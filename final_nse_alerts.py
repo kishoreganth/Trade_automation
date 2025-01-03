@@ -5,7 +5,7 @@ import json
 import pandas as pd
 import os
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 import httpx
 import threading
@@ -13,6 +13,7 @@ import schedule
 import time
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio 
 
 import csv
 from stock_info import companie_names
@@ -317,27 +318,42 @@ def get_CA_equities():
 
 
 
-def run_scheduler():
-    """
-    Run the scheduler in a separate thread.
-    """
-    schedule.every(10).seconds.do(get_CA_equities)
-    print("Scheduler started.")
+# def run_scheduler():
+#     """
+#     Run the scheduler in a separate thread.
+#     """
+#     schedule.every(10).seconds.do(get_CA_equities)
+#     print("Scheduler started.")
 
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(1)
+
+# Function to run the periodic task
+async def run_periodic_task():
     while True:
-        schedule.run_pending()
-        time.sleep(1)
+        get_CA_equities()  # Run the task
+        await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+
+
+# Start the background task when FastAPI is running
+@app.get("/start-scheduler/")
+async def start_scheduler(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_periodic_task)
+    return {"message": "Scheduler started!"}
+
 
 @app.get("/")
 async def home():
     return "HOME PAGE FOR TRADE AUTOMATION"
 
+
 if __name__ == "__main__":
     # Set the webhook
     # set_webhook()
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.daemon = True
-    scheduler_thread.start()
+    # scheduler_thread = threading.Thread(target=run_scheduler)
+    # scheduler_thread.daemon = True
+    # scheduler_thread.start()
 
     # Run the web server
     import uvicorn
