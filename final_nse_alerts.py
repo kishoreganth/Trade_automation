@@ -334,7 +334,7 @@ async def home():
 
 if __name__ == "__main__":
     # Set the webhook
-    set_webhook()
+    # set_webhook()
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
     scheduler_thread.start()
