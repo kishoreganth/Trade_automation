@@ -12,9 +12,10 @@ import threading
 import schedule
 import time
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+
 import csv
 from stock_info import companie_names
-from fastapi.middleware.cors import CORSMiddleware
 
 # Base URL to fetch cookies
 base_url = "https://www.nseindia.com"
