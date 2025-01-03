@@ -332,18 +332,13 @@ def run_scheduler():
 async def home():
     return "HOME PAGE FOR TRADE AUTOMATION"
 
-set_webhook()
-scheduler_thread = threading.Thread(target=run_scheduler)
-scheduler_thread.daemon = True
-scheduler_thread.start()
+if __name__ == "__main__":
+    # Set the webhook
+    set_webhook()
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.daemon = True
+    scheduler_thread.start()
 
-# if __name__ == "__main__":
-#     # Set the webhook
-#     set_webhook()
-#     scheduler_thread = threading.Thread(target=run_scheduler)
-#     scheduler_thread.daemon = True
-#     scheduler_thread.start()
-
-#     # Run the web server
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=5000)
+    # Run the web server
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
