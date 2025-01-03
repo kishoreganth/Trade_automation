@@ -328,6 +328,9 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
+@app.post("/")
+async def home():
+    return "HOME PAGE FOR TRADE AUTOMATION"
 
 set_webhook()
 scheduler_thread = threading.Thread(target=run_scheduler)
