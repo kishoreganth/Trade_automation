@@ -328,7 +328,7 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
-@app.post("/")
+@app.get("/")
 async def home():
     return "HOME PAGE FOR TRADE AUTOMATION"
 
