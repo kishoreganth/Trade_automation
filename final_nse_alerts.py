@@ -328,13 +328,19 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
-if __name__ == "__main__":
-    # Set the webhook
-    set_webhook()
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.daemon = True
-    scheduler_thread.start()
 
-    # Run the web server
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+set_webhook()
+scheduler_thread = threading.Thread(target=run_scheduler)
+scheduler_thread.daemon = True
+scheduler_thread.start()
+
+# if __name__ == "__main__":
+#     # Set the webhook
+#     set_webhook()
+#     scheduler_thread = threading.Thread(target=run_scheduler)
+#     scheduler_thread.daemon = True
+#     scheduler_thread.start()
+
+#     # Run the web server
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=5000)
