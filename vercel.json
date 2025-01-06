@@ -1,0 +1,14 @@
+{
+    "builds":[
+        {
+            "src":"final_nse_alerts.py",
+            "use":"@vercel/python"
+        }
+    ],
+    "routes":[
+        {
+            "src":"/(.*)",
+            "dest":"final_nse_alerts.py"
+        }
+    ]
+}
