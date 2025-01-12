@@ -41,7 +41,7 @@ chat_id = "@test_kishore_ai_chat"
 
 global session 
 session = requests.Session()
-response = session.get(base_url, headers=headers)
+response = session.get(base_url, headers=headers,verify=False)
 
 
 app = FastAPI()
