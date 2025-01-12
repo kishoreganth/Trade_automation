@@ -45,7 +45,7 @@ import urllib3
 
 # Disable SSL certificate verification warning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-response = session.get(base_url, headers=headers,timeout=30, verify=False)
+response = session.get(base_url, headers=headers,timeout=30 )
 
 
 app = FastAPI()
