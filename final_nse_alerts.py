@@ -41,6 +41,10 @@ chat_id = "@test_kishore_ai_chat"
 
 global session 
 session = requests.Session()
+import urllib3
+
+# Disable SSL certificate verification warning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 response = session.get(base_url, headers=headers,verify=False)
 
 
