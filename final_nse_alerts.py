@@ -29,8 +29,8 @@ headers = {
     "Connection": "keep-alive",
 }
 # Path to your CSV file
-csv_file_path = "all_corporate_announcements.csv"
-watchlist_CA_files = "watchlist_corporate_announcements.csv"
+csv_file_path = "files/all_corporate_announcements.csv"
+watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
 
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
@@ -85,6 +85,12 @@ def search_csv(keyword):
     # Return results
     return results
 
+
+@app.get("/files")
+def list_files():
+    folder_path = "./files"  # Path inside the container
+    files = os.listdir(folder_path)
+    return {"files": files}
 
 ## THIS IS to get input message for the AI bot in the telegram, I response based on the previous data 
 @app.post("/webhook")
@@ -253,9 +259,9 @@ def get_CA_equities():
                 # print(f"File '{csv_file_path}' exists. Loading data...")
                 df1 = pd.read_csv(csv_file_path, dtype='object')
                 df2 = pd.DataFrame(json_data)
-                df2.to_csv("temp.csv", index = False)
+                df2.to_csv("files/temp.csv", index = False)
 
-                api_df = pd.read_csv("temp.csv", dtype= 'object')
+                api_df = pd.read_csv("files/temp.csv", dtype= 'object')
 
                 # Convert all columns to the same type (e.g., to string) for comparison
                 df1 = df1.map(str)
@@ -353,6 +359,7 @@ async def start_scheduler(background_tasks: BackgroundTasks):
 @app.get("/")
 async def home():
     return "HOME PAGE FOR TRADE AUTOMATION"
+
 
 
 if __name__ == "__main__":
