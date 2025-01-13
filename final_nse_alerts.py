@@ -34,7 +34,7 @@ watchlist_CA_files = "watchlist_corporate_announcements.csv"
 
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
-WEBHOOK_URL = "https://32f4-106-219-183-82.ngrok-free.app/webhook"  # Make sure the path matches Flask's route
+WEBHOOK_URL = "https://fb6e-106-219-182-140.ngrok-free.app/webhook"  # Make sure the path matches Flask's route
 
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 chat_id = "@test_kishore_ai_chat"
@@ -43,10 +43,10 @@ global session
 session = requests.Session()
 import urllib3
 
-# Disable SSL certificate verification warning
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-response = session.get(base_url, headers=headers,timeout=30 )
-
+## Disable SSL certificate verification warning
+# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# response = session.get(base_url, headers=headers,timeout=30 )
+# print("INITIAL RESPONES SESSION - ", response)
 
 app = FastAPI()
 
@@ -229,7 +229,10 @@ def get_CA_equities():
     # print(session)
     print(" --------------------------------------- ")
     api_response = session.get(api_url, headers=headers)
-
+    if api_response.status_code == 401:
+        session = get_cookies()
+        print("TRying again")
+        return
     if api_response.status_code == 200:
         encoding = api_response.headers.get('Content-Encoding', '')
         try:
@@ -361,4 +364,4 @@ if __name__ == "__main__":
 
     # Run the web server
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, port=5000)
