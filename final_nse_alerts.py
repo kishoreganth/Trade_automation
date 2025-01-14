@@ -234,14 +234,15 @@ def get_CA_equities():
         session = get_cookies()
     # print(session)
     print(" --------------------------------------- ")
-    api_response = session.get(api_url, headers=headers)
-    if api_response.status_code == 401:
-        session = get_cookies()
-        print("TRying again")
-        return
-    if api_response.status_code == 200:
-        encoding = api_response.headers.get('Content-Encoding', '')
-        try:
+    try:
+        api_response = session.get(api_url, headers=headers)
+        if api_response.status_code == 401:
+            session = get_cookies()
+            print("TRying again")
+            return
+        if api_response.status_code == 200:
+            encoding = api_response.headers.get('Content-Encoding', '')
+            
             if 'gzip' in encoding:
                 content = gzip.decompress(api_response.content).decode('utf-8')
             elif 'br' in encoding:
@@ -320,15 +321,13 @@ def get_CA_equities():
                 # Step 3: Save to CSV
                 df.to_csv(csv_file_path, index=False)
 
-                
-        except Exception as e:
-            print("Error processing the response content:")
-            print(e)
+        else:
+            print(f"Failed to fetch API data. Status code: {api_response.status_code}")
+            print(api_response.text)
 
-    else:
-        print(f"Failed to fetch API data. Status code: {api_response.status_code}")
-        print(api_response.text)
-
+    except Exception as e:
+        print("Error processing the response content:")
+        print(e)
 
 
 # def run_scheduler():
