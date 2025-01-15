@@ -14,6 +14,8 @@ import time
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio 
+import logging
+logging.basicConfig(level=logging.INFO)
 
 import csv
 from stock_info import companie_names
@@ -234,6 +236,7 @@ def get_CA_equities():
     global session
     if not session:
         print("SESSION need to refresh it")
+        logging.info("SESSION need to refresh it")
         session = get_cookies()
     # print(session)
     print(" --------------------------------------- ")
@@ -242,6 +245,7 @@ def get_CA_equities():
         if api_response.status_code == 401:
             session = get_cookies()
             print("TRying again")
+            logging.info("TRying again")
             return
         if api_response.status_code == 200:
             encoding = api_response.headers.get('Content-Encoding', '')
@@ -309,16 +313,21 @@ def get_CA_equities():
                             trigger_message(message)
                             if os.path.exists(watchlist_CA_files):
                                 print(f"File '{watchlist_CA_files}' exists. Loading data...")
+                                logging.info(f"File '{watchlist_CA_files}' exists. Loading data...")
+
                                 new_rows.to_csv(watchlist_CA_files, mode='a', index=False)
                             else:
                                 # Create a new file and write data
                                 new_rows.to_csv(watchlist_CA_files, index=False)
                                 print(f"New file created at {watchlist_CA_files} and data written.")
+                                logging.info(f"New file created at {watchlist_CA_files} and data written.")
 
                     df1_updated = pd.concat([new_rows, df1], ignore_index=True).drop_duplicates()
                     df1_updated.to_csv(csv_file_path, index=False)
             else:
                 print(f"File '{csv_file_path}' does not exist. Creating a new DataFrame.")
+                logging.info(f"File '{csv_file_path}' does not exist. Creating a new DataFrame.")
+
                 # Step 2: Convert JSON to DataFrame
                 df = pd.DataFrame(json_data)
                 # Step 3: Save to CSV
@@ -327,9 +336,11 @@ def get_CA_equities():
         else:
             print(f"Failed to fetch API data. Status code: {api_response.status_code}")
             print(api_response.text)
+            logging.info(f"Failed to fetch API data. Status code: {api_response.status_code}")
 
     except Exception as e:
         print("Error processing the response content:")
+        logging.info(f"Error processing the response content : {e}")
         print(e)
 
 
