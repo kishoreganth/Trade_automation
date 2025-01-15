@@ -240,8 +240,11 @@ def get_CA_equities():
         session = get_cookies()
     # print(session)
     print(" --------------------------------------- ")
+    logging.info(" --------------------------------------- ")
+
     try:
         api_response = session.get(api_url, headers=headers)
+        logging.info(" THIS IS API_RESPONSE  ", api_response)
         if api_response.status_code == 401:
             session = get_cookies()
             print("TRying again")
@@ -337,9 +340,8 @@ def get_CA_equities():
             print(f"Failed to fetch API data. Status code: {api_response.status_code}")
             print(api_response.text)
             logging.info(f"Failed to fetch API data. Status code: {api_response.status_code}")
-
     except Exception as e:
-        print("Error processing the response content:")
+        # print("Error processing the response content:")
         logging.info(f"Error processing the response content : {e}")
         print(e)
 
@@ -360,6 +362,8 @@ async def run_periodic_task():
     while True:
         logging.info("starting")
         get_CA_equities()  # Run the task
+        logging.info("next loop")
+
         await asyncio.sleep(10)  # Wait for 10 seconds before running it again
 
 
