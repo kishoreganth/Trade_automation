@@ -17,6 +17,8 @@ import asyncio
 
 import csv
 from stock_info import companie_names
+from tenacity import retry, stop_after_attempt, wait_fixed
+
 
 # Base URL to fetch cookies
 base_url = "https://www.nseindia.com"
@@ -227,6 +229,7 @@ def trigger_message(message):
     r = requests.post(url, json=payload)
     # print(r.json())
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))  # Retries 3 times with 2 seconds between attempts
 def get_CA_equities():
     global session
     if not session:
