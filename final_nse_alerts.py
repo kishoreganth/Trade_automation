@@ -202,13 +202,16 @@ def get_cookies():
     # Create a session to handle cookies and headers
     global session 
     session = requests.Session()
+    try:
+        # Step 1: Get cookies by visiting the main site
+        response = session.get(base_url, headers=headers)
+        if response.status_code == 200:
+            print("Cookies obtained successfully.")
+            logging.info(" THIS IS cookiges  ", session)
+            return session
+    except Exception as e:
+        logging.info(" THIS IS Exceptiono of cookiges  ", e)
 
-    # Step 1: Get cookies by visiting the main site
-    response = session.get(base_url, headers=headers)
-    if response.status_code == 200:
-        print("Cookies obtained successfully.")
-    
-    return session
 
 def trigger_test_message(chat_idd, message):
 
@@ -234,15 +237,15 @@ def trigger_message(message):
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))  # Retries 3 times with 2 seconds between attempts
 def get_CA_equities():
     global session
-    if not session:
-        print("SESSION need to refresh it")
-        logging.info("SESSION need to refresh it")
-        session = get_cookies()
-    # print(session)
-    print(" --------------------------------------- ")
-    logging.info(" --------------------------------------- ")
-
     try:
+        if not session:
+            print("SESSION need to refresh it")
+            logging.info("SESSION need to refresh it")
+            session = get_cookies()
+        # print(session)
+        print(" --------------------------------------- ")
+        logging.info(" --------------------------------------- ")
+
         api_response = session.get(api_url, headers=headers)
         logging.info(" THIS IS API_RESPONSE  ", api_response)
         if api_response.status_code == 401:
