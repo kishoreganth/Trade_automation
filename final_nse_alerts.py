@@ -358,6 +358,7 @@ def get_CA_equities():
 # Function to run the periodic task
 async def run_periodic_task():
     while True:
+        logging.info("starting")
         get_CA_equities()  # Run the task
         await asyncio.sleep(10)  # Wait for 10 seconds before running it again
 
