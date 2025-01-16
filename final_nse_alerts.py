@@ -43,8 +43,8 @@ WEBHOOK_URL = "https://fb6e-106-219-182-140.ngrok-free.app/webhook"  # Make sure
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 chat_id = "@test_kishore_ai_chat"
 
-global session 
-session = requests.Session()
+# global session 
+# session = requests.Session()
 import urllib3
 
 ## Disable SSL certificate verification warning
