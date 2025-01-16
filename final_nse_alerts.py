@@ -43,7 +43,8 @@ WEBHOOK_URL = "https://fb6e-106-219-182-140.ngrok-free.app/webhook"  # Make sure
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 chat_id = "@test_kishore_ai_chat"
 
-# global session 
+global session 
+session = None
 # session = requests.Session()
 import urllib3
 
@@ -207,8 +208,8 @@ def get_cookies():
         response = session.get(base_url, headers=headers)
         if response.status_code == 200:
             print("Cookies obtained successfully.")
-            logging.info(" THIS IS cookiges  ", session)
-            return session
+            # logging.info(" THIS IS cookiges  ", session)
+            # return session
     except Exception as e:
         logging.info(" THIS IS Exceptiono of cookiges  ", e)
 
@@ -238,18 +239,18 @@ def trigger_message(message):
 def get_CA_equities():
     global session
     try:
-        if not session:
+        if session is None:
             print("SESSION need to refresh it")
             logging.info("SESSION need to refresh it")
-            session = get_cookies()
+            get_cookies()
         # print(session)
         print(" --------------------------------------- ")
         logging.info(" --------------------------------------- ")
 
         api_response = session.get(api_url, headers=headers)
-        logging.info(" THIS IS API_RESPONSE  ", api_response)
+        # logging.info(" THIS IS API_RESPONSE  ", api_response)
         if api_response.status_code == 401:
-            session = get_cookies()
+            get_cookies()
             print("TRying again")
             logging.info("TRying again")
             return
