@@ -323,11 +323,12 @@ async def get_CA_equities():
         #     print("SESSION need to refresh it")
         #     logging.info("SESSION need to refresh it")
         #     session = get_cookies()
-        cookie = get_cookies()
+
+        # cookie = get_cookies()
         # print(session)
         print(" --------------- ")
-        print("C OOkie is ", cookie)
-        logging.info("Cookie is: %s", cookie)
+        # print("C OOkie is ", cookie)
+        # logging.info("Cookie is: %s", cookie)
 
         # try:
         #     cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
@@ -346,8 +347,8 @@ async def get_CA_equities():
         #     raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
         async with httpx.AsyncClient(timeout= 10) as client:
             try:
-                cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
-                headers["Cookie"] = cookie_str
+                # cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
+                # headers["Cookie"] = cookie_str
 
                 response = await client.get(api_url, headers=headers)
                 return response_file_handle(response)
@@ -387,7 +388,7 @@ async def run_periodic_task():
     except Exception as e:
         logging.info(" periodic tasks issue -: %s", e)
         raise Exception( str(e) )
-    await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+    # await asyncio.sleep(10)  # Wait for 10 seconds before running it again
 
 
 # Start the background task when FastAPI is running
