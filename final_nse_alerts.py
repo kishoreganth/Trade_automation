@@ -207,7 +207,7 @@ def get_cookies():
     session = requests.Session()
     try:
         # Step 1: Get cookies by visiting the main site
-        response = session.get(base_url, headers=headers)
+        response = session.get(base_url, headers=headers, timeout=10)
         logging.info("cookie response status: %s", response.status_code)
         logging.info("COokie respones is: %s", response) 
         if response.status_code == 200:
@@ -344,7 +344,7 @@ async def get_CA_equities():
 
 
         #     raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout= 10) as client:
             try:
                 cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
                 headers["Cookie"] = cookie_str
