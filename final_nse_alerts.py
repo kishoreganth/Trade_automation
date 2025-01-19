@@ -212,6 +212,8 @@ def get_cookies():
     try:
         # Step 1: Get cookies by visiting the main site
         response = session.get(base_url, headers=headers)
+        logging.info("cookie response status  ", str(response.status_code))
+        logging.info("COokie respones is ", str(response))
         if response.status_code == 200:
             cookie = response.cookies
             # print("Cookies obtained successfully.", response.cookies)
@@ -326,9 +328,9 @@ async def get_CA_equities():
             logging.info("SESSION need to refresh it")
             get_cookies()
         # print(session)
-        print(" --------------------------------------- ")
+        print(" --------------- ")
         print("C OOkie is ", cookie)
-        logging.info(" --------------------------------------- ")
+        logging.info("Cookie is ", str(cookie))
 
         # try:
         #     cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
