@@ -358,7 +358,7 @@ async def get_CA_equities():
             except Exception as e:
                 print(f"Error: {str(e)}")
                 logging.info(" Error in api request ", str(e))
-                raise 
+                raise
                 
 
     except Exception as e:
@@ -380,15 +380,15 @@ async def get_CA_equities():
 
 # Function to run the periodic task
 async def run_periodic_task():
-    while True:
-        try:
-            logging.info("starting")
-            await get_CA_equities()  # Run the task
-            logging.info("next loop")
-        except Exception as e:
-            logging.info(" periodic tasks issue - ", str(e))
-            raise Exception( str(e) )
-        await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+    # while True:
+    try:
+        logging.info("starting")
+        await get_CA_equities()  # Run the task
+        logging.info("next loop")
+    except Exception as e:
+        logging.info(" periodic tasks issue - ", str(e))
+        raise Exception( str(e) )
+    await asyncio.sleep(10)  # Wait for 10 seconds before running it again
 
 
 # Start the background task when FastAPI is running
