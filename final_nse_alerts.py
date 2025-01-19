@@ -45,18 +45,13 @@ WEBHOOK_URL = "https://fb6e-106-219-182-140.ngrok-free.app/webhook"  # Make sure
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 chat_id = "@test_kishore_ai_chat"
 
-global session 
-session = None
+# global session 
+# session = None
 
-global cookie
-cookie = None
+# global cookie
+# cookie = None
 # session = requests.Session()
 import urllib3
-
-## Disable SSL certificate verification warning
-# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-# response = session.get(base_url, headers=headers,timeout=30 )
-# print("INITIAL RESPONES SESSION - ", response)
 
 app = FastAPI()
 
@@ -206,22 +201,23 @@ def set_webhook():
 
 def get_cookies():
     # Create a session to handle cookies and headers
-    global session 
-    global cookie
+    # global session 
+    # global cookie
+    global headers
     session = requests.Session()
     try:
         # Step 1: Get cookies by visiting the main site
         response = session.get(base_url, headers=headers)
-        logging.info("cookie response status  ", str(response.status_code))
-        logging.info("COokie respones is ", str(response))
+        logging.info("cookie response status: %s", response.status_code)
+        logging.info("COokie respones is: %s", response) 
         if response.status_code == 200:
             cookie = response.cookies
             # print("Cookies obtained successfully.", response.cookies)
             # print(str(response))
-            logging.info(" THIS IS cookiges  ")
-            # return session
+            logging.info(" THIS IS cookiges: %s", cookie)
+            return cookie
     except Exception as e:
-        logging.info(" THIS IS Exceptiono of cookiges  ", str(e))
+        logging.info(" THIS IS Exceptiono of cookiges: %s", str(e))
         raise Exception(" THIS IS Exceptiono of cookiges  ", str(e))
 
 
@@ -319,18 +315,19 @@ def response_file_handle(api_response : httpx.Response):
 
 # @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))  # Retries 3 times with 2 seconds between attempts
 async def get_CA_equities():
-    global session
-    global cookie
+    # global session
+    # global cookie
     global headers
     try:
-        if session is None:
-            print("SESSION need to refresh it")
-            logging.info("SESSION need to refresh it")
-            get_cookies()
+        # if not session:
+        #     print("SESSION need to refresh it")
+        #     logging.info("SESSION need to refresh it")
+        #     session = get_cookies()
+        cookie = get_cookies()
         # print(session)
         print(" --------------- ")
         print("C OOkie is ", cookie)
-        logging.info("Cookie is ", str(cookie))
+        logging.info("Cookie is: %s", cookie)
 
         # try:
         #     cookie_str = "; ".join([f"{key}={value}" for key, value in cookie.items()])
@@ -359,15 +356,15 @@ async def get_CA_equities():
                 raise
             except Exception as e:
                 print(f"Error: {str(e)}")
-                logging.info(" Error in api request ", str(e))
+                logging.info(" Error in api request: %s", e)
                 raise
                 
 
     except Exception as e:
         # print("Error processing the response content:")
-        logging.info(f"Error in getCAEquities : {str(e)}")
+        logging.info(f"Error in getCAEquities : {e}")
         print(e)
-        raise Exception(f"Error in getCAEquities : {str(e)}")
+        raise Exception(f"Error in getCAEquities : {e}")
 
 # def run_scheduler():
 #     """
@@ -388,7 +385,7 @@ async def run_periodic_task():
         await get_CA_equities()  # Run the task
         logging.info("next loop")
     except Exception as e:
-        logging.info(" periodic tasks issue - ", str(e))
+        logging.info(" periodic tasks issue -: %s", e)
         raise Exception( str(e) )
     await asyncio.sleep(10)  # Wait for 10 seconds before running it again
 
