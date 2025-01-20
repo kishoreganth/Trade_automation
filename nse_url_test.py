@@ -128,12 +128,16 @@ async def CA_equities():
 
 # Function to run the periodic task
 async def run_periodic_task():
-    while True:
-        logging.info("starting")
-        await CA_equities()  # Run the task
-        logging.info("next loop")
-
-        await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+    logging.info("starting thescript ")
+    try:
+        while True:
+            logging.info("starting")
+            await CA_equities()  # Run the task
+            logging.info("next loop")
+            await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+    except Exception as e:
+        logging.info("Script running issue , "str(e))
+        raise 
 
 
 # Start the background task when FastAPI is running
