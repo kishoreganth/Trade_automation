@@ -136,7 +136,7 @@ async def run_periodic_task():
             logging.info("next loop")
             await asyncio.sleep(10)  # Wait for 10 seconds before running it again
     except Exception as e:
-        logging.info("Script running issue , "str(e))
+        logging.info("Script running issue  ", str(e))
         raise 
 
 
