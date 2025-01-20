@@ -1,5 +1,6 @@
 from nsepython import *
 import asyncio
+import nsepythonserver
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,7 +55,8 @@ def trigger_test_message(chat_idd, message):
 async def CA_equities():
     try:
         # positions = nsefetch('https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O')
-        ca_docs = nsefetch('https://www.nseindia.com/api/corporate-announcements?index=equities')
+        ca_docs = nsepythonserver.nsefetch('https://www.nseindia.com/api/corporate-announcements?index=equities')
+        # ca_docs = nsefetch('https://www.nseindia.com/api/corporate-announcements?index=equities')
         # print(ca_docs)
         print(type(ca_docs))
         logging.info("GOT THE CA DATA  : ", type(ca_docs))
