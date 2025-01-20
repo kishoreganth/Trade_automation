@@ -129,6 +129,11 @@ async def start_scheduler(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_periodic_task)
     return {"message": "Scheduler started!"}
 
+@app.get("/")
+async def home():
+    return "New automation method Trillionaire"
+
+
 
 if __name__ == "__main__":
 
