@@ -17,6 +17,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+import logging
+logging.basicConfig(level=logging.INFO, filename='app.log',format='%(asctime)s - %(levelname)s - %(message)s')
 
 csv_file_path = "files/all_corporate_announcements.csv"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
@@ -32,6 +34,8 @@ def trigger_message(message):
         "text": message,
         "parse_mode": "HTML"
     }
+    logging.info("Triggered message : ", message)
+
     r = requests.post(url, json=payload)
     # print(r.json())
 
@@ -43,19 +47,28 @@ def trigger_test_message(chat_idd, message):
         "text": message,
         "parse_mode": "HTML"
     }
+    logging.info("Triggered  test message : ", message)
+
     r = requests.post(url, json=payload)
 
 async def CA_equities():
-    # positions = nsefetch('https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O')
-    ca_docs = nsefetch('https://www.nseindia.com/api/corporate-announcements?index=equities')
-    # print(ca_docs)
-    print(type(ca_docs))
+    try:
+        # positions = nsefetch('https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O')
+        ca_docs = nsefetch('https://www.nseindia.com/api/corporate-announcements?index=equities')
+        # print(ca_docs)
+        print(type(ca_docs))
+        logging.info("GOT THE CA DATA  : ", type(ca_docs))
+        logging.info("GOT THE CA DATA  : ", ca_docs)
+    except Exception as e:
+        logging.info("GOt exception while fetching CA - ", str(e))
+
 
     if os.path.exists(csv_file_path):
         # print(f"File '{csv_file_path}' exists. Loading data...")
         df1 = pd.read_csv(csv_file_path, dtype='object')
         df2 = pd.DataFrame(ca_docs)
         df2.to_csv("files/temp.csv", index = False)
+        logging.info("WRITING IN INT ")
 
         api_df = pd.read_csv("files/temp.csv", dtype= 'object')
 
