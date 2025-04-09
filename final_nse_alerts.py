@@ -356,7 +356,7 @@ async def get_CA_equities():
                 print(f"HTTP Status Error: {e.response.status_code} - {e.response.text}")
                 raise
             except Exception as e:
-                print(f"Error: {str(e)}")
+                print(f"Error in: {str(e)}")
                 logging.info(" Error in api request: %s", e)
                 raise
                 

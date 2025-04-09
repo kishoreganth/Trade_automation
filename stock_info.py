@@ -1,4 +1,6 @@
-companie_names = [
+BSE_NSE_companies = ["BF Utilities Limited","OK Play India Limited"]
+
+SME_companies = [
     "ABS Marine Services Limited",
     "Accent Microcell Limited",
     "Addictive Learning Technology Limited",
