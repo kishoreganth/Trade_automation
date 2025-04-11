@@ -622,7 +622,7 @@ async def run_periodic_task_equities():
 # Start the background task when FastAPI is running
 @app.get("/start-scheduler/")
 async def start_scheduler(background_tasks: BackgroundTasks):
-    await set_webhook()
+    # await set_webhook()
     background_tasks.add_task(run_periodic_task_sme)
     background_tasks.add_task(run_periodic_task_equities)
     return {"message": "Scheduler started!"}
