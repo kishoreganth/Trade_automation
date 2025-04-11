@@ -633,7 +633,7 @@ async def home():
 
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0",port=5000)
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0",port=5000)
