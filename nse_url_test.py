@@ -12,9 +12,10 @@ import httpx
 import aiofiles
 import aiofiles.os
 import io
+from contextlib import asynccontextmanager
+import logging
 
 from stock_info import SME_companies, BSE_NSE_companies
-
 
 ## TELEGRAM SETUP
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
@@ -26,8 +27,7 @@ chat_ids = ["776062518", "@test_kishore_ai_chat"]
 equity_url = "https://www.nseindia.com/api/corporate-announcements?index=equities"
 sme_url = "https://www.nseindia.com/api/corporate-announcements?index=sme"
 
-
-
+# Create the FastAPI app
 app = FastAPI()
 
 # CORS configuration
@@ -38,7 +38,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-import logging
 
 # Set up logging to both file and console
 logger = logging.getLogger()
@@ -59,6 +58,10 @@ console_handler.setFormatter(console_formatter)
 # Add both handlers to the logger
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
+
+# Store task references globally
+sme_task = None
+equities_task = None
 
 csv_file_path = "files/all_corporate_announcements.csv"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
@@ -199,7 +202,7 @@ async def trigger_test_message(chat_idd, message):
         "parse_mode": "HTML"
     }
     # logger.info(f"Triggered test message: {message}")
-    print("triggered", chat_idd)
+    print("triggered", chat_idd, "  -- message is ", message)
     r = requests.post(url, json=payload)
 
 
@@ -236,10 +239,17 @@ async def process_ca_data(ca_docs):
                 group_keyword_df = pd.read_csv(keyword_custom_group_url)
                 print(group_keyword_df)
                 group_id_keywords = {}
+                # for index, row in group_keyword_df.iterrows():
+                #     print("row is - ", row)
+                #     group_id = "@" + str(row['group_id'])
+                #     group_id_keywords[group_id] = row['keywords']
+                    
                 for index, row in group_keyword_df.iterrows():
-                    print("row is - ", row)
-                    group_id = "@" + str(row['group_id'])
-                    group_id_keywords[group_id] = row['keywords']
+                    group_id = "@" + str(row['group_id']).strip()
+                    keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
+                    # Split by comma and strip each keyword
+                    keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
+                    group_id_keywords[group_id] = keywords
                 print("these are the group id and keywords - ", group_id_keywords)
             except Exception as e:
                 logger.error(f"Error reading Google Sheet: {str(e)}")
@@ -247,6 +257,9 @@ async def process_ca_data(ca_docs):
                 group_id_keywords = {}  # Set empty dict to continue processing without custom groups
 
 
+            # group_id_keywords = {}
+            # group_id_keywords["@test_and_q"] = ["exchange"]
+            # group_id_keywords["@test_and_k"] = ["updates", "general"]
 
             # now we need to check if the new_rows is in the group_id_keywords
             for group_id, keywords in group_id_keywords.items():
@@ -336,7 +349,12 @@ async def CA_sme():
         # Method 2: Using httpx.AsyncClient with improved session handling
         try:
             logger.info("Attempting fallback method using httpx.AsyncClient with improved session handling...")
-            
+            # headers = {
+            #     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+            #     "Accept-Language": "en-US,en;q=0.9",
+            #     "Accept-Encoding": "gzip, deflate, br",
+            #     "Connection": "keep-alive",
+            # }
             # More comprehensive headers that mimic a real browser
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -613,27 +631,54 @@ async def run_periodic_task_equities():
             # Slightly increase wait time to avoid hitting rate limits
             await asyncio.sleep(10)  # Wait for 10 seconds before running it again
         except Exception as e:
-            logger.error(f"Error in run_periodic_task equiteis: {str(e)}")
-            logger.info("Error occurred, waiting 30 seconds before retrying...")
-            await asyncio.sleep(30)  # Wait for 60 seconds before retrying
+            logger.error(f"Error in run_periodic_task_equities: {str(e)}")
+            logger.info("Error occurred in Equities task, waiting 30 seconds before retrying...")
+            await asyncio.sleep(30)  # Wait for 30 seconds before retrying
 
+# Start the background tasks when the application starts
+@app.on_event("startup")
+async def startup_event():
+    global sme_task, equities_task
+    # Start both tasks in parallel using asyncio.create_task
+    sme_task = asyncio.create_task(run_periodic_task_sme())
+    equities_task = asyncio.create_task(run_periodic_task_equities())
+    print("Both SME and Equities background tasks are now running in parallel")
+    logger.info("Both SME and Equities background tasks are now running in parallel")
 
-
-# Start the background task when FastAPI is running
-@app.get("/start-scheduler/")
-async def start_scheduler(background_tasks: BackgroundTasks):
-    # await set_webhook()
-    background_tasks.add_task(run_periodic_task_sme)
-    background_tasks.add_task(run_periodic_task_equities)
-    return {"message": "Scheduler started!"}
+# Clean up tasks when the application shuts down
+@app.on_event("shutdown")
+async def shutdown_event():
+    global sme_task, equities_task
+    # Cancel the SME task if it's still running
+    if sme_task and not sme_task.done():
+        sme_task.cancel()
+        try:
+            await sme_task
+        except asyncio.CancelledError:
+            print("SME task was cancelled")
+            logger.info("SME task was cancelled")
+    
+    # Cancel the Equities task if it's still running
+    if equities_task and not equities_task.done():
+        equities_task.cancel()
+        try:
+            await equities_task
+        except asyncio.CancelledError:
+            print("Equities task was cancelled")
+            logger.info("Equities task was cancelled")
 
 @app.get("/")
 async def home():
     return "New automation method Trillionaire"
 
+@app.get("/status")
+async def status():
+    global sme_task, equities_task
+    return {
+        "sme_task_running": sme_task is not None and not sme_task.done(),
+        "equities_task_running": equities_task is not None and not equities_task.done()
+    }
 
-
-# if __name__ == "__main__":
-
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0",port=5000)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0",port=5000)
