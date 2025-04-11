@@ -9,6 +9,9 @@ import pandas as pd
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import aiofiles
+import aiofiles.os
+import io
 
 from stock_info import SME_companies, BSE_NSE_companies
 
@@ -16,14 +19,12 @@ from stock_info import SME_companies, BSE_NSE_companies
 ## TELEGRAM SETUP
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
-WEBHOOK_URL = "https://c690-49-206-10-151.ngrok-free.app/webhook"  # Make sure the path matches Flask's route
+WEBHOOK_URL = "https://a68f-49-206-11-126.ngrok-free.app/webhook"  # Make sure the path matches Flask's route
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 # chat_id = "@test_kishore_ai_chat"
 
 equity_url = "https://www.nseindia.com/api/corporate-announcements?index=equities"
 sme_url = "https://www.nseindia.com/api/corporate-announcements?index=sme"
-
-api_url = sme_url 
 
 
 
@@ -64,28 +65,36 @@ watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
 # chat_id = "@test_kishore_ai_chat"
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 
+# "fundraisensebse"
 
 
 
 
 gsheet_chats = "1v35Bq76X3_gA00uZan5wa0TOP60F-AHJVSCeHCPadD0"
-
 sheet_id = gsheet_chats
-gsheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
-df = pd.read_csv(gsheet_url)
+
+# Keyword _custom group
+gid = "1091746650"
+keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+
+
+watchlist_sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+df = pd.read_csv(watchlist_sheet_url)
+print(df)
 
 watchlist_chat_ids = []
+print("these are the watchlist chat ids - ", watchlist_chat_ids)
 
 for index, row in df.iterrows():
     print("row is - ", row)
-    chat_id = "@" + str(row['chat_id'])
+    chat_id = "@" + str(row['Telegram link'])
     print("CHAT ID IS - ", chat_id)
     watchlist_chat_ids.append(chat_id)
 
 print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
 
 
-async def send_message(chat_id: int, text: str):
+async def send_webhook_message(chat_id: int, text: str):
     url = f"{TELEGRAM_API_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -97,12 +106,12 @@ async def send_message(chat_id: int, text: str):
         try:
             response = await client.post(url, json=payload)
             response.raise_for_status()
-            print(f"Message sent to {chat_id}: {text}")
+            # print(f"Message sent to {chat_id}: {text}")
         except httpx.RequestError as e:
             print(f"Error sending message: {e}")
 
 
-def set_webhook():
+async def set_webhook():
     url = f"{TELEGRAM_API_URL}/setWebhook"
     payload = {"url": WEBHOOK_URL}
 
@@ -118,30 +127,53 @@ def set_webhook():
         print(f"Error setting webhook: {e}")
 
 
-def search_csv(keyword):
+async def search_csv(all_keywords):
     # List to store results
     results = []
-    keyword = keyword.lower()
+    seen_rows = set()  # To track unique rows
 
-    # Open the CSV file
-    with open(watchlist_CA_files, mode="r", encoding="utf-8") as file:
-        reader = csv.reader(file)
+    # Convert string input to list if needed
+    if isinstance(all_keywords, str):
+        all_keywords = [all_keywords]
+    elif not isinstance(all_keywords, list):
+        all_keywords = [str(all_keywords)]
 
-        # Iterate through rows
-        for row in reader:
-            # Check if keyword exists in any cell of the row
-            if any(keyword in str(cell).lower() for cell in row):
-                results.append({
-                    "row": row,
-                })
+    # logger.info(f"Starting search for keywords: {all_keywords}")
+    
+    try:
+        with open(csv_file_path, mode="r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+            
+            # Skip header row
+            next(reader, None)
+            
+            # Iterate through rows
+            for row in reader:
+                # Create a unique identifier for the row
+                row_id = tuple(row)
+                
+                # Skip if we've already seen this row
+                if row_id in seen_rows:
+                    continue
+                
+                # Check if any of the keywords exists in any cell of the row
+                if any(any(kw in str(cell).lower() for kw in all_keywords) for cell in row):
+                    results.append({
+                        "row": row,
+                    })
+                    seen_rows.add(row_id)
+                    
+        # logger.info(f"Search completed. Found {len(results)} unique results")
+        return results
+        
+    except Exception as e:
+        # logger.error(f"Error in search_csv: {str(e)}")
+        return []
 
-    # Return results
-    return results
 
 
 
-
-def trigger_message(message):
+async def trigger_watchlist_message(message):
     print("WATCHLIST stocks are sending to telegram")
     for chat_id in watchlist_chat_ids:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -155,7 +187,10 @@ def trigger_message(message):
         r = requests.post(url, json=payload)
     # print(r.json())
 
-def trigger_test_message(chat_idd, message):
+
+# this is the test message to see if the script is working or not
+# This will send all the CA docs to the trade_mvd chat id ( which is our Script CA running telegram )
+async def trigger_test_message(chat_idd, message):
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -163,81 +198,112 @@ def trigger_test_message(chat_idd, message):
         "text": message,
         "parse_mode": "HTML"
     }
-    logger.info(f"Triggered test message: {message}")
-
+    # logger.info(f"Triggered test message: {message}")
+    print("triggered", chat_idd)
     r = requests.post(url, json=payload)
 
 
-async def response_file_handle(api_response : httpx.Response):
+
+
+async def process_ca_data(ca_docs):
+    """Process the corporate announcements data and update CSV files"""
+    if await aiofiles.os.path.exists(csv_file_path):
+        logger.info(f"Processing existing file: {csv_file_path}")
+        async with aiofiles.open(csv_file_path, mode='r') as f:
+            content = await f.read()
+            df1 = pd.read_csv(io.StringIO(content), dtype='object')
+            
+        df2 = pd.DataFrame(ca_docs)
+        async with aiofiles.open("files/temp.csv", mode='w') as f:
+            await f.write(df2.to_csv(index=False))
         
-    api_response = api_response.json()
-    logging.info(" FILE handling start ")
-    if os.path.exists(csv_file_path):
-        # print(f"File '{csv_file_path}' exists. Loading data...")
-        df1 = pd.read_csv(csv_file_path, dtype='object')
-        df2 = pd.DataFrame(api_response)
-        df2.to_csv("files/temp.csv", index = False)
-
-        api_df = pd.read_csv("files/temp.csv", dtype= 'object')
-
-        # Convert all columns to the same type (e.g., to string) for comparison
-        df1 = df1.map(str)
-        api_df = api_df.map(str)
-
-        # Remove extra spaces
-        df1 = df1.map(lambda x: x.strip() if isinstance(x, str) else x)
-        api_df = api_df.map(lambda x: x.strip() if isinstance(x, str) else x)
-
-        # Perform an outer merge on all columns to find the differences
+        async with aiofiles.open("files/temp.csv", mode='r') as f:
+            content = await f.read()
+            api_df = pd.read_csv(io.StringIO(content), dtype='object')
+        
+        # Convert all columns to string and strip whitespace
+        df1 = df1.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
+        api_df = api_df.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
+        
+        # Find new rows
         merged = pd.merge(df1, api_df, how='outer', indicator=True)
-        merged = merged.sort_values(by='an_dt', ascending= False)
-        # print(" MERGED TABLE ")
-        # print(merged)
-
-        # # Filter rows that are only in df2 and not in df1
+        merged = merged.sort_values(by='an_dt', ascending=False)
         new_rows = merged[merged['_merge'] == 'right_only'].drop('_merge', axis=1)
-        # # Print the new rows
-        print(new_rows)
-        print(len(new_rows))
-
+        
+        #if new rows  
         if len(new_rows) > 0:
+            try:
+                group_keyword_df = pd.read_csv(keyword_custom_group_url)
+                print(group_keyword_df)
+                group_id_keywords = {}
+                for index, row in group_keyword_df.iterrows():
+                    print("row is - ", row)
+                    group_id = "@" + str(row['group_id'])
+                    group_id_keywords[group_id] = row['keywords']
+                print("these are the group id and keywords - ", group_id_keywords)
+            except Exception as e:
+                logger.error(f"Error reading Google Sheet: {str(e)}")
+                logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
+                group_id_keywords = {}  # Set empty dict to continue processing without custom groups
+
+
+    
+            # now we need to check if the new_rows is in the group_id_keywords
+            for group_id, keywords in group_id_keywords.items():
+                # Convert keywords to lowercase list
+                keywords_lower = [str(kw).lower() for kw in keywords]
+                
+                # Check if any keyword exists in any column of the row  
+                for index, row in new_rows.iterrows():
+                    # Convert all row values to lowercase strings and check for keyword matches
+                    row_values = [str(val).lower() for val in row]
+                    if any(any(kw in val for val in row_values) for kw in keywords_lower):
+                        message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
+                        await trigger_test_message(group_id, message)
+
             for index, row in new_rows.iterrows():
-                # job(1, "NEW RECORD OR CA")
-                symbol = row["symbol"]
-                sm_name = row["sm_name"]
-                desc = row["desc"]
-                attached_text = row["attchmntText"]
-                attached_file = row["attchmntFile"]
 
-                print("SUYMBOL IS  - ", symbol)
-                message = f"""<b>{symbol} - {sm_name}</b>\n\n{desc}\n\n<i>{attached_text}</i>\n\n<b>File:</b>\n{attached_file}"""
-                trigger_test_message("@trade_mvd",message)
-                if sm_name in SME_companies:
-                    # await send_message(chat_id, final_message)
-                    trigger_message(message)
-                    if os.path.exists(watchlist_CA_files):
-                        print(f"File '{watchlist_CA_files}' exists. Loading data...")
-                        logging.info(f"File '{watchlist_CA_files}' exists. Loading data...")
+                message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
 
-                        new_rows.to_csv(watchlist_CA_files, mode='a', index=False)
-                    else:
-                        # Create a new file and write data
-                        new_rows.to_csv(watchlist_CA_files, index=False)
-                        print(f"New file created at {watchlist_CA_files} and data written.")
-                        logging.info(f"New file created at {watchlist_CA_files} and data written.")
-
+                # message = f"""<b>{symbol} - {sm_name}</b>\n\n{desc}\n\n<i>{attached_text}</i>\n\n<b>File:</b>\n{attached_file}"""
+                await trigger_test_message("@trade_mvd", message)
+                
+                # check if the company is in the SME list
+                if row["sm_name"] in SME_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
+                # check if the company is in the BSE_NSE_companies list
+                if row["sm_name"] in BSE_NSE_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
+                    
+            # Update main CSV file
             df1_updated = pd.concat([new_rows, df1], ignore_index=True).drop_duplicates()
-            df1_updated.to_csv(csv_file_path, index=False)
+            async with aiofiles.open(csv_file_path, mode='w') as f:
+                await f.write(df1_updated.to_csv(index=False))
+            
+        return 1
     else:
-        print(f"File '{csv_file_path}' does not exist. Creating a new DataFrame.")
-        logging.info(f"File '{csv_file_path}' does not exist. Creating a new DataFrame.")
+        logger.info(f"Creating new file: {csv_file_path}")
+        df = pd.DataFrame(ca_docs)
+        async with aiofiles.open(csv_file_path, mode='w') as f:
+            await f.write(df.to_csv(index=False))
+        return 1
 
-        # Step 2: Convert JSON to DataFrame
-        df = pd.DataFrame(api_response)
-        # Step 3: Save to CSV
-        df.to_csv(csv_file_path, index=False)
+async def update_watchlist_file(new_rows):
+    """Update the watchlist CSV file with new rows"""
+    if await aiofiles.os.path.exists(watchlist_CA_files):
+        logger.info(f"Appending to existing watchlist file: {watchlist_CA_files}")
+        async with aiofiles.open(watchlist_CA_files, mode='a') as f:
+            await f.write(new_rows.to_csv(index=False, header=False))
+    else:
+        logger.info(f"Creating new watchlist file: {watchlist_CA_files}")
+        async with aiofiles.open(watchlist_CA_files, mode='w') as f:
+            await f.write(new_rows.to_csv(index=False))
 
-async def CA_equities():
+
+
+async def CA_sme():
     """
     Fetches corporate announcements data using two methods:
     1. Primary method using nsefetch
@@ -261,7 +327,7 @@ async def CA_equities():
         logger.info("Attempting to fetch data using nsefetch...")
         # raise json.JSONDecodeError("Test JSON decode error", "", 0)
 
-        ca_docs = nsefetch(api_url)
+        ca_docs = nsefetch(sme_url)
         logger.info(f"Successfully fetched data using nsefetch. Type: {type(ca_docs)}")
         return await process_ca_data(ca_docs)
         
@@ -302,7 +368,7 @@ async def CA_equities():
                 
                 # Now make the actual API request with the same session (cookies will be maintained)
                 logger.info("Making API request with session cookies...")
-                response = await client.get(api_url, headers=headers)
+                response = await client.get(sme_url, headers=headers)
                 
                 # Log the response status and headers for debugging
                 logger.info(f"Response status: {response.status_code}")
@@ -341,62 +407,9 @@ async def CA_equities():
     except Exception as e:
         logger.error(f"Unexpected error in CA_equities: {str(e)}")
         logger.info("Both methods failed. Waiting 30 seconds before retrying...")
-        await asyncio.sleep(30)
+        await asyncio.sleep(20)
         return None
 
-async def process_ca_data(ca_docs):
-    """Process the corporate announcements data and update CSV files"""
-    if os.path.exists(csv_file_path):
-        logger.info(f"Processing existing file: {csv_file_path}")
-        df1 = pd.read_csv(csv_file_path, dtype='object')
-        df2 = pd.DataFrame(ca_docs)
-        df2.to_csv("files/temp.csv", index=False)
-        
-        api_df = pd.read_csv("files/temp.csv", dtype='object')
-        
-        # Convert all columns to string and strip whitespace
-        df1 = df1.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
-        api_df = api_df.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
-        
-        # Find new rows
-        merged = pd.merge(df1, api_df, how='outer', indicator=True)
-        merged = merged.sort_values(by='an_dt', ascending=False)
-        new_rows = merged[merged['_merge'] == 'right_only'].drop('_merge', axis=1)
-        
-        if len(new_rows) > 0:
-            for index, row in new_rows.iterrows():
-                symbol = row["symbol"]
-                sm_name = row["sm_name"]
-                desc = row["desc"]
-                attached_text = row["attchmntText"]
-                attached_file = row["attchmntFile"]
-                
-                message = f"""<b>{symbol} - {sm_name}</b>\n\n{desc}\n\n<i>{attached_text}</i>\n\n<b>File:</b>\n{attached_file}"""
-                trigger_test_message("@trade_mvd", message)
-                
-                if sm_name in SME_companies:
-                    trigger_message(message)
-                    update_watchlist_file(new_rows)
-            
-            # Update main CSV file
-            df1_updated = pd.concat([new_rows, df1], ignore_index=True).drop_duplicates()
-            df1_updated.to_csv(csv_file_path, index=False)
-            
-        return 1
-    else:
-        logger.info(f"Creating new file: {csv_file_path}")
-        df = pd.DataFrame(ca_docs)
-        df.to_csv(csv_file_path, index=False)
-        return 1
-
-def update_watchlist_file(new_rows):
-    """Update the watchlist CSV file with new rows"""
-    if os.path.exists(watchlist_CA_files):
-        logger.info(f"Appending to existing watchlist file: {watchlist_CA_files}")
-        new_rows.to_csv(watchlist_CA_files, mode='a', index=False)
-    else:
-        logger.info(f"Creating new watchlist file: {watchlist_CA_files}")
-        new_rows.to_csv(watchlist_CA_files, index=False)
 
 
 
@@ -406,8 +419,8 @@ def update_watchlist_file(new_rows):
 async def webhook(request: Request):
     try:
         data = await request.json()
-        print(f"Incoming data: {data}")  # Log data for debugging
-        print(data)
+        # print(f"Incoming data: {data}")  # Log data for debugging
+        # print(data)
         if "message" in data:
             chat_id = data["message"]["chat"]["id"]
             text = data["message"].get("text", "")
@@ -415,12 +428,14 @@ async def webhook(request: Request):
             if text:
                 # Respond to the user
                 ## search from the existing files of equity
-                results = search_csv(text)
-                print(results)
-                print(type(results))
+                results = await search_csv(text)
+                # print(results)
+                # print("\n")
+                print("Total records found - ", len(results))
+                # print(type(results))
                 if len(results) > 0:
                     for i in range(len(results)):
-                        print(results[i])
+                        # print(results[i])
                         symbol = results[i]["row"][0]
                         sm_name = results[i]["row"][4]
                         desc = results[i]["row"][1]
@@ -428,10 +443,10 @@ async def webhook(request: Request):
                         attached_file = results[i]["row"][3]
 
                         final_message = f"""<b>{symbol} - {sm_name}</b>\n\n{desc}\n\n<i>{attached_text}</i>\n\n<b>File:</b>\n{attached_file}"""
-                        await send_message(chat_id, final_message)
+                        await send_webhook_message(chat_id, final_message)
 
             else:
-                await send_message(chat_id, "I can only process text messages right now.")
+                await send_webhook_message(chat_id, "I can only process text messages right now.")
 
         return {"status": "ok"}
     except Exception as e:
@@ -441,8 +456,146 @@ async def webhook(request: Request):
 
 
 # Function to run the periodic task
-async def run_periodic_task():
-    logger.info("starting thescript ")
+async def run_periodic_task_sme():
+    logger.info("starting thescript sme")
+    while True:
+        try:
+            logger.info("starting")
+            print("starting")
+            result = await CA_sme()  # Run the task
+            
+            if result is None:
+                logger.warning("Failed to fetch data, will retry in next cycle")
+            else:
+                logger.info("Successfully fetched data")
+                # Process results here if needed
+                
+            logger.info("next loop")
+            print("next loop")
+            # Slightly increase wait time to avoid hitting rate limits
+            await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+        except Exception as e:
+            logger.error(f"Error in run_periodic_task sme: {str(e)}")
+            logger.info("Error occurred, waiting 30 seconds before retrying...")
+            await asyncio.sleep(30)  # Wait for 60 seconds before retrying
+
+
+# X--- X --- X --- X --- X --- X 
+#  EQUITiES 
+# X--- X --- X --- X --- X --- X 
+
+
+async def CA_equities():
+    """
+    Fetches corporate announcements data using two methods:
+    1. Primary method using nsefetch
+    2. Fallback method using httpx.AsyncClient with improved session handling
+    If both methods fail, waits 60 seconds before retrying
+    """
+    # Test exception handling
+    # if test_exception:
+        # if test_exception == 'json_decode':
+        # elif test_exception == 'http_error':
+        #     raise httpx.HTTPStatusError("Test HTTP error", request=None, response=None)
+        # elif test_exception == 'empty_response':
+        #     raise ValueError("Empty response from NSE API")
+        # elif test_exception == 'unauthorized':
+        #     raise ValueError("NSE API returned 401 Unauthorized. Access might be blocked.")
+        # else:
+        #     raise ValueError(f"Invalid test exception type: {test_exception}")
+
+    # Method 1: Using nsefetch
+    try:
+        logger.info("Attempting to fetch data using nsefetch...")
+        # raise json.JSONDecodeError("Test JSON decode error", "", 0)
+
+        ca_docs = nsefetch(equity_url)
+        logger.info(f"Successfully fetched data using nsefetch. Type: {type(ca_docs)}")
+        return await process_ca_data(ca_docs)
+        
+    except (requests.exceptions.JSONDecodeError, json.JSONDecodeError) as e:
+        logger.error(f"JSON Decode Error in nsefetch method: {str(e)}")
+        # Method 2: Using httpx.AsyncClient with improved session handling
+        try:
+            logger.info("Attempting fallback method using httpx.AsyncClient with improved session handling...")
+            
+            # More comprehensive headers that mimic a real browser
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Referer": "https://www.nseindia.com/",
+                "Origin": "https://www.nseindia.com",
+                "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache"
+            }
+            
+            
+            # Create a session with cookies
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                # First, visit the main page to get cookies
+                logger.info("Visiting main NSE page to get cookies...")
+                main_page_response = await client.get("https://www.nseindia.com/", headers=headers)
+                
+                # Add a small delay to mimic human behavior
+                await asyncio.sleep(2)
+                
+                # Now make the actual API request with the same session (cookies will be maintained)
+                logger.info("Making API request with session cookies...")
+                response = await client.get(equity_url, headers=headers)
+                
+                # Log the response status and headers for debugging
+                logger.info(f"Response status: {response.status_code}")
+                # logger.info(f"Response headers: {dict(response.headers)}")
+                
+                # Check if response is empty
+                if not response.text:
+                    logger.error("Empty response received from NSE API")
+                    raise ValueError("Empty response from NSE API")
+                
+                # Check if we got a 401 Unauthorized
+                if response.status_code == 401:
+                    logger.error("Received 401 Unauthorized. NSE might be blocking automated access.")
+                    # logger.error(f"Response text: {response.text[:200]}...")
+                    raise ValueError("NSE API returned 401 Unauthorized. Access might be blocked.")
+                    
+                # Try to parse JSON
+                try:
+                    data = response.json()
+                    if not data:
+                        logger.error("Empty JSON data received from NSE API")
+                        raise ValueError("Empty JSON data from NSE API")
+                    return await process_ca_data(data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON response: {str(e)}")
+                    logger.error(f"Response text: {response.text[:200]}...")  # Log first 200 chars of response
+                    raise
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP Status Error in fallback method: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in fallback method: {str(e)}")
+            raise
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in CA_equities: {str(e)}")
+        logger.info("Both methods failed. Waiting 30 seconds before retrying...")
+        await asyncio.sleep(20)
+        return None
+
+
+# Function to run the periodic task
+async def run_periodic_task_equities():
+    logger.info("starting thescript equities ")
     while True:
         try:
             logger.info("starting")
@@ -460,16 +613,18 @@ async def run_periodic_task():
             # Slightly increase wait time to avoid hitting rate limits
             await asyncio.sleep(10)  # Wait for 10 seconds before running it again
         except Exception as e:
-            logger.error(f"Error in run_periodic_task: {str(e)}")
+            logger.error(f"Error in run_periodic_task equiteis: {str(e)}")
             logger.info("Error occurred, waiting 30 seconds before retrying...")
             await asyncio.sleep(30)  # Wait for 60 seconds before retrying
+
 
 
 # Start the background task when FastAPI is running
 @app.get("/start-scheduler/")
 async def start_scheduler(background_tasks: BackgroundTasks):
-    set_webhook()
-    background_tasks.add_task(run_periodic_task)
+    await set_webhook()
+    background_tasks.add_task(run_periodic_task_sme)
+    background_tasks.add_task(run_periodic_task_equities)
     return {"message": "Scheduler started!"}
 
 @app.get("/")
