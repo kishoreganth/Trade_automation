@@ -19,7 +19,7 @@ from stock_info import SME_companies, BSE_NSE_companies
 ## TELEGRAM SETUP
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
-WEBHOOK_URL = "https://a68f-49-206-11-126.ngrok-free.app/webhook"  # Make sure the path matches Flask's route
+WEBHOOK_URL = "http://122.165.113.41:5000/webhook"  # Make sure the path matches Flask's route
 chat_ids = ["776062518", "@test_kishore_ai_chat"]
 # chat_id = "@test_kishore_ai_chat"
 
@@ -247,7 +247,7 @@ async def process_ca_data(ca_docs):
                 group_id_keywords = {}  # Set empty dict to continue processing without custom groups
 
 
-    
+
             # now we need to check if the new_rows is in the group_id_keywords
             for group_id, keywords in group_id_keywords.items():
                 # Convert keywords to lowercase list
