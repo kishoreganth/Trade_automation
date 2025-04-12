@@ -82,19 +82,7 @@ keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/e
 
 
 watchlist_sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
-df = pd.read_csv(watchlist_sheet_url)
-print(df)
 
-watchlist_chat_ids = []
-print("these are the watchlist chat ids - ", watchlist_chat_ids)
-
-for index, row in df.iterrows():
-    print("row is - ", row)
-    chat_id = "@" + str(row['Telegram link'])
-    print("CHAT ID IS - ", chat_id)
-    watchlist_chat_ids.append(chat_id)
-
-print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
 
 
 async def send_webhook_message(chat_id: int, text: str):
@@ -178,6 +166,21 @@ async def search_csv(all_keywords):
 
 async def trigger_watchlist_message(message):
     print("WATCHLIST stocks are sending to telegram")
+    
+    df = pd.read_csv(watchlist_sheet_url)
+    print(df)
+
+    watchlist_chat_ids = []
+    print("these are the watchlist chat ids - ", watchlist_chat_ids)
+
+    for index, row in df.iterrows():
+        print("row is - ", row)
+        chat_id = "@" + str(row['Telegram link'])
+        print("CHAT ID IS - ", chat_id)
+        watchlist_chat_ids.append(chat_id)
+
+    print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
+    
     for chat_id in watchlist_chat_ids:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
