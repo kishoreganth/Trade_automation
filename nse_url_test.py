@@ -640,16 +640,16 @@ async def process_ca_data(ca_docs):
                 print(f"Message created for {row['symbol']}")
                  
                 # Send the message
-                # await trigger_test_message("@trade_mvd", message)
+                await trigger_test_message("@trade_mvd", message)
                 
-                # check if the company is in the SME list
-                if row["sm_name"] in SME_companies:
-                    await trigger_watchlist_message(message)
-                    await update_watchlist_file(new_rows)
-                # check if the company is in the BSE_NSE_companies list
-                if row["sm_name"] in BSE_NSE_companies:
-                    await trigger_watchlist_message(message)
-                    await update_watchlist_file(new_rows)
+                # # check if the company is in the SME list
+                # if row["sm_name"] in SME_companies:
+                #     await trigger_watchlist_message(message)
+                #     await update_watchlist_file(new_rows)
+                # # check if the company is in the BSE_NSE_companies list
+                # if row["sm_name"] in BSE_NSE_companies:
+                #     await trigger_watchlist_message(message)
+                #     await update_watchlist_file(new_rows)
             
             # For CSV storage, keep original URLs to maintain duplicate detection
             new_rows_for_csv = new_rows.copy()
@@ -1013,20 +1013,23 @@ async def run_periodic_task_equities():
             await asyncio.sleep(30)  # Wait for 30 seconds before retrying
 
 # Start the background tasks when the application starts
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application startup and shutdown events"""
     global sme_task, equities_task
+    
+    # Startup: Create directories and start background tasks
+    os.makedirs("files/pdf", exist_ok=True)
+    
     # Start both tasks in parallel using asyncio.create_task
     # sme_task = asyncio.create_task(run_periodic_task_sme())
     equities_task = asyncio.create_task(run_periodic_task_equities())
     print("Both SME and Equities background tasks are now running in parallel")
     logger.info("Both SME and Equities background tasks are now running in parallel")
-
-# Clean up tasks when the application shuts down
-@app.on_event("shutdown")
-async def shutdown_event():
-    global sme_task, equities_task
-    # Cancel the SME task if it's still running
+    
+    yield  # FastAPI will run the application here
+    
+    # Shutdown: Clean up tasks
     if sme_task and not sme_task.done():
         sme_task.cancel()
         try:
@@ -1035,7 +1038,6 @@ async def shutdown_event():
             print("SME task was cancelled")
             logger.info("SME task was cancelled")
     
-    # Cancel the Equities task if it's still running
     if equities_task and not equities_task.done():
         equities_task.cancel()
         try:
@@ -1043,6 +1045,9 @@ async def shutdown_event():
         except asyncio.CancelledError:
             print("Equities task was cancelled")
             logger.info("Equities task was cancelled")
+
+# Create the FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def home():
