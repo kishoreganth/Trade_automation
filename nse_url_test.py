@@ -28,7 +28,7 @@ from reportlab.lib import colors
 from stock_info import SME_companies, BSE_NSE_companies
 
 # Add this near the top with other global variables
-BASE_URL = "http://localhost:5000"  # Can be changed to any domain/IP
+BASE_URL = "http://122.165.113.41:5000"  # Can be changed to any domain/IP
 
 ## TELEGRAM SETUP
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
