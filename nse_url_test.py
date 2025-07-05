@@ -123,6 +123,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure directories exist before mounting
+os.makedirs("files/pdf", exist_ok=True)  # Create files and pdf subdirectory if they don't exist
+
 # Mount static files for serving PDFs
 app.mount("/files", StaticFiles(directory="files"), name="files")
 
