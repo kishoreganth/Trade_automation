@@ -750,21 +750,21 @@ async def process_ca_data(ca_docs):
                 
                 # Create message with the final attachment URL (PDF if converted, otherwise original)
                 # Always show the full URL in the link text
-                message = f'''THIS IISSSS SKSIHORE <b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+                message = f'''<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
 
                 print(f"Message created for {row['symbol']}")
                  
                 # Send the message
-                await trigger_test_message("@trade_mvd", message)
+                # await trigger_test_message("@trade_mvd", message)
                 
-                # # check if the company is in the SME list
-                # if row["sm_name"] in SME_companies:
-                #     await trigger_watchlist_message(message)
-                #     await update_watchlist_file(new_rows)
-                # # check if the company is in the BSE_NSE_companies list
-                # if row["sm_name"] in BSE_NSE_companies:
-                #     await trigger_watchlist_message(message)
-                #     await update_watchlist_file(new_rows)
+                # check if the company is in the SME list
+                if row["sm_name"] in SME_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
+                # check if the company is in the BSE_NSE_companies list
+                if row["sm_name"] in BSE_NSE_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
             
             # For CSV storage, keep original URLs to maintain duplicate detection
             new_rows_for_csv = new_rows.copy()
