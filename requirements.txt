@@ -30,3 +30,4 @@ nsepython
 nsepythonserver
 aiofiles==23.2.1
 weasyprint
+reportlab
