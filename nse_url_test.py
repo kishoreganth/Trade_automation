@@ -123,27 +123,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure all required directories exist before starting
-os.makedirs("files", exist_ok=True)  # Create main files directory
-os.makedirs("files/pdf", exist_ok=True)  # Create pdf subdirectory
-# Create empty CSV files if they don't exist
-csv_files = [
-    "files/all_corporate_announcements.csv",
-    "files/temp.csv",
-    "files/watchlist_corporate_announcements.csv"
-]
-for csv_file in csv_files:
-    if not os.path.exists(csv_file):
-        try:
-            with open(csv_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                # Add headers for the main announcements file
-                if csv_file == "files/all_corporate_announcements.csv":
-                    writer.writerow(['symbol', 'desc', 'dt', 'attchmntFile', 'sm_name', 'an_dt'])
-            logger.info(f"Created CSV file: {csv_file}")
-        except Exception as e:
-            logger.error(f"Error creating CSV file {csv_file}: {str(e)}")
-            raise
+# Ensure directories exist before mounting
+os.makedirs("files/pdf", exist_ok=True)  # Create files and pdf subdirectory if they don't exist
 
 # Mount static files for serving PDFs
 app.mount("/files", StaticFiles(directory="files"), name="files")
@@ -595,126 +576,109 @@ def format_field_name(field_name):
 
 async def process_ca_data(ca_docs):
     """Process the corporate announcements data and update CSV files"""
-    try:
-        if await aiofiles.os.path.exists(csv_file_path):
-            logger.info(f"Processing existing file: {csv_file_path}")
+    if await aiofiles.os.path.exists(csv_file_path):
+        logger.info(f"Processing existing file: {csv_file_path}")
+        async with aiofiles.open(csv_file_path, mode='r') as f:
+            content = await f.read()
+            df1 = pd.read_csv(io.StringIO(content), dtype='object')
+            
+        df2 = pd.DataFrame(ca_docs)
+        async with aiofiles.open("files/temp.csv", mode='w') as f:
+            await f.write(df2.to_csv(index=False))
+        
+        async with aiofiles.open("files/temp.csv", mode='r') as f:
+            content = await f.read()
+            api_df = pd.read_csv(io.StringIO(content), dtype='object')
+        
+        # Convert all columns to string and strip whitespace
+        df1 = df1.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
+        api_df = api_df.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
+        
+        # Find new rows
+        merged = pd.merge(df1, api_df, how='outer', indicator=True)
+        merged = merged.sort_values(by='an_dt', ascending=False)
+        new_rows = merged[merged['_merge'] == 'right_only'].drop('_merge', axis=1)
+        
+        #if new rows  
+        if len(new_rows) > 0:
             try:
-                async with aiofiles.open(csv_file_path, mode='r', encoding='utf-8') as f:
-                    content = await f.read()
-                    df1 = pd.read_csv(io.StringIO(content), dtype='object')
+                group_keyword_df = pd.read_csv(keyword_custom_group_url)
+                print(group_keyword_df)
+                group_id_keywords = {}
                 
-                df2 = pd.DataFrame(ca_docs)
-                try:
-                    async with aiofiles.open("files/temp.csv", mode='w', encoding='utf-8') as f:
-                        await f.write(df2.to_csv(index=False))
-                    
-                    async with aiofiles.open("files/temp.csv", mode='r', encoding='utf-8') as f:
-                        content = await f.read()
-                        api_df = pd.read_csv(io.StringIO(content), dtype='object')
-                except Exception as e:
-                    logger.error(f"Error handling temp.csv: {str(e)}")
-                    raise
-                
-                # Convert all columns to string and strip whitespace
-                df1 = df1.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
-                api_df = api_df.map(str).map(lambda x: x.strip() if isinstance(x, str) else x)
-                
-                # Find new rows
-                merged = pd.merge(df1, api_df, how='outer', indicator=True)
-                merged = merged.sort_values(by='an_dt', ascending=False)
-                new_rows = merged[merged['_merge'] == 'right_only'].drop('_merge', axis=1)
-
-                # Process new rows and send messages
-                if len(new_rows) > 0:
-                    try:
-                        group_keyword_df = pd.read_csv(keyword_custom_group_url)
-                        print(group_keyword_df)
-                        group_id_keywords = {}
-                        
-                        for index, row in group_keyword_df.iterrows():
-                            group_id = "@" + str(row['group_id']).strip()
-                            keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
-                            # Split by comma and strip each keyword
-                            keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
-                            group_id_keywords[group_id] = keywords
-                        print("these are the group id and keywords - ", group_id_keywords)
-                    except Exception as e:
-                        logger.error(f"Error reading Google Sheet: {str(e)}")
-                        logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
-                        group_id_keywords = {}  # Set empty dict to continue processing without custom groups
-
-                    # Now process all rows and send messages
-                    for index, row in new_rows.iterrows():
-                        attachment_file = str(row['attchmntFile'])
-                        
-                        print(f"Processing row {index}: {row['symbol']} - {row['sm_name']}")
-                        
-                        # If it's an XML file, convert it and use the PDF URL
-                        if attachment_file.lower().endswith('.xml'):
-                            pdf_url = await convert_xml_to_pdf(attachment_file)
-                            if pdf_url:
-                                attachment_file = pdf_url
-                                logger.info(f"Using converted PDF URL: {pdf_url}")
-                        
-                        print(f"Final attachment file: {attachment_file}")
-                        
-                        # Create message with the final attachment URL (PDF if converted, otherwise original)
-                        # Always show the full URL in the link text
-                        message = f'''<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
-
-                        print(f"Message created for {row['symbol']}")
-                         
-                        # Send the message
-                        # await trigger_test_message("@trade_mvd", message)
-                        
-                        # check if the company is in the SME list
-                        if row["sm_name"] in SME_companies:
-                            await trigger_watchlist_message(message)
-                            await update_watchlist_file(new_rows)
-                        # check if the company is in the BSE_NSE_companies list
-                        if row["sm_name"] in BSE_NSE_companies:
-                            await trigger_watchlist_message(message)
-                            await update_watchlist_file(new_rows)
-                    
-                    # For CSV storage, keep original URLs to maintain duplicate detection
-                    new_rows_for_csv = new_rows.copy()
-                    
-                    # Restore original XML URLs in the CSV copy to maintain duplicate detection
-                    for index, row in new_rows.iterrows():
-                        if row['attchmntFile'].startswith(f"{BASE_URL}/files/pdf/"):
-                            # Find the original XML URL from the API data
-                            api_row = api_df[api_df['symbol'] == row['symbol']]
-                            if not api_row.empty:
-                                original_url = api_row.iloc[0]['attchmntFile']
-                                new_rows_for_csv.iloc[index, new_rows_for_csv.columns.get_loc('attchmntFile')] = original_url
-                                logger.info(f"📝 Restored original URL for CSV: {row['symbol']} -> {original_url}")
-                    
-                    # Update main CSV file with ORIGINAL URLs (for duplicate detection)
-                    logger.info("Updating CSV file with original URLs (for duplicate detection)")
-                    df1_updated = pd.concat([new_rows_for_csv, df1], ignore_index=True).drop_duplicates()
-                    try:
-                        async with aiofiles.open(csv_file_path, mode='w', encoding='utf-8') as f:
-                            await f.write(df1_updated.to_csv(index=False))
-                        logger.info(f"Updated CSV file saved with {len(df1_updated)} total rows")
-                    except Exception as e:
-                        logger.error(f"Error writing to main CSV file: {str(e)}")
-                        raise
+                for index, row in group_keyword_df.iterrows():
+                    group_id = "@" + str(row['group_id']).strip()
+                    keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
+                    # Split by comma and strip each keyword
+                    keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
+                    group_id_keywords[group_id] = keywords
+                print("these are the group id and keywords - ", group_id_keywords)
             except Exception as e:
-                logger.error(f"Error processing existing CSV file: {str(e)}")
-                raise
-        else:
-            logger.info(f"Creating new file: {csv_file_path}")
-            try:
-                df = pd.DataFrame(ca_docs)
-                async with aiofiles.open(csv_file_path, mode='w', encoding='utf-8') as f:
-                    await f.write(df.to_csv(index=False))
-            except Exception as e:
-                logger.error(f"Error creating new CSV file: {str(e)}")
-                raise
+                logger.error(f"Error reading Google Sheet: {str(e)}")
+                logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
+                group_id_keywords = {}  # Set empty dict to continue processing without custom groups
+
+            # Now process all rows and send messages
+            for index, row in new_rows.iterrows():
+                attachment_file = str(row['attchmntFile'])
+                
+                print(f"Processing row {index}: {row['symbol']} - {row['sm_name']}")
+                
+                # If it's an XML file, convert it and use the PDF URL
+                if attachment_file.lower().endswith('.xml'):
+                    pdf_url = await convert_xml_to_pdf(attachment_file)
+                    if pdf_url:
+                        attachment_file = pdf_url
+                        logger.info(f"Using converted PDF URL: {pdf_url}")
+                
+                print(f"Final attachment file: {attachment_file}")
+                
+                # Create message with the final attachment URL (PDF if converted, otherwise original)
+                # Always show the full URL in the link text
+                message = f'''<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+
+                print(f"Message created for {row['symbol']}")
+                 
+                # Send the message
+                # await trigger_test_message("@trade_mvd", message)
+                
+                # check if the company is in the SME list
+                if row["sm_name"] in SME_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
+                # check if the company is in the BSE_NSE_companies list
+                if row["sm_name"] in BSE_NSE_companies:
+                    await trigger_watchlist_message(message)
+                    await update_watchlist_file(new_rows)
+            
+            # For CSV storage, keep original URLs to maintain duplicate detection
+            new_rows_for_csv = new_rows.copy()
+            
+            # Restore original XML URLs in the CSV copy to maintain duplicate detection
+            for index, row in new_rows.iterrows():
+                if row['attchmntFile'].startswith(f"{BASE_URL}/files/pdf/"):
+                    # Find the original XML URL from the API data
+                    api_row = api_df[api_df['symbol'] == row['symbol']]
+                    if not api_row.empty:
+                        original_url = api_row.iloc[0]['attchmntFile']
+                        new_rows_for_csv.iloc[index, new_rows_for_csv.columns.get_loc('attchmntFile')] = original_url
+                        logger.info(f"📝 Restored original URL for CSV: {row['symbol']} -> {original_url}")
+            
+            # Update main CSV file with ORIGINAL URLs (for duplicate detection)
+            logger.info("Updating CSV file with original URLs (for duplicate detection)")
+            df1_updated = pd.concat([new_rows_for_csv, df1], ignore_index=True).drop_duplicates()
+            async with aiofiles.open(csv_file_path, mode='w') as f:
+                await f.write(df1_updated.to_csv(index=False))
+            logger.info(f"Updated CSV file saved with {len(df1_updated)} total rows")
+
+            
         return 1
-    except Exception as e:
-        logger.error(f"Error in process_ca_data: {str(e)}")
-        return None
+    else:
+        logger.info(f"Creating new file: {csv_file_path}")
+        df = pd.DataFrame(ca_docs)
+        async with aiofiles.open(csv_file_path, mode='w') as f:
+            await f.write(df.to_csv(index=False))
+        return 1
 
 async def update_watchlist_file(new_rows):
     """Update the watchlist CSV file with new rows"""
