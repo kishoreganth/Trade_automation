@@ -27,9 +27,14 @@ from reportlab.lib import colors
 
 from stock_info import SME_companies, BSE_NSE_companies
 
+# Set up logging to both file and console
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
 # Add this near the top with other global variables
 BASE_URL = "http://122.165.113.41:5000"  # Can be changed to any domain/IP
-
+# BASE_URL = "http://localhost:5000"
 ## TELEGRAM SETUP
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
@@ -111,8 +116,42 @@ print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
 
 #######################
     
-# Create the FastAPI app
-app = FastAPI()
+# Start the background tasks when the application starts
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application startup and shutdown events"""
+    global sme_task, equities_task
+    
+    # Startup: Create directories and start background tasks
+    os.makedirs("files/pdf", exist_ok=True)
+    
+    # Start both tasks in parallel using asyncio.create_task
+    # sme_task = asyncio.create_task(run_periodic_task_sme())
+    equities_task = asyncio.create_task(run_periodic_task_equities())
+    print("Both SME and Equities background tasks are now running in parallel")
+    logger.info("Both SME and Equities background tasks are now running in parallel")
+    
+    yield  # FastAPI will run the application here
+    
+    # Shutdown: Clean up tasks
+    if sme_task and not sme_task.done():
+        sme_task.cancel()
+        try:
+            await sme_task
+        except asyncio.CancelledError:
+            print("SME task was cancelled")
+            logger.info("SME task was cancelled")
+    
+    if equities_task and not equities_task.done():
+        equities_task.cancel()
+        try:
+            await equities_task
+        except asyncio.CancelledError:
+            print("Equities task was cancelled")
+            logger.info("Equities task was cancelled")
+    
+# Create the FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
 
 # CORS configuration
 app.add_middleware(
@@ -123,15 +162,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure directories exist before mounting
-os.makedirs("files/pdf", exist_ok=True)  # Create files and pdf subdirectory if they don't exist
+# Ensure directories exist and have proper permissions
+os.makedirs("files", exist_ok=True)
+os.makedirs("files/pdf", exist_ok=True)
 
-# Mount static files for serving PDFs
-app.mount("/files", StaticFiles(directory="files"), name="files")
+# Log the absolute paths for debugging
+files_dir = os.path.abspath("files")
+pdf_dir = os.path.abspath("files/pdf")
+logger.info(f"Files directory: {files_dir}")
+logger.info(f"PDF directory: {pdf_dir}")
 
-# Set up logging to both file and console
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Verify directory permissions
+logger.info(f"Files directory exists: {os.path.exists(files_dir)}")
+logger.info(f"PDF directory exists: {os.path.exists(pdf_dir)}")
+logger.info(f"Files directory permissions: {oct(os.stat(files_dir).st_mode)[-3:]}")
+logger.info(f"PDF directory permissions: {oct(os.stat(pdf_dir).st_mode)[-3:]}")
+
+# Mount static files for serving PDFs with explicit directory path and HTML listing enabled
+app.mount("/files", StaticFiles(directory=files_dir, html=True, check_dir=True), name="files")
+
+# Add a test endpoint to check PDF directory
+@app.get("/check_pdf_dir")
+async def check_pdf_dir():
+    try:
+        # Get absolute paths
+        abs_pdf_dir = os.path.abspath(pdf_dir)
+        
+        # List all files in the directory
+        pdf_files = os.listdir(abs_pdf_dir)
+        
+        # Get detailed file info
+        file_details = []
+        for file in pdf_files:
+            file_path = os.path.join(abs_pdf_dir, file)
+            file_details.append({
+                "name": file,
+                "size": os.path.getsize(file_path),
+                "permissions": oct(os.stat(file_path).st_mode)[-3:],
+                "exists": os.path.exists(file_path),
+                "is_file": os.path.isfile(file_path)
+            })
+        
+        return {
+            "pdf_dir": abs_pdf_dir,
+            "exists": os.path.exists(abs_pdf_dir),
+            "is_dir": os.path.isdir(abs_pdf_dir),
+            "permissions": oct(os.stat(abs_pdf_dir).st_mode)[-3:],
+            "files": file_details,
+            "static_files_dir": files_dir,
+            "mount_point": "/files"
+        }
+    except Exception as e:
+        logger.error(f"Error in check_pdf_dir: {str(e)}")
+        return {"error": str(e), "type": str(type(e))}
+
 
 # File handler with UTF-8 encoding
 file_handler = logging.FileHandler('app.log', encoding='utf-8')
@@ -446,36 +530,49 @@ async def trigger_test_message(chat_idd, message):
 
 async def convert_xml_to_pdf(xml_url):
     try:
-        logger.info(f"Fetching XML from URL: {xml_url}")
+        logger.info(f"Starting XML to PDF conversion for URL: {xml_url}")
         headers = {"User-Agent": "Mozilla/5.0"}
+        
+        # Log directory creation
+        pdf_dir = "files/pdf"
+        logger.info(f"Ensuring PDF directory exists: {pdf_dir}")
+        os.makedirs(pdf_dir, exist_ok=True)
+        if not os.path.exists(pdf_dir):
+            logger.error(f"Failed to create PDF directory: {pdf_dir}")
+            return None
+        else:
+            logger.info(f"PDF directory confirmed: {pdf_dir}")
+
+        # Fetch XML
+        logger.info("Fetching XML content...")
         res = requests.get(xml_url, headers=headers, timeout=10)
         res.raise_for_status()
-        print(res.content)
+        logger.info(f"XML fetch status code: {res.status_code}")
         
         if not res.content:
             logger.error("Empty response received from XML URL")
             return None
             
+        # Parse XML
+        logger.info("Parsing XML content...")
         root = ET.fromstring(res.content)
         if root is None:
             logger.error("Failed to parse XML content")
             return None
 
-        # Get namespaces from root element attributes
+        # Get namespaces and extract data
         namespaces = dict([node for node in root.attrib.items() if node[0].startswith('xmlns:')])
-        # Add any namespaces from the root tag
         if '}' in root.tag:
             ns = root.tag.split('}')[0].strip('{')
             namespaces['xmlns'] = ns
-        print("Available namespaces:", namespaces)
+        logger.info(f"Found namespaces: {namespaces}")
 
         data = {}
         found_fields = 0
 
-        # First, get all elements and their values
-        print("\nAll elements found in XML:")
+        # Extract all elements
+        logger.info("Extracting elements from XML...")
         for elem in root.iter():
-            # Remove namespace from tag if present
             if '}' in elem.tag:
                 tag = elem.tag.split('}')[1]
             else:
@@ -483,7 +580,7 @@ async def convert_xml_to_pdf(xml_url):
                 
             if elem.text and elem.text.strip():
                 value = elem.text.strip()
-                print(f"Found: {tag} = {value}")
+                logger.info(f"Found field: {tag}")
                 data[tag] = value
                 found_fields += 1
 
@@ -491,18 +588,20 @@ async def convert_xml_to_pdf(xml_url):
             logger.warning("No fields found in XML document")
             return None
 
-        # Create PDF from the extracted data
+        # Create PDF
         if data:
             try:
-                # Ensure PDF directory exists
-                pdf_dir = "files/pdf"
-                os.makedirs(pdf_dir, exist_ok=True)
-                
-                # Create filename from company symbol or name
+                # Create filename
                 company_name = data.get('NSESymbol', data.get('NameOfTheCompany', 'Unknown')).replace('/', '_')
                 pdf_filename = f"CA_{company_name}_{int(time.time())}.pdf"
-                pdf_path = os.path.join(pdf_dir, pdf_filename)
+                pdf_path = os.path.join(pdf_dir, pdf_filename)  # Use absolute path
+                logger.info(f"Attempting to create PDF at absolute path: {pdf_path}")
                 
+                # Verify directory is writable
+                if not os.access(pdf_dir, os.W_OK):
+                    logger.error(f"PDF directory is not writable: {pdf_dir}")
+                    return None
+
                 # Create PDF
                 doc = SimpleDocTemplate(
                     pdf_path, 
@@ -514,7 +613,7 @@ async def convert_xml_to_pdf(xml_url):
                 styles = getSampleStyleSheet()
                 story = []
                 
-                # Title
+                # Add content
                 title = f"{data.get('NSESymbol', 'N/A')} - {data.get('NameOfTheCompany', 'Corporate Announcement')}"
                 title_style = ParagraphStyle(
                     'CustomTitle',
@@ -529,23 +628,39 @@ async def convert_xml_to_pdf(xml_url):
                 
                 # Add all fields
                 for field, value in data.items():
-                    if value and field not in ['NSESymbol', 'NameOfTheCompany']:  # Skip title fields
-                        # Format field name
+                    if value and field not in ['NSESymbol', 'NameOfTheCompany']:
                         field_name = ' '.join(field.split('_')).title()
-                        # Add field
                         story.append(Paragraph(f"<b>{field_name}:</b>", styles['Heading3']))
                         story.append(Paragraph(value, styles['Normal']))
                         story.append(Spacer(1, 10))
                 
                 # Build PDF
+                logger.info("Building PDF document...")
                 doc.build(story)
-                logger.info(f"Successfully created PDF: {pdf_path}")
                 
-                # Use BASE_URL for the PDF URL
-                return f"{BASE_URL}/files/pdf/{pdf_filename}"
-                
+                # Verify PDF was created and is readable
+                if os.path.exists(pdf_path):
+                    if os.access(pdf_path, os.R_OK):
+                        pdf_size = os.path.getsize(pdf_path)
+                        logger.info(f"PDF created successfully at {pdf_path} (size: {pdf_size} bytes)")
+                        web_url = f"{BASE_URL}/files/pdf/{pdf_filename}"
+                        logger.info(f"PDF accessible at URL: {web_url}")
+                        
+                        # List directory contents for verification
+                        logger.info(f"Directory contents of {pdf_dir}:")
+                        for f in os.listdir(pdf_dir):
+                            logger.info(f"- {f}")
+                        
+                        return web_url
+                    else:
+                        logger.error(f"PDF file exists but is not readable: {pdf_path}")
+                        return None
+                else:
+                    logger.error(f"PDF file not found after creation attempt: {pdf_path}")
+                    return None
             except Exception as e:
                 logger.error(f"Error creating PDF: {str(e)}")
+                logger.error(f"Current working directory: {os.getcwd()}")
                 return None
         else:
             logger.warning("No data extracted from XML")
@@ -635,7 +750,7 @@ async def process_ca_data(ca_docs):
                 
                 # Create message with the final attachment URL (PDF if converted, otherwise original)
                 # Always show the full URL in the link text
-                message = f'''<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+                message = f'''THIS IISSSS SKSIHORE <b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
 
                 print(f"Message created for {row['symbol']}")
                  
@@ -1012,42 +1127,8 @@ async def run_periodic_task_equities():
             logger.info("Error occurred in Equities task, waiting 30 seconds before retrying...")
             await asyncio.sleep(30)  # Wait for 30 seconds before retrying
 
-# Start the background tasks when the application starts
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager for FastAPI application startup and shutdown events"""
-    global sme_task, equities_task
-    
-    # Startup: Create directories and start background tasks
-    os.makedirs("files/pdf", exist_ok=True)
-    
-    # Start both tasks in parallel using asyncio.create_task
-    # sme_task = asyncio.create_task(run_periodic_task_sme())
-    equities_task = asyncio.create_task(run_periodic_task_equities())
-    print("Both SME and Equities background tasks are now running in parallel")
-    logger.info("Both SME and Equities background tasks are now running in parallel")
-    
-    yield  # FastAPI will run the application here
-    
-    # Shutdown: Clean up tasks
-    if sme_task and not sme_task.done():
-        sme_task.cancel()
-        try:
-            await sme_task
-        except asyncio.CancelledError:
-            print("SME task was cancelled")
-            logger.info("SME task was cancelled")
-    
-    if equities_task and not equities_task.done():
-        equities_task.cancel()
-        try:
-            await equities_task
-        except asyncio.CancelledError:
-            print("Equities task was cancelled")
-            logger.info("Equities task was cancelled")
 
-# Create the FastAPI app with lifespan
-app = FastAPI(lifespan=lifespan)
+
 
 @app.get("/")
 async def home():
@@ -1060,7 +1141,6 @@ async def status():
         "sme_task_running": sme_task is not None and not sme_task.done(),
         "equities_task_running": equities_task is not None and not equities_task.done()
     }
-
 
 if __name__ == "__main__":
     import uvicorn
