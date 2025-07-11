@@ -791,7 +791,7 @@ async def process_ca_data(ca_docs):
                     # Convert all row values to lowercase strings and check for keyword matches
                     row_values = [str(val).lower() for val in row]
                     if any(any(kw in val for val in row_values) for kw in keywords_lower):
-                        message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
+                        # message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
                         await trigger_test_message(group_id, message)
             #################################################################
             
