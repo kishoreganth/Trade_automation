@@ -734,22 +734,23 @@ async def process_ca_data(ca_docs):
                 group_id_keywords = {}  # Set empty dict to continue processing without custom groups
 
             #################################################################
-            # now we need to check if the new_rows is in the group_id_keywords
-            for group_id, keywords in group_id_keywords.items():
-                # Convert keywords to lowercase list
-                keywords_lower = [str(kw).lower() for kw in keywords]
+            # # now we need to check if the new_rows is in the group_id_keywords
+            # for group_id, keywords in group_id_keywords.items():
+            #     # Convert keywords to lowercase list
+            #     keywords_lower = [str(kw).lower() for kw in keywords]
 
-                # Check if any keyword exists in any column of the row  
-                for index, row in new_rows.iterrows():
-                    # Convert all row values to lowercase strings and check for keyword matches
-                    row_values = [str(val).lower() for val in row]
-                    if any(any(kw in val for val in row_values) for kw in keywords_lower):
-                        message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
-                        await trigger_test_message(group_id, message)
+            #     # Check if any keyword exists in any column of the row  
+            #     for index, row in new_rows.iterrows():
+            #         # Convert all row values to lowercase strings and check for keyword matches
+            #         row_values = [str(val).lower() for val in row]
+            #         if any(any(kw in val for val in row_values) for kw in keywords_lower):
+            #             message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
+            #             await trigger_test_message(group_id, message)
             #################################################################
 
             #################################################################
             # Now process all rows and send messages
+                
             for index, row in new_rows.iterrows():
                 attachment_file = str(row['attchmntFile'])
                 
@@ -769,7 +770,7 @@ async def process_ca_data(ca_docs):
                 message = f'''<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
 
                 print(f"Message created for {row['symbol']}")
-                 
+                
                 # Send the message
                 await trigger_test_message("@trade_mvd", message)
                 
@@ -781,6 +782,17 @@ async def process_ca_data(ca_docs):
                 if row["sm_name"] in BSE_NSE_companies:
                     await trigger_watchlist_message(message)
                     await update_watchlist_file(new_rows)
+                    
+                # now we need to check if the new_rows is in the group_id_keywords
+                for group_id, keywords in group_id_keywords.items():
+                    # Convert keywords to lowercase list
+                    keywords_lower = [str(kw).lower() for kw in keywords]
+                    
+                    # Convert all row values to lowercase strings and check for keyword matches
+                    row_values = [str(val).lower() for val in row]
+                    if any(any(kw in val for val in row_values) for kw in keywords_lower):
+                        message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
+                        await trigger_test_message(group_id, message)
             #################################################################
             
             
