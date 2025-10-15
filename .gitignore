@@ -1,8 +1,23 @@
-# Exclude files folder
+# Environment variables and secrets
+.env
+*.env
+kotak_session.json
+
+# Database files
+messages.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated folders
 files/
+images/
+downloads/
+temp_uploads/
 
 # Exclude log files
 app.log
+*.log
 
 # Exclude cookies file
 cookies.txt

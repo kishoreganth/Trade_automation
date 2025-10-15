@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Trading Messages Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Stock Trading Messages Dashboard</h1>
+            <p>Real-time monitoring of corporate announcements and trading alerts - Integrated NSE System</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <h3>📊 Filter by Option</h3>
+                <div class="option-filters">
+                    <div class="option-filter all active" data-option="all">
+                        All Options
+                    </div>
+                    <div class="option-filter" data-option="quarterly_result">
+                        📈 Quarterly Result
+                    </div>
+                    <div class="option-filter" data-option="investor_presentation">
+                        📊 Investor Presentation
+                    </div>
+                    <div class="option-filter" data-option="concall">
+                        📞 Concall
+                    </div>
+                    <div class="option-filter" data-option="monthly_business_update">
+                        📅 Monthly Business Update
+                    </div>
+                    <div class="option-filter" data-option="fund_raising">
+                        💰 Fund Raising
+                    </div>
+                    <div class="option-filter" data-option="result_concall">
+                        📋 Outcome of Board Meeting
+                    </div>
+                    <div class="option-filter" data-option="ai_analyzer">
+                        🤖 AI Analyzer
+                    </div>
+                    <div class="option-filter" data-option="place_order">
+                        📈 Place Order
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-area">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalMessages">0</div>
+                        <div class="stat-label">Total Messages</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="todayMessages">0</div>
+                        <div class="stat-label">Today's Messages</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="uniqueSymbols">0</div>
+                        <div class="stat-label">Unique Symbols</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="lastMessageTime">-</div>
+                        <div class="stat-label">Last Message</div>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <div class="control-group">
+                        <label>Filter by Symbol:</label>
+                        <input type="text" id="symbolFilter" placeholder="Enter symbol...">
+                    </div>
+                    <div class="control-group">
+                        <label>Show last:</label>
+                        <select id="limitSelect">
+                            <option value="50">50 messages</option>
+                            <option value="100" selected>100 messages</option>
+                            <option value="200">200 messages</option>
+                            <option value="0">All messages</option>
+                        </select>
+                    </div>
+                    <button onclick="refreshData()">🔄 Refresh</button>
+                </div>
+                
+                <div class="status">
+                    <div class="connection-status">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span id="connectionStatus">Connecting to WebSocket...</span>
+                    </div>
+                    <div id="lastUpdate">Last update: Never</div>
+                </div>
+                
+                <div class="table-container" id="messagesTableContainer">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Symbol</th>
+                                <th>Company</th>
+                                <th>Description</th>
+                                <th>Option</th>
+                                <th>File</th>
+                                <th>Chat ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="messagesTable">
+                            <tr>
+                                <td colspan="7" class="no-messages">
+                                    No messages yet. Waiting for corporate announcements...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="table-container" id="financialMetricsContainer" style="display: none;">
+                    <h3>📊 Financial Metrics - Board Meeting Outcomes</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Stock</th>
+                                <th>Period</th>
+                                <th>Year</th>
+                                <th>Revenue (₹ L)</th>
+                                <th>PBT (₹ L)</th>
+                                <th>PAT (₹ L)</th>
+                                <th>Total Income (₹ L)</th>
+                                <th>Other Income (₹ L)</th>
+                                <th>EPS (₹)</th>
+                                <th>Reported At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="financialMetricsTable">
+                            <tr>
+                                <td colspan="10" class="no-messages">
+                                    No financial metrics data available yet...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="ai-analyzer-container" id="aiAnalyzerContainer" style="display: none;">
+                    <h3>🤖 AI Financial Document Analyzer</h3>
+                    <div class="upload-section">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">📄</div>
+                            <div class="upload-text">
+                                <strong>Drop your PDF file here or click to browse</strong>
+                                <p>Supported format: PDF files only</p>
+                            </div>
+                            <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                        </div>
+                        <div class="upload-status" id="uploadStatus" style="display: none;">
+                            <div class="status-icon">⏳</div>
+                            <div class="status-text">Processing your document...</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="ai-results-container" id="aiResultsContainer" style="display: none;">
+                        <h4>📈 Analysis Results</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Year</th>
+                                    <th>Revenue (₹ L)</th>
+                                    <th>PBT (₹ L)</th>
+                                    <th>PAT (₹ L)</th>
+                                    <th>Total Income (₹ L)</th>
+                                    <th>Other Income (₹ L)</th>
+                                    <th>EPS (₹)</th>
+                                    <th>Analyzed At</th>
+                                </tr>
+                            </thead>
+                            <tbody id="aiResultsTable">
+                                <tr>
+                                    <td colspan="9" class="no-messages">
+                                        Upload a PDF file to see financial analysis results...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- Place Order Page -->
+            <div class="place-order-page" id="placeOrderPage" style="display: none;">
+                <div class="page-header">
+                    <h3>📈 Place Order</h3>
+                    <p>Market orders and TOTP authentication</p>
+                </div>
+                
+                <div class="place-order-layout">
+                    <!-- Left side - Google Sheet Preview -->
+                    <div class="sheet-preview-section">
+                        <div class="sheet-header">
+                            <h4>📊 Market Open Orders</h4>
+                            <button id="refreshSheetBtn" class="refresh-sheet-btn">🔄 Refresh</button>
+                        </div>
+                        <div class="sheet-container">
+                            <table class="sheet-table" id="sheetTable">
+                                <thead>
+                                    <tr>
+                                        <th>Stock Name</th>
+                                        <th>Exchange Token</th>
+                                        <th>Gap</th>
+                                        <th>Market</th>
+                                        <th>Quantity</th>
+                                        <th>Close Price</th>
+                                        <th>Buy Order</th>
+                                        <th>Sell Order</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sheetTableBody">
+                                    <tr>
+                                        <td colspan="8" class="loading-cell">Loading market data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Right side - TOTP Section -->
+                    <div class="totp-auth-section">
+                        <div class="totp-container">
+                            <div class="totp-header">
+                                <h4>🔐 Authentication</h4>
+                                <p>Enter TOTP to activate trading</p>
+                            </div>
+                            
+                            <div class="totp-form">
+                                <div class="form-group">
+                                    <label for="totpInput">TOTP Code</label>
+                                    <input 
+                                        type="text" 
+                                        id="totpInput" 
+                                        placeholder="Enter 6-digit TOTP code" 
+                                        maxlength="6" 
+                                        pattern="[0-9]{6}"
+                                        class="totp-input"
+                                    >
+                                    <div class="input-help">
+                                        Enter the 6-digit code from your authenticator app
+                                    </div>
+                                </div>
+                                
+                                <div class="button-group">
+                                    <button id="checkTotpBtn" class="check-btn">
+                                        <span class="btn-icon">🔐</span>
+                                        Check
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="totp-status" id="totpStatus" style="display: none;">
+                                <div class="status-icon" id="statusIcon">⏳</div>
+                                <div class="status-message" id="statusMessage">Verifying TOTP...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Place Order Section -->
+                        <div class="place-order-section">
+                            <div class="order-header">
+                                <h4>🚀 Execute Orders</h4>
+                                <p>Place buy/sell orders for all stocks in the sheet</p>
+                            </div>
+                            
+                            <!-- <div class="order-description">
+                                <div class="order-info">
+                                    <div class="info-item">
+                                        <span class="info-icon">📈</span>
+                                        <span>BUY orders: 5% below LTP</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-icon">📉</span>
+                                        <span>SELL orders: 5% above LTP</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-icon">⚡</span>
+                                        <span>Batch processing for all stocks</span>
+                                    </div>
+                                </div>
+                            </div> -->
+                            
+                            <div class="button-group">
+                                <button id="placeOrderBtn" class="place-order-btn">
+                                    <span class="btn-icon">🚀</span>
+                                    PLACE ORDERS
+                                </button>
+                            </div>
+                            
+                            <div class="order-status" id="orderStatus" style="display: none;">
+                                <div class="status-icon" id="orderStatusIcon">⏳</div>
+                                <div class="status-message" id="orderStatusMessage">Processing orders...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

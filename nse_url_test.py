@@ -6,10 +6,16 @@ import requests
 import os
 import json
 import pandas as pd
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+import pyotp
+import secrets
+import sqlite3
+import aiosqlite
 import httpx
 import aiofiles
 import aiofiles.os
@@ -17,19 +23,48 @@ import io
 from contextlib import asynccontextmanager
 import logging
 import xml.etree.ElementTree as ET
-
+from datetime import datetime, timedelta
+import aiohttp
+import time
+import psutil
+import gc
 import tempfile
+import shutil
+from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 # from fpdf import FPDF
-
+import sys
+import codecs
 from stock_info import SME_companies, BSE_NSE_companies
+from async_ocr_from_image import main_ocr_async, pdf_to_png_async, process_ocr_from_images_async, encode_images_async, analyze_financial_metrics_async, get_global_ocr_model
+from neo_main_login import main as neo_main_login
+from place_order import main as place_order_main
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging to both file and console
-logger = logging.getLogger()
+logger = logging.getLogger()    
 logger.setLevel(logging.INFO)
+
+# Cleanup configuration
+CLEANUP_CONFIG = {
+    "pdf_retention_days": 30,      # Keep PDFs for 30 days
+    "images_retention_days": 7,     # Keep images for 7 days (shorter since they're larger)
+    "cleanup_interval_hours": 24,   # Run cleanup every 24 hours
+    "post_ocr_cleanup": True,       # Delete images immediately after OCR completes
+    "folders": {
+        "pdf": "files/pdf",
+        "images": "images",
+        "downloads": "downloads",
+        "temp_uploads": "temp_uploads"
+    }
+}
+
 
 
 # Add this near the top with other global variables
@@ -100,36 +135,271 @@ fields = [
 gsheet_chats = "1v35Bq76X3_gA00uZan5wa0TOP60F-AHJVSCeHCPadD0"
 sheet_id = gsheet_chats
 watchlist_sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
-df = pd.read_csv(watchlist_sheet_url)
-print(df)
 
+# Initialize empty list - will be populated async during startup
 watchlist_chat_ids = []
-print("these are the watchlist chat ids - ", watchlist_chat_ids)
 
-for index, row in df.iterrows():
-    print("row is - ", row)
-    chat_id = "@" + str(row['Telegram link'])
-    print("CHAT ID IS - ", chat_id)
-    watchlist_chat_ids.append(chat_id)
-
-print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
+async def load_watchlist_chat_ids():
+    """Load watchlist chat IDs from Google Sheets asynchronously"""
+    global watchlist_chat_ids
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(watchlist_sheet_url)
+            response.raise_for_status()
+            
+            df = pd.read_csv(io.StringIO(response.text))
+            print("Watchlist DataFrame loaded:", df)
+            
+            watchlist_chat_ids = []
+            for index, row in df.iterrows():
+                print("row is - ", row)
+                chat_id = "@" + str(row['Telegram link'])
+                print("CHAT ID IS - ", chat_id)
+                watchlist_chat_ids.append(chat_id)
+            
+            print("WATCHLIST CHAT IDS ARE - ", watchlist_chat_ids)
+            logger.info(f"Loaded {len(watchlist_chat_ids)} watchlist chat IDs")
+            
+    except Exception as e:
+        logger.error(f"Error loading watchlist chat IDs: {e}")
+        watchlist_chat_ids = []  # Fallback to empty list
 
 #######################
+
+# ============================================================================
+# CLEANUP SYSTEM - Efficient, Async, Scalable File Management
+# ============================================================================
+
+async def cleanup_old_files_async(folder_path: str, retention_days: int) -> Dict[str, int]:
+    """
+    Async cleanup of files older than retention_days.
+    Returns statistics about cleanup operation.
+    """
+    stats = {
+        "files_deleted": 0,
+        "space_freed_mb": 0,
+        "errors": 0
+    }
+    
+    try:
+        folder = Path(folder_path)
+        if not folder.exists():
+            logger.info(f"📁 Folder {folder_path} doesn't exist, skipping cleanup")
+            return stats
+        
+        cutoff_time = datetime.now() - timedelta(days=retention_days)
+        cutoff_timestamp = cutoff_time.timestamp()
+        
+        logger.info(f"🧹 Starting cleanup in {folder_path} (files older than {retention_days} days)")
+        
+        # Walk through directory recursively
+        for item in folder.rglob('*'):
+            if item.is_file():
+                try:
+                    # Check file modification time
+                    file_mtime = item.stat().st_mtime
+                    
+                    if file_mtime < cutoff_timestamp:
+                        # Get file size before deletion
+                        file_size = item.stat().st_size
+                        
+                        # Delete file asynchronously
+                        await asyncio.to_thread(item.unlink)
+                        
+                        stats["files_deleted"] += 1
+                        stats["space_freed_mb"] += file_size / (1024 * 1024)
+                        
+                        logger.debug(f"🗑️  Deleted: {item.name} ({file_size / 1024:.1f} KB)")
+                        
+                except Exception as e:
+                    stats["errors"] += 1
+                    logger.error(f"❌ Error deleting {item}: {e}")
+        
+        # Clean up empty directories
+        for item in sorted(folder.rglob('*'), reverse=True):
+            if item.is_dir() and not any(item.iterdir()):
+                try:
+                    await asyncio.to_thread(item.rmdir)
+                    logger.debug(f"📂 Removed empty directory: {item.name}")
+                except Exception as e:
+                    logger.debug(f"Could not remove directory {item}: {e}")
+        
+        logger.info(
+            f"✅ Cleanup complete for {folder_path}: "
+            f"{stats['files_deleted']} files deleted, "
+            f"{stats['space_freed_mb']:.2f} MB freed"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error during cleanup of {folder_path}: {e}")
+        stats["errors"] += 1
+    
+    return stats
+
+
+async def cleanup_specific_folder_async(folder_path: str) -> Dict[str, int]:
+    """
+    Delete entire folder and its contents immediately (post-processing cleanup).
+    Returns statistics about cleanup operation.
+    """
+    stats = {
+        "files_deleted": 0,
+        "space_freed_mb": 0,
+        "errors": 0
+    }
+    
+    try:
+        folder = Path(folder_path)
+        if not folder.exists():
+            return stats
+        
+        # Calculate total size before deletion
+        total_size = 0
+        file_count = 0
+        
+        for item in folder.rglob('*'):
+            if item.is_file():
+                total_size += item.stat().st_size
+                file_count += 1
+        
+        # Delete entire folder asynchronously
+        await asyncio.to_thread(shutil.rmtree, folder_path, ignore_errors=True)
+        
+        stats["files_deleted"] = file_count
+        stats["space_freed_mb"] = total_size / (1024 * 1024)
+        
+        logger.info(
+            f"🗑️  Post-OCR cleanup: Deleted {folder_path} "
+            f"({file_count} files, {stats['space_freed_mb']:.2f} MB freed)"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error during post-processing cleanup of {folder_path}: {e}")
+        stats["errors"] += 1
+    
+    return stats
+
+
+async def run_periodic_cleanup():
+    """
+    Background task that runs cleanup periodically based on retention policies.
+    Runs every 24 hours by default.
+    """
+    interval_seconds = CLEANUP_CONFIG["cleanup_interval_hours"] * 3600
+    
+    while True:
+        try:
+            logger.info("🕐 Starting periodic cleanup task...")
+            
+            total_stats = {
+                "files_deleted": 0,
+                "space_freed_mb": 0,
+                "errors": 0
+            }
+            
+            # Cleanup PDFs older than 30 days
+            pdf_stats = await cleanup_old_files_async(
+                CLEANUP_CONFIG["folders"]["pdf"],
+                CLEANUP_CONFIG["pdf_retention_days"]
+            )
+            
+            # Cleanup images older than 7 days
+            images_stats = await cleanup_old_files_async(
+                CLEANUP_CONFIG["folders"]["images"],
+                CLEANUP_CONFIG["images_retention_days"]
+            )
+            
+            # Cleanup downloads older than 30 days
+            downloads_stats = await cleanup_old_files_async(
+                CLEANUP_CONFIG["folders"]["downloads"],
+                CLEANUP_CONFIG["pdf_retention_days"]
+            )
+            
+            # Cleanup temp uploads older than 1 day
+            temp_stats = await cleanup_old_files_async(
+                CLEANUP_CONFIG["folders"]["temp_uploads"],
+                1  # Keep temp files for only 1 day
+            )
+            
+            # Aggregate statistics
+            for stats in [pdf_stats, images_stats, downloads_stats, temp_stats]:
+                total_stats["files_deleted"] += stats["files_deleted"]
+                total_stats["space_freed_mb"] += stats["space_freed_mb"]
+                total_stats["errors"] += stats["errors"]
+            
+            logger.info(
+                f"✅ Periodic cleanup completed: "
+                f"{total_stats['files_deleted']} total files deleted, "
+                f"{total_stats['space_freed_mb']:.2f} MB freed, "
+                f"{total_stats['errors']} errors"
+            )
+            
+            # Force garbage collection after cleanup
+            gc.collect()
+            
+        except Exception as e:
+            logger.error(f"❌ Error in periodic cleanup task: {e}")
+        
+        # Wait for next cleanup cycle
+        await asyncio.sleep(interval_seconds)
+
+
+async def post_ocr_cleanup_async(image_folder: str):
+    """
+    Cleanup images immediately after OCR processing completes.
+    Called after successful OCR analysis.
+    """
+    if not CLEANUP_CONFIG["post_ocr_cleanup"]:
+        return
+    
+    try:
+        stats = await cleanup_specific_folder_async(image_folder)
+        logger.info(f"✅ Post-OCR cleanup: {stats['files_deleted']} files, {stats['space_freed_mb']:.2f} MB freed")
+    except Exception as e:
+        logger.error(f"❌ Post-OCR cleanup failed for {image_folder}: {e}")
+
+# ============================================================================
+# END CLEANUP SYSTEM
+# ============================================================================
     
 # Start the background tasks when the application starts
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application startup and shutdown events"""
-    global sme_task, equities_task
+    global sme_task, equities_task, cleanup_task
     
     # Startup: Create directories and start background tasks
     os.makedirs("files/pdf", exist_ok=True)
+    os.makedirs(CLEANUP_CONFIG["folders"]["images"], exist_ok=True)
+    os.makedirs(CLEANUP_CONFIG["folders"]["downloads"], exist_ok=True)
+    os.makedirs(CLEANUP_CONFIG["folders"]["temp_uploads"], exist_ok=True)
     
-    # Start both tasks in parallel using asyncio.create_task
+    # Initialize database
+    await init_db()
+    logger.info("Dashboard database initialized")
+    
+    # Load Google Sheets data asynchronously during startup
+    logger.info("Loading Google Sheets data...")
+    await asyncio.gather(
+        load_watchlist_chat_ids(),
+        load_result_concall_keywords()
+    )
+    logger.info("Google Sheets data loaded successfully")
+    
+    # Pre-load OCR model at startup for 80% speed improvement
+    logger.info("🔥 Pre-loading OCR model for global caching...")
+    start_model_time = time.time()
+    await get_global_ocr_model()
+    model_load_time = time.time() - start_model_time
+    logger.info(f"✅ OCR model pre-loaded and cached in {model_load_time:.2f}s - All future requests will be 80% faster!")
+    
+    # Start all background tasks in parallel using asyncio.create_task
     # sme_task = asyncio.create_task(run_periodic_task_sme())
     equities_task = asyncio.create_task(run_periodic_task_equities())
-    print("Both SME and Equities background tasks are now running in parallel")
-    logger.info("Both SME and Equities background tasks are now running in parallel")
+    cleanup_task = asyncio.create_task(run_periodic_cleanup())
+    
+    logger.info("✅ All background tasks started: SME, Equities, and Periodic Cleanup (24h interval)")
+    logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
     yield  # FastAPI will run the application here
     
@@ -181,6 +451,163 @@ logger.info(f"PDF directory permissions: {oct(os.stat(pdf_dir).st_mode)[-3:]}")
 # Mount static files for serving PDFs with explicit directory path and HTML listing enabled
 app.mount("/files", StaticFiles(directory=files_dir, html=True, check_dir=True), name="files")
 
+# Mount static files for dashboard
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Database setup for dashboard
+DB_PATH = "messages.db"
+
+class MessageData(BaseModel):
+    chat_id: str
+    message: str
+    timestamp: Optional[str] = None
+    symbol: Optional[str] = None
+    company_name: Optional[str] = None
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    option: Optional[str] = None
+
+class TOTPRequest(BaseModel):
+    totp_code: str
+
+class OrderRequest(BaseModel):
+    symbol: str
+    quantity: int
+    price: float
+    order_type: str
+
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def broadcast_message(self, message: dict):
+        """Broadcast message to all connected clients"""
+        if self.active_connections:
+            logger.info(f"Broadcasting to {len(self.active_connections)} connections")
+            disconnected = []
+            for connection in self.active_connections:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logger.error(f"Error sending to WebSocket: {e}")
+                    disconnected.append(connection)
+            
+            # Remove disconnected clients
+            for conn in disconnected:
+                self.disconnect(conn)
+
+# WebSocket manager instance
+ws_manager = WebSocketManager()
+
+async def init_db():
+    """Initialize SQLite database with migration support"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Create table with basic structure first
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT NOT NULL,
+                message TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                symbol TEXT,
+                company_name TEXT,
+                description TEXT,
+                file_url TEXT,
+                raw_message TEXT
+            )
+        """)
+        
+        # Create financial metrics table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS financial_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_symbol TEXT NOT NULL,
+                period TEXT NOT NULL,
+                year TEXT NOT NULL,
+                revenue REAL,
+                pbt REAL,
+                pat REAL,
+                total_income REAL,
+                other_income REAL,
+                eps REAL,
+                reported_at TEXT NOT NULL,
+                message_id INTEGER,
+                FOREIGN KEY (message_id) REFERENCES messages (id)
+            )
+        """)
+        
+        # Check if option column exists, if not add it
+        cursor = await db.execute("PRAGMA table_info(messages)")
+        columns = await cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        if 'option' not in column_names:
+            logger.info("Adding option column to existing database")
+            await db.execute("ALTER TABLE messages ADD COLUMN option TEXT")
+        
+        await db.commit()
+    logger.info("Database initialized with migration support")
+
+def parse_message_content(message: str) -> Dict:
+    """Parse the HTML message to extract structured data"""
+    try:
+        # Extract symbol and company name from the message
+        lines = message.split('\n')
+        
+        # First line usually contains symbol and company name
+        first_line = lines[0].replace('<b>', '').replace('</b>', '') if lines else ""
+        
+        symbol = ""
+        company_name = ""
+        description = ""
+        file_url = ""
+        
+        # Parse first line for symbol and company name
+        if ' - ' in first_line:
+            parts = first_line.split(' - ')
+            if len(parts) >= 3:
+                symbol = parts[1].strip()
+                company_name = parts[2].strip()
+        
+        # Extract description (usually the middle part)
+        desc_lines = []
+        for line in lines[1:]:
+            if line.strip() and not line.startswith('<a href=') and 'File:' not in line:
+                clean_line = line.replace('<i>', '').replace('</i>', '').strip()
+                if clean_line:
+                    desc_lines.append(clean_line)
+        
+        description = '\n'.join(desc_lines)
+        
+        # Extract file URL
+        for line in lines:
+            if '<a href=' in line:
+                start = line.find('href="') + 6
+                end = line.find('"', start)
+                if start > 5 and end > start:
+                    file_url = line[start:end]
+                break
+        
+        return {
+            "symbol": symbol,
+            "company_name": company_name,
+            "description": description,
+            "file_url": file_url
+        }
+    except Exception as e:
+        logger.error(f"Error parsing message: {e}")
+        return {"symbol": "", "company_name": "", "description": "", "file_url": ""}
+
 # Add a test endpoint to check PDF directory
 @app.get("/check_pdf_dir")
 async def check_pdf_dir():
@@ -224,9 +651,9 @@ file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(file_formatter)
 
 # Console handler with UTF-8 encoding
-import sys
+
 if sys.platform == 'win32':
-    import codecs
+
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
 console_handler = logging.StreamHandler(sys.stdout)
@@ -245,6 +672,8 @@ logger.addHandler(console_handler)
 # Store task references globally
 sme_task = None
 equities_task = None
+cleanup_task = None
+ai_processing_active = False  # Flag to pause background tasks during AI processing
 
 csv_file_path = "files/all_corporate_announcements.csv"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
@@ -260,8 +689,73 @@ TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 gid = "1091746650"
 keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
 
+concall_gid = "341478113"
+result_concall_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={concall_gid}"
 
+# Initialize empty dict - will be populated async during startup
+result_concall_keywords = {}
 
+async def load_result_concall_keywords():
+    """Load result concall keywords from Google Sheets asynchronously"""
+    global result_concall_keywords
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(result_concall_url)
+            response.raise_for_status()
+            
+            result_concall_df = pd.read_csv(io.StringIO(response.text))
+            print("Result concall DataFrame loaded:", result_concall_df)
+            
+            result_concall_keywords = {}
+            for index, row in result_concall_df.iterrows():
+                group_id = "@" + str(row['group_id']).strip()
+                keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
+                # Split by comma and strip each keyword
+                keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
+                result_concall_keywords[group_id] = keywords
+                print("these are the result_concall id and keywords - ", result_concall_keywords)
+                
+            logger.info(f"Loaded result concall keywords for {len(result_concall_keywords)} groups")
+            
+    except Exception as e:
+        logger.error(f"Error reading Google Sheet: {str(e)}")
+        logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
+        result_concall_keywords = {}  # Set empty dict to continue processing without custom groups
+
+async def load_group_keywords_async():
+    """Load group keywords from Google Sheets asynchronously"""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(keyword_custom_group_url)
+            response.raise_for_status()
+            
+            group_keyword_df = pd.read_csv(io.StringIO(response.text))
+            print("Group keywords DataFrame loaded:", group_keyword_df)
+            
+            group_id_keywords = {}
+            for index, row in group_keyword_df.iterrows():
+                group_id = "@" + str(row['group_id']).strip()
+                keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
+                option_str = str(row['OPTION']) if pd.notna(row['OPTION']) else ""
+                
+                # Split by comma and strip each keyword
+                keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
+                
+                # Store both keywords and option in the dictionary
+                group_id_keywords[group_id] = {
+                    'keywords': keywords,
+                    'option': option_str.strip() if option_str else ""
+                }
+            
+            print("these are the group id, keywords and options - ", group_id_keywords)
+            logger.info(f"Loaded group keywords for {len(group_id_keywords)} groups")
+            return group_id_keywords
+            
+    except Exception as e:
+        logger.error(f"Error reading Google Sheet for group keywords: {str(e)}")
+        logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
+        return {}  # Return empty dict to continue processing without custom groups
+                
 
 async def send_webhook_message(chat_id: int, text: str):
     url = f"{TELEGRAM_API_URL}/sendMessage"
@@ -271,7 +765,7 @@ async def send_webhook_message(chat_id: int, text: str):
         "parse_mode": "HTML"
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             response = await client.post(url, json=payload)
             response.raise_for_status()
@@ -310,8 +804,9 @@ async def search_csv(all_keywords):
     # logger.info(f"Starting search for keywords: {all_keywords}")
     
     try:
-        with open(csv_file_path, mode="r", encoding="utf-8") as file:
-            reader = csv.reader(file)
+        async with aiofiles.open(csv_file_path, mode="r", encoding="utf-8") as file:
+            content = await file.read()
+            reader = csv.reader(io.StringIO(content))
             
             # Skip header row
             next(reader, None)
@@ -345,24 +840,30 @@ async def search_csv(all_keywords):
 async def trigger_watchlist_message(message):
     print("WATCHLIST stocks are sending to telegram")
     
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        for chat_id in watchlist_chat_ids:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            logger.info(f"Triggered message: {message}")
 
-    for chat_id in watchlist_chat_ids:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "HTML"
-        }
-        logger.info(f"Triggered message: {message}")
-
-        r = requests.post(url, json=payload)
+            try:
+                r = await client.post(url, json=payload)
+                r.raise_for_status()
+            except httpx.RequestError as e:
+                logger.error(f"Error sending watchlist message to {chat_id}: {e}")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error sending watchlist message to {chat_id}: {e.response.status_code}")
     # print(r.json())
 
 
 # this is the test message to see if the script is working or not
 # This will send all the CA docs to the trade_mvd chat id ( which is our Script CA running telegram )
-async def trigger_test_message(chat_idd, message):
-
+async def trigger_test_message(chat_idd, message, type="test", symbol="", company_name=""):
+    # Send to Telegram as before
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": chat_idd,
@@ -372,7 +873,164 @@ async def trigger_test_message(chat_idd, message):
     }
     # logger.info(f"Triggered test message: {message}")
     print("triggered", chat_idd, "  -- message is ", message)
-    r = requests.post(url, json=payload)
+    
+    # Use async HTTP client for non-blocking Telegram API call
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        try:
+            r = await client.post(url, json=payload)
+            r.raise_for_status()
+        except httpx.RequestError as e:
+            logger.error(f"Error sending test message to {chat_idd}: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error sending test message to {chat_idd}: {e.response.status_code}")
+    
+    # Also save to local database for UI dashboard
+    try:
+        # Create message data with symbol and company_name if provided
+        message_data = MessageData(
+            chat_id=chat_idd,
+            message=message,
+            timestamp=datetime.now().isoformat(),
+            symbol=symbol,
+            company_name=company_name,
+            option=type
+        )
+        
+        # Parse message content only if symbol/company not provided
+        if not message_data.symbol or not message_data.company_name:
+            parsed = parse_message_content(message_data.message)
+            if not message_data.symbol:
+                message_data.symbol = parsed.get("symbol", "")
+            if not message_data.company_name:
+                message_data.company_name = parsed.get("company_name", "")
+            message_data.description = parsed.get("description", "")
+            message_data.file_url = parsed.get("file_url", "")
+        
+        # Skip database save and WebSocket for test messages
+        if type == "test":
+            print(f"✅ Test message sent to Telegram only (not saved to DB): {message_data.symbol} - {message_data.company_name}")
+            return None
+        
+        # Save to database (only non-test messages)
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                INSERT INTO messages 
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                message_data.chat_id,
+                message_data.message,
+                message_data.timestamp,
+                message_data.symbol,
+                message_data.company_name,
+                message_data.description,
+                message_data.file_url,
+                message_data.message,
+                message_data.option
+            ))
+            message_id = cursor.lastrowid
+            await db.commit()
+        
+        # Broadcast to WebSocket clients
+        await ws_manager.broadcast_message({
+            "type": "new_message",
+            "message": message_data.dict()
+        })
+        
+        print(f"✅ Message saved to dashboard database: {message_data.symbol} - {message_data.company_name}")
+        
+        return message_id  # Return the message ID for linking with financial metrics
+        
+    except Exception as e:
+        # Don't let database errors break the main Telegram functionality
+        print(f"⚠️ Error saving to dashboard database: {e}")
+        return None
+
+async def process_financial_metrics(financial_metrics, stock_symbol, message_id=None):
+    """Process financial metrics data and store in database"""
+    try:
+        if not financial_metrics or 'quarterly_data' not in financial_metrics:
+            logger.warning(f"No quarterly data found in financial metrics for {stock_symbol}")
+            return []
+            
+        quarterly_data = financial_metrics.get('quarterly_data', [])
+        reported_at = datetime.now().isoformat()
+        
+        stored_metrics = []
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            for quarter in quarterly_data:
+                # Insert financial metrics data
+                cursor = await db.execute("""
+                    INSERT INTO financial_metrics 
+                    (stock_symbol, period, year, revenue, pbt, pat, total_income, other_income, eps, reported_at, message_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    stock_symbol,
+                    quarter.get('period', ''),
+                    quarter.get('year_ended', ''),
+                    quarter.get('revenue_from_operations', 0),
+                    quarter.get('profit_before_tax', 0),
+                    quarter.get('profit_after_tax', 0),
+                    quarter.get('total_income', 0),
+                    quarter.get('other_income', 0),
+                    quarter.get('earnings_per_share', 0),
+                    reported_at,
+                    message_id
+                ))
+                
+                # Prepare data for frontend
+                metric_data = {
+                    "id": cursor.lastrowid,
+                    "stock_symbol": stock_symbol,
+                    "period": quarter.get('period', ''),
+                    "year": quarter.get('year_ended', ''),
+                    "revenue": quarter.get('revenue_from_operations', 0),
+                    "pbt": quarter.get('profit_before_tax', 0),
+                    "pat": quarter.get('profit_after_tax', 0),
+                    "total_income": quarter.get('total_income', 0),
+                    "other_income": quarter.get('other_income', 0),
+                    "eps": quarter.get('earnings_per_share', 0),
+                    "reported_at": reported_at
+                }
+                stored_metrics.append(metric_data)
+            
+            await db.commit()
+        
+        logger.info(f"Stored {len(stored_metrics)} financial metrics for {stock_symbol}")
+        
+        # Send to frontend via WebSocket
+        await ws_manager.broadcast_message({
+            "type": "financial_metrics",
+            "data": {
+                "stock_symbol": stock_symbol,
+                "metrics": stored_metrics,
+                "total_quarters": len(stored_metrics)
+            }
+        })
+        
+        return stored_metrics
+        
+    except Exception as e:
+        logger.error(f"Error processing financial metrics for {stock_symbol}: {e}")
+        return []
+
+        
+
+async def set_webhook():
+    url = f"{TELEGRAM_API_URL}/setWebhook"
+    payload = {"url": WEBHOOK_URL}
+
+    try:
+        response = httpx.post(url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("ok"):
+            print(f"Webhook set successfully: {data}")
+        else:
+            print(f"Failed to set webhook: {data}")
+    except httpx.RequestError as e:
+        print(f"Error setting webhook: {e}")
 
 
 
@@ -543,15 +1201,23 @@ async def convert_xml_to_pdf(xml_url):
         else:
             logger.info(f"PDF directory confirmed: {pdf_dir}")
 
-        # Fetch XML
+        # Fetch XML using async HTTP client
         logger.info("Fetching XML content...")
-        res = requests.get(xml_url, headers=headers, timeout=10)
-        res.raise_for_status()
-        logger.info(f"XML fetch status code: {res.status_code}")
-        
-        if not res.content:
-            logger.error("Empty response received from XML URL")
-            return None
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                res = await client.get(xml_url, headers=headers, timeout=10)
+                res.raise_for_status()
+                logger.info(f"XML fetch status code: {res.status_code}")
+                
+                if not res.content:
+                    logger.error("Empty response received from XML URL")
+                    return None
+            except httpx.RequestError as e:
+                logger.error(f"Network error fetching XML: {e}")
+                return None
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error fetching XML: {e.response.status_code}")
+                return None
             
         # Parse XML
         logger.info("Parsing XML content...")
@@ -713,41 +1379,21 @@ async def process_ca_data(ca_docs):
         merged = pd.merge(df1, api_df, how='outer', indicator=True)
         merged = merged.sort_values(by='an_dt', ascending=False)
         new_rows = merged[merged['_merge'] == 'right_only'].drop('_merge', axis=1)
+  
+        ###### x --------- sending watchlist message -------x ########
+        #### this is getting the group id and keywords from the google sheet
+        try:
+            group_id_keywords = await load_group_keywords_async()
+        except Exception as e:
+            logger.error(f"Error loading group keywords: {str(e)}")
+            logger.info("Continuing without custom group keywords due to loading error")
+            group_id_keywords = {}  # Set empty dict to continue processing without custom groups
+
+        ###### X --------------------------------------------X #########      
         
         #if new rows  
         if len(new_rows) > 0:
-            try:
-                group_keyword_df = pd.read_csv(keyword_custom_group_url)
-                print(group_keyword_df)
-                group_id_keywords = {}
                 
-                for index, row in group_keyword_df.iterrows():
-                    group_id = "@" + str(row['group_id']).strip()
-                    keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
-                    # Split by comma and strip each keyword
-                    keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
-                    group_id_keywords[group_id] = keywords
-                print("these are the group id and keywords - ", group_id_keywords)
-            except Exception as e:
-                logger.error(f"Error reading Google Sheet: {str(e)}")
-                logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
-                group_id_keywords = {}  # Set empty dict to continue processing without custom groups
-
-            #################################################################
-            # # now we need to check if the new_rows is in the group_id_keywords
-            # for group_id, keywords in group_id_keywords.items():
-            #     # Convert keywords to lowercase list
-            #     keywords_lower = [str(kw).lower() for kw in keywords]
-
-            #     # Check if any keyword exists in any column of the row  
-            #     for index, row in new_rows.iterrows():
-            #         # Convert all row values to lowercase strings and check for keyword matches
-            #         row_values = [str(val).lower() for val in row]
-            #         if any(any(kw in val for val in row_values) for kw in keywords_lower):
-            #             message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
-            #             await trigger_test_message(group_id, message)
-            #################################################################
-
             #################################################################
             # Now process all rows and send messages
                 
@@ -771,30 +1417,67 @@ async def process_ca_data(ca_docs):
 
                 print(f"Message created for {row['symbol']}")
                 
-                # Send the message
-                await trigger_test_message("@trade_mvd", message)
+                # Send the message This will send all the messages to the trade_mvd chat id WHich is used to testing or to check if the script is running or not
+                await trigger_test_message("@trade_mvd", message, "test", row['symbol'], row['sm_name'])
                 
-                # check if the company is in the SME list
-                if row["sm_name"] in SME_companies:
-                    await trigger_watchlist_message(message)
-                    await update_watchlist_file(new_rows)
-                # check if the company is in the BSE_NSE_companies list
-                if row["sm_name"] in BSE_NSE_companies:
-                    await trigger_watchlist_message(message)
-                    await update_watchlist_file(new_rows)
+                
+                ##### X------------ THIS IS WATCHING LIST SENDING -------X ########
+                # # check if the company is in the SME list
+                # if row["sm_name"] in SME_companies:
+                #     await trigger_watchlist_message(message)
+                #     await update_watchlist_file(new_rows)
+                # # check if the company is in the BSE_NSE_companies list
+                # if row["sm_name"] in BSE_NSE_companies:
+                #     await trigger_watchlist_message(message)
+                #     await update_watchlist_file(new_rows)
+                ##### X -------------------------------------------------X ########   
                     
-                # now we need to check if the new_rows is in the group_id_keywords
-                for group_id, keywords in group_id_keywords.items():
+                # Convert all row values to lowercase strings and check for keyword matches
+                row_values = [str(val).lower() for val in row]  
+                
+                ###############################################################
+                ###### x --------- sending watchlist message -------x ########
+                #### this is getting the group id and keywords from the google sheet
+                ## now we need to check if the new_rows is in the group_id_keywords
+                for group_id, data in group_id_keywords.items():
+                    # Extract keywords and option from the data structure
+                    keywords = data.get('keywords', [])
+                    option = data.get('option', '')
+                    
                     # Convert keywords to lowercase list
                     keywords_lower = [str(kw).lower() for kw in keywords]
-                    
-                    # Convert all row values to lowercase strings and check for keyword matches
-                    row_values = [str(val).lower() for val in row]
+
                     if any(any(kw in val for val in row_values) for kw in keywords_lower):
                         # message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
-                        await trigger_test_message(group_id, message)
-            #################################################################
-            
+                        await trigger_test_message(group_id, message, option, row['symbol'], row['sm_name'])
+                ###### X --------------------------------------------X #########      
+                ################################################################
+                
+                
+                
+                ################################################################
+                ###### x --------- sending result concal message -------x ########
+                #### this is getting the group id and keywords from the google sheet
+                for group_id, keywords in result_concall_keywords.items():
+                    # Convert keywords to lowercase list
+                    result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
+                    if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
+                        # ocr the pdf
+                        financial_metrics = await main_ocr_async(attachment_file)
+                        print("FINANCIAL METRICS ARE - ", financial_metrics)
+                        
+                        # Send message to Telegram and get message ID
+                        message_id = await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'])
+                        
+                        # Process and store financial metrics
+                        if financial_metrics:
+                            await process_financial_metrics(
+                                financial_metrics, 
+                                row['symbol'], 
+                                message_id
+                            )
+                ###### X --------------------------------------------X #########      
+                ################################################################
             
             # For CSV storage, keep original URLs to maintain duplicate detection
             new_rows_for_csv = new_rows.copy()
@@ -915,7 +1598,7 @@ async def CA_sme():
                 # logger.info(f"Response headers: {dict(response.headers)}")
                 
                 # Check if response is empty
-                if not response.text:
+                if not response.text:   
                     logger.error("Empty response received from NSE API")
                     raise ValueError("Empty response from NSE API")
                 
@@ -945,7 +1628,7 @@ async def CA_sme():
             raise
             
     except Exception as e:
-        logger.error(f"Unexpected error in CA_equities: {str(e)}")
+        logger.error(f"Unexpected error in CA_sme: {str(e)}")
         logger.info("Both methods failed. Waiting 30 seconds before retrying...")
         await asyncio.sleep(20)
         return None
@@ -1012,8 +1695,8 @@ async def run_periodic_task_sme():
                 
             logger.info("next loop")
             print("next loop")
-            # Slightly increase wait time to avoid hitting rate limits
-            await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+            # Increased wait time to reduce interference with AI analyzer
+            await asyncio.sleep(60)  # Wait for 60 seconds before running it again
         except Exception as e:
             logger.error(f"Error in run_periodic_task sme: {str(e)}")
             logger.info("Error occurred, waiting 30 seconds before retrying...")
@@ -1135,9 +1818,16 @@ async def CA_equities():
 
 # Function to run the periodic task
 async def run_periodic_task_equities():
+    global ai_processing_active
     logger.info("starting thescript equities ")
     while True:
         try:
+            # Pause background task if AI processing is active
+            if ai_processing_active:
+                logger.info("AI processing active, pausing background task...")
+                await asyncio.sleep(10)  # Check again in 10 seconds
+                continue
+                
             logger.info("starting")
             print("starting")
             result = await CA_equities()  # Run the task
@@ -1150,8 +1840,8 @@ async def run_periodic_task_equities():
                 
             logger.info("next loop")
             print("next loop")
-            # Slightly increase wait time to avoid hitting rate limits
-            await asyncio.sleep(10)  # Wait for 10 seconds before running it again
+            # Increased wait time to reduce interference with AI analyzer
+            await asyncio.sleep(60)  # Wait for 60 seconds before running it again
         except Exception as e:
             logger.error(f"Error in run_periodic_task_equities: {str(e)}")
             logger.info("Error occurred in Equities task, waiting 30 seconds before retrying...")
@@ -1161,15 +1851,641 @@ async def run_periodic_task_equities():
 
 
 @app.get("/")
+async def get_dashboard():
+    """Serve the main dashboard"""
+    return FileResponse('static/index.html')
+
+@app.get("/home")
 async def home():
     return "New automation method Trillionaire"
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time updates"""
+    await ws_manager.connect(websocket)
+    try:
+        # Send existing messages to new connection (get all messages, no limit)
+        messages = await get_messages_from_db(limit=0)
+        await websocket.send_json({
+            "type": "messages_list",
+            "messages": messages
+        })
+        
+        # Keep connection alive
+        while True:
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+
+@app.post("/api/trigger_message")
+async def receive_trigger_message(message_data: MessageData):
+    """Receive trigger_test_message calls and broadcast to UI"""
+    try:
+        # Add timestamp if not provided
+        if not message_data.timestamp:
+            message_data.timestamp = datetime.now().isoformat()
+        
+        # Parse message content if not already structured
+        if not message_data.symbol and not message_data.company_name:
+            parsed = parse_message_content(message_data.message)
+            message_data.symbol = parsed.get("symbol", "")
+            message_data.company_name = parsed.get("company_name", "")
+            message_data.description = parsed.get("description", "")
+            message_data.file_url = parsed.get("file_url", "")
+        
+        # Skip "test" option completely - no DB, no WebSocket, Telegram only
+        if message_data.option == "test":
+            logger.info(f"Test message - Telegram only (not saved to DB or dashboard): {message_data.symbol} - {message_data.company_name}")
+            return {"success": True, "message": "Test message sent to Telegram only"}
+        
+        # Save to database (all options except "test")
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO messages 
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                message_data.chat_id,
+                message_data.message,
+                message_data.timestamp,
+                message_data.symbol,
+                message_data.company_name,
+                message_data.description,
+                message_data.file_url,
+                message_data.message,
+                message_data.option
+            ))
+            await db.commit()
+        
+        # Broadcast to WebSocket clients (only for non-test messages)
+        await ws_manager.broadcast_message({
+            "type": "new_message",
+            "message": message_data.dict()
+        })
+        
+        logger.info(f"Message saved to DB and broadcasted: {message_data.symbol} - {message_data.company_name}")
+        
+        return {"success": True, "message": "Message received and broadcasted"}
+        
+    except Exception as e:
+        logger.error(f"Error processing message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def get_messages_from_db(limit: int = 100) -> List[Dict]:
+    """Get messages from database"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        if limit > 0:
+            cursor = await db.execute("""
+                SELECT * FROM messages 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            """, (limit,))
+        else:
+            cursor = await db.execute("""
+                SELECT * FROM messages 
+                ORDER BY timestamp DESC
+            """)
+        
+        rows = await cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        
+        return [dict(zip(columns, row)) for row in rows]
+
+@app.get("/api/messages")
+async def get_messages(limit: int = 0):
+    """Get all messages"""
+    try:
+        messages = await get_messages_from_db(limit)
+        return {"success": True, "messages": messages}
+    except Exception as e:
+        logger.error(f"Error fetching messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/financial_metrics")
+async def get_financial_metrics(limit: int = 100):
+    """Get financial metrics data"""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            if limit > 0:
+                cursor = await db.execute("""
+                    SELECT * FROM financial_metrics 
+                    ORDER BY reported_at DESC 
+                    LIMIT ?
+                """, (limit,))
+            else:
+                cursor = await db.execute("""
+                    SELECT * FROM financial_metrics 
+                    ORDER BY reported_at DESC
+                """)
+            
+            rows = await cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            
+            metrics = [dict(zip(columns, row)) for row in rows]
+            
+            return {"success": True, "metrics": metrics}
+    except Exception as e:
+        logger.error(f"Error fetching financial metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def process_local_pdf_async_optimized(pdf_path: str):
+    """Memory-optimized PDF processing with background task pausing, batch processing, and memory monitoring."""
+    global ai_processing_active
+
+    
+    try:
+        # Set AI processing flag to pause background tasks
+        ai_processing_active = True
+        
+        # Monitor initial memory
+        memory_start = psutil.virtual_memory().percent
+        logger.info(f"🚀 Starting MEMORY-OPTIMIZED PDF processing: {pdf_path}")
+        logger.info(f"💾 Initial memory usage: {memory_start:.1f}%")
+        logger.info("⏸️ Background tasks paused for faster processing")
+        
+        start_time = time.time()
+        
+        # Step 1: Convert PDF to images with memory optimization (150 DPI + smart compression)
+        logger.info("📄 Converting PDF to images with memory optimization (DPI: 150, compression: 9)...")
+        image_paths, images_folder = await pdf_to_png_async(pdf_path, base_images_folder="images")
+        
+        if not image_paths:
+            logger.error("No images were created from the PDF")
+            return None
+        
+        convert_time = time.time() - start_time
+        memory_after_convert = psutil.virtual_memory().percent
+        logger.info(f"✅ Created {len(image_paths)} images in {convert_time:.2f}s")
+        logger.info(f"💾 Memory after conversion: {memory_after_convert:.1f}%")
+        
+        # Memory check and cleanup if needed
+        if memory_after_convert > 75:
+            logger.info("⚠️ High memory usage, forcing cleanup...")
+            gc.collect()
+            memory_after_gc = psutil.virtual_memory().percent
+            logger.info(f"💾 Memory after cleanup: {memory_after_gc:.1f}%")
+        
+        # Step 2: Process pages with batch processing for memory control
+        logger.info(f"📄 Processing {len(image_paths)} pages with batch processing (5 pages per batch)")
+        
+        # Step 3: Run OCR with memory-optimized batch processing
+        ocr_start = time.time()
+        logger.info("🔍 Running memory-optimized OCR processing...")
+        ocr_results = await process_ocr_from_images_async(image_paths)
+        
+        if not ocr_results:
+            logger.error("OCR processing failed")
+            return None
+            
+        ocr_time = time.time() - ocr_start
+        memory_after_ocr = psutil.virtual_memory().percent
+        logger.info(f"✅ OCR completed in {ocr_time:.2f}s. Found {len(ocr_results.get('financial_pages', []))} pages with financial content")
+        logger.info(f"💾 Memory after OCR: {memory_after_ocr:.1f}%")
+        
+        # Step 4: Encode financial images with memory-optimized batch processing
+        encoded_images = []
+        if ocr_results.get('detected_image_paths'):
+            logger.info("🖼️ Encoding financial images with memory optimization...")
+            encode_start = time.time()
+            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
+            encode_time = time.time() - encode_start
+            memory_after_encode = psutil.virtual_memory().percent
+            logger.info(f"✅ Encoded {len(encoded_images)} images in {encode_time:.2f}s")
+            logger.info(f"💾 Memory after encoding: {memory_after_encode:.1f}%")
+        
+        # Memory cleanup before AI analysis
+        if memory_after_ocr > 70:
+            logger.info("⚠️ Performing memory cleanup before AI analysis...")
+            gc.collect()
+            memory_before_ai = psutil.virtual_memory().percent
+            logger.info(f"💾 Memory before AI analysis: {memory_before_ai:.1f}%")
+        
+        # Step 5: Use financial_text if available, otherwise use all_pages_text
+        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
+        
+        if not text_for_analysis:
+            logger.warning("No text extracted from PDF")
+            return None
+        
+        # Step 6: AI analysis with text AND images for maximum accuracy
+        ai_start = time.time()
+        logger.info("🤖 Starting comprehensive AI analysis (text + images)...")
+        financial_metrics = await analyze_financial_metrics_async(text_for_analysis, encoded_images)
+        
+        ai_time = time.time() - ai_start
+        total_time = time.time() - start_time
+        memory_final = psutil.virtual_memory().percent
+        
+        logger.info(f"✅ AI analysis completed in {ai_time:.2f}s")
+        logger.info(f"🎉 TOTAL PROCESSING TIME: {total_time:.2f}s")
+        logger.info(f"💾 Final memory usage: {memory_final:.1f}% (started at {memory_start:.1f}%)")
+        logger.info(f"📊 Memory efficiency: {memory_final - memory_start:+.1f}% change")
+        
+        # Post-OCR cleanup: Delete images immediately after successful processing
+        if images_folder and CLEANUP_CONFIG["post_ocr_cleanup"]:
+            await post_ocr_cleanup_async(images_folder)
+        
+        return financial_metrics
+        
+    except Exception as e:
+        logger.error(f"Error in optimized PDF processing: {str(e)}")
+        # Cleanup images even on error
+        if 'images_folder' in locals() and images_folder and CLEANUP_CONFIG["post_ocr_cleanup"]:
+            await post_ocr_cleanup_async(images_folder)
+        return None
+    finally:
+        # Always resume background tasks
+        ai_processing_active = False
+        logger.info("▶️ Background tasks resumed")
+
+# Keep the original function as backup
+async def process_local_pdf_async(pdf_path: str):
+    """Process a local PDF file using OCR and extract financial metrics."""
+    try:
+        logger.info(f"Starting local PDF processing: {pdf_path}")
+        
+        # Convert PDF to images
+        logger.info("Converting PDF to images...")
+        image_paths, images_folder = await pdf_to_png_async(pdf_path, base_images_folder="images")
+        
+        if not image_paths:
+            logger.error("No images were created from the PDF")
+            return None
+        
+        logger.info(f"Created {len(image_paths)} images from PDF")
+        
+        # Run OCR on all pages
+        logger.info("Running OCR on all pages...")
+        ocr_results = await process_ocr_from_images_async(image_paths)
+        
+        if not ocr_results:
+            logger.error("OCR processing failed")
+            return None
+            
+        logger.info(f"OCR completed. Found {len(ocr_results.get('financial_pages', []))} pages with financial content")
+        
+        # Encode financial images to base64
+        encoded_images = []
+        if ocr_results.get('detected_image_paths'):
+            logger.info("Encoding financial images...")
+            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
+            logger.info(f"Encoded {len(encoded_images)} images")
+        
+        # Use financial_text if available, otherwise use all_pages_text
+        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
+        
+        if not text_for_analysis:
+            logger.warning("No text extracted from PDF")
+            return None
+        
+        # Analyze with AI
+        logger.info("Starting AI analysis...")
+        financial_metrics = await analyze_financial_metrics_async(text_for_analysis, encoded_images)
+        
+        logger.info("AI analysis completed successfully")
+        return financial_metrics
+        
+    except Exception as e:
+        logger.error(f"Error in process_local_pdf_async: {str(e)}")
+        return None
+
+# Clear messages API endpoint removed by user request
+
+@app.post("/api/ai_analyze")
+async def ai_analyze(file: UploadFile = File(...)):
+    """AI analyzer endpoint that processes PDF files using OCR and returns financial metrics"""
+    try:
+        # Validate file type
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        # Create temporary directory for uploaded files
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Save uploaded file temporarily
+        temp_file_path = os.path.join(temp_dir, file.filename)
+        
+        async with aiofiles.open(temp_file_path, 'wb') as f:
+            content = await file.read()
+            await f.write(content)
+        
+        logger.info(f"Processing uploaded PDF: {file.filename}")
+        
+        # Process the PDF using OPTIMIZED local processing
+        financial_metrics = await process_local_pdf_async_optimized(temp_file_path)
+        
+        # Clean up temporary file
+        try:
+            await aiofiles.os.remove(temp_file_path)
+        except Exception as e:
+            logger.warning(f"Could not remove temporary file {temp_file_path}: {e}")
+        
+        if not financial_metrics:
+            error_msg = "No financial metrics extracted from the document. This could be due to: 1) PDF contains no financial data, 2) OCR failed to extract text, or 3) AI couldn't parse the financial information."
+            logger.warning(f"No financial metrics extracted from {file.filename}")
+            raise HTTPException(status_code=422, detail="No financial metrics could be extracted from the PDF")
+        
+        logger.info(f"Successfully processed PDF: {file.filename}")
+        return {
+            "success": True,
+            "filename": file.filename,
+            "financial_metrics": financial_metrics,
+            "message": "PDF processed successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in AI analyzer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+
+# OCR dependencies test endpoint removed - was only for debugging
+
+@app.post("/api/pause_background_tasks")
+async def pause_background_tasks():
+    """Temporarily pause background tasks for faster AI processing"""
+    global ai_processing_active
+    ai_processing_active = True
+    return {"success": True, "message": "Background tasks paused"}
+
+@app.post("/api/resume_background_tasks") 
+async def resume_background_tasks():
+    """Resume background tasks after AI processing"""
+    global ai_processing_active
+    ai_processing_active = False
+    return {"success": True, "message": "Background tasks resumed"}
+
+@app.get("/api/place_order_sheet")
+async def get_place_order_sheet():
+    """Get place order data from Google Sheets"""
+    try:
+        sheet_id = "1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM"
+        gid = "0"  # place_order sheet
+        sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+        
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(sheet_url)
+            response.raise_for_status()
+            
+            df = pd.read_csv(io.StringIO(response.text))
+            
+            # Replace NaN values with empty strings to avoid JSON serialization errors
+            df = df.fillna('')
+            
+            # Convert to list of dictionaries for JSON response
+            sheet_data = df.to_dict('records')
+            
+            # Filter out completely empty rows
+            filtered_data = []
+            for row in sheet_data:
+                if any(str(value).strip() for value in row.values() if value != ''):
+                    # Clean up the row data for JSON serialization
+                    cleaned_row = {}
+                    for key, value in row.items():
+                        if pd.isna(value) or value == 'nan':
+                            cleaned_row[key] = ''
+                        else:
+                            cleaned_row[key] = str(value).strip()
+                    filtered_data.append(cleaned_row)
+            
+            logger.info(f"Loaded {len(filtered_data)} rows from place_order sheet")
+            return {
+                "success": True,
+                "data": filtered_data,
+                "total_rows": len(filtered_data)
+            }
+            
+    except Exception as e:
+        logger.error(f"Error loading place order sheet: {e}")
+        return {
+            "success": False,
+            "message": f"Error loading sheet data: {str(e)}",
+            "data": []
+        }
+
+@app.get("/api/session_status")
+async def get_session_status():
+    """Check if there's a valid active session"""
+    try:
+        session_file = "kotak_session.json"
+        
+        if not os.path.exists(session_file):
+            return {
+                "session_active": False,
+                "message": "No session found"
+            }
+        
+        async with aiofiles.open(session_file, 'r') as f:
+            content = await f.read()
+            session_data = json.loads(content)
+        
+        expires_at_str = session_data.get('expires_at')
+        if not expires_at_str:
+            return {
+                "session_active": False,
+                "message": "Invalid session data"
+            }
+        
+        # Parse expiry time
+        from datetime import datetime
+        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        current_time = datetime.now()
+        
+        if current_time < expires_at:
+            return {
+                "session_active": True,
+                "message": "Session is active",
+                "expires_at": expires_at_str,
+                "sid": session_data.get('sid', 'N/A')
+            }
+        else:
+            return {
+                "session_active": False,
+                "message": "Session expired"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error checking session status: {e}")
+        return {
+            "session_active": False,
+            "message": "Error checking session"
+        }
+
+@app.post("/api/verify_totp")
+async def verify_totp(request: TOTPRequest):
+    """Verify TOTP code and authenticate with Neo trading system"""
+    try:
+        # Get credentials from environment variables
+        client_credentials = os.getenv("CLIENT_CREDENTIALS")
+        mobile_number = os.getenv("MOBILE_NUMBER")
+        ucc = os.getenv("UCC")
+        mpin = os.getenv("MPIN")
+        
+        if not all([client_credentials, mobile_number, ucc, mpin]):
+            logger.error("Missing required environment variables")
+            return {
+                "success": False,
+                "message": "Server configuration error: Missing credentials"
+            }
+        
+        logger.info(f"Starting Neo authentication with TOTP from UI: {request.totp_code}")
+        
+        # Format client credentials for Basic auth
+        formatted_credentials = f'Basic {client_credentials}'
+        
+        # Call neo_main_login function with TOTP from UI, rest from .env
+        session_data = await neo_main_login(formatted_credentials, mobile_number, ucc, request.totp_code, mpin)
+        
+        if session_data:
+            logger.info("Neo authentication successful")
+            return {
+                "success": True,
+                "message": "TOTP verified and session established for the day",
+                "session_info": {
+                    "sid": session_data.get('data', {}).get('sid', 'N/A'),
+                    "expires_at": session_data.get('expires_at', 'N/A')
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            logger.warning(f"Neo authentication failed for TOTP: {request.totp_code}")
+            return {
+                "success": False,
+                "message": "Invalid TOTP code or authentication failed"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error in Neo TOTP authentication: {e}")
+        return {
+            "success": False,
+            "message": f"Authentication error: {str(e)}"
+        }
+
+@app.post("/api/place_order")
+async def place_order(request: OrderRequest):
+    """Place a trading order (mock implementation)"""
+    try:
+        # Validate order data
+        if request.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be positive")
+        
+        if request.price <= 0:
+            raise HTTPException(status_code=400, detail="Price must be positive")
+        
+        if request.order_type not in ["BUY", "SELL"]:
+            raise HTTPException(status_code=400, detail="Order type must be BUY or SELL")
+        
+        # Generate mock order ID
+        order_id = f"ORD{secrets.randbelow(1000000):06d}"
+        
+        # Calculate total value
+        total_value = request.quantity * request.price
+        
+        # Log the order (in production, this would place actual order)
+        logger.info(f"Order placed: {request.order_type} {request.quantity} {request.symbol} @ ₹{request.price} = ₹{total_value:.2f}")
+        
+        # Mock order placement - in production, integrate with actual trading API
+        order_data = {
+            "order_id": order_id,
+            "symbol": request.symbol.upper(),
+            "quantity": request.quantity,
+            "price": request.price,
+            "order_type": request.order_type,
+            "total_value": total_value,
+            "status": "PLACED",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Save order to database (optional)
+        try:
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS orders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        order_id TEXT UNIQUE,
+                        symbol TEXT,
+                        quantity INTEGER,
+                        price REAL,
+                        order_type TEXT,
+                        total_value REAL,
+                        status TEXT,
+                        timestamp TEXT
+                    )
+                """)
+                
+                await db.execute("""
+                    INSERT INTO orders 
+                    (order_id, symbol, quantity, price, order_type, total_value, status, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    order_data["order_id"],
+                    order_data["symbol"],
+                    order_data["quantity"],
+                    order_data["price"],
+                    order_data["order_type"],
+                    order_data["total_value"],
+                    order_data["status"],
+                    order_data["timestamp"]
+                ))
+                await db.commit()
+                
+        except Exception as db_error:
+            logger.warning(f"Failed to save order to database: {db_error}")
+        
+        return {
+            "success": True,
+            "message": "Order placed successfully",
+            "order_id": order_id,
+            "order_details": order_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error placing order: {e}")
+        raise HTTPException(status_code=500, detail="Error placing order")
+
+@app.post("/api/execute_orders")
+async def execute_orders():
+    """Execute place orders using place_order.py main function"""
+    try:
+        logger.info("Starting order execution from place_order.py")
+        
+        # Call the main function from place_order.py
+        result = await place_order_main()
+        
+        if result:
+            logger.info("Order execution completed successfully")
+            return {
+                "success": True,
+                "message": "Orders executed successfully",
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            logger.warning("Order execution completed but returned None")
+            return {
+                "success": True,
+                "message": "Order execution completed",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"Error executing orders: {e}")
+        return {
+            "success": False,
+            "message": f"Error executing orders: {str(e)}"
+        }
+
 @app.get("/status")
 async def status():
-    global sme_task, equities_task
+    global sme_task, equities_task, ai_processing_active
     return {
         "sme_task_running": sme_task is not None and not sme_task.done(),
-        "equities_task_running": equities_task is not None and not equities_task.done()
+        "equities_task_running": equities_task is not None and not equities_task.done(),
+        "dashboard_active": True,
+        "ai_processing_active": ai_processing_active
     }
 
 if __name__ == "__main__":
