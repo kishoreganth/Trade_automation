@@ -862,7 +862,7 @@ async def trigger_watchlist_message(message):
 
 # this is the test message to see if the script is working or not
 # This will send all the CA docs to the trade_mvd chat id ( which is our Script CA running telegram )
-async def trigger_test_message(chat_idd, message, type="test", symbol="", company_name=""):
+async def trigger_test_message(chat_idd, message, type="test", symbol="", company_name="", description="", file_url=""):
     # Send to Telegram as before
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -886,25 +886,29 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
     
     # Also save to local database for UI dashboard
     try:
-        # Create message data with symbol and company_name if provided
+        # Create message data with all provided fields
         message_data = MessageData(
             chat_id=chat_idd,
             message=message,
             timestamp=datetime.now().isoformat(),
             symbol=symbol,
             company_name=company_name,
+            description=description,
+            file_url=file_url,
             option=type
         )
         
-        # Parse message content only if symbol/company not provided
-        if not message_data.symbol or not message_data.company_name:
+        # Parse message content only if fields not provided
+        if not message_data.symbol or not message_data.company_name or not message_data.description or not message_data.file_url:
             parsed = parse_message_content(message_data.message)
             if not message_data.symbol:
                 message_data.symbol = parsed.get("symbol", "")
             if not message_data.company_name:
                 message_data.company_name = parsed.get("company_name", "")
-            message_data.description = parsed.get("description", "")
-            message_data.file_url = parsed.get("file_url", "")
+            if not message_data.description:
+                message_data.description = parsed.get("description", "")
+            if not message_data.file_url:
+                message_data.file_url = parsed.get("file_url", "")
         
         # Skip database save and WebSocket for test messages
         if type == "test":
@@ -1418,7 +1422,7 @@ async def process_ca_data(ca_docs):
                 print(f"Message created for {row['symbol']}")
                 
                 # Send the message This will send all the messages to the trade_mvd chat id WHich is used to testing or to check if the script is running or not
-                await trigger_test_message("@trade_mvd", message, "test", row['symbol'], row['sm_name'])
+                await trigger_test_message("@trade_mvd", message, "test", row['symbol'], row['sm_name'], row['desc'], attachment_file)
                 
                 
                 ##### X------------ THIS IS WATCHING LIST SENDING -------X ########
@@ -1449,7 +1453,7 @@ async def process_ca_data(ca_docs):
 
                     if any(any(kw in val for val in row_values) for kw in keywords_lower):
                         # message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
-                        await trigger_test_message(group_id, message, option, row['symbol'], row['sm_name'])
+                        await trigger_test_message(group_id, message, option, row['symbol'], row['sm_name'], row['desc'], attachment_file)
                 ###### X --------------------------------------------X #########      
                 ################################################################
                 
@@ -1467,7 +1471,7 @@ async def process_ca_data(ca_docs):
                         print("FINANCIAL METRICS ARE - ", financial_metrics)
                         
                         # Send message to Telegram and get message ID
-                        message_id = await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'])
+                        message_id = await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'], row['desc'], attachment_file)
                         
                         # Process and store financial metrics
                         if financial_metrics:
