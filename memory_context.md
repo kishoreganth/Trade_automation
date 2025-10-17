@@ -5,6 +5,23 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-10-17: Dashboard Default View - Show All Records
+
+**Problem**: Dashboard was showing only 100 messages on initial load instead of all records from the database.
+
+**Solution Implemented**:
+- Changed default selection in `static/index.html` dropdown from "100 messages" to "All messages" (value="0")
+- Backend API already supported limit=0 for fetching all records
+- No backend changes required
+
+**Performance Impact**:
+- Dashboard now displays complete data from database on initial load
+- Users can still filter to 50/100/200 messages if needed
+- Better data visibility for monitoring all corporate announcements
+
+**Files Modified**:
+- `static/index.html`: Changed default dropdown selection to "All messages"
+
 ### 2025-09-20: OpenAI Client Initialization Optimization (Updated)
 
 **Problem**: The OpenAI client was being initialized every time the `analyze_financial_metrics_async` function was called, causing unnecessary overhead and potential performance issues.
