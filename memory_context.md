@@ -5,6 +5,49 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-10-20: Login Authentication System
+
+**Problem**: Dashboard needed authentication to protect access and track user sessions.
+
+**Solution Implemented**:
+1. **Database Schema**:
+   - Created `users` table (id, username, password_hash, created_at, last_login)
+   - Created `sessions` table (id, session_token, user_id, created_at, expires_at)
+   - Auto-creates default admin user on first run (username: admin, password: admin123)
+
+2. **Backend Authentication**:
+   - Added SessionMiddleware for session management
+   - Implemented SHA256 password hashing
+   - Created `/api/login` endpoint for authentication
+   - Created `/api/logout` endpoint for session invalidation
+   - Added `verify_session()` helper function for API endpoints
+   - `/dashboard` route serves dashboard HTML (auth checked client-side)
+   - Session expires after 24 hours
+
+3. **Frontend**:
+   - Created `static/login.html` with modern gradient UI
+   - Login page with username/password fields
+   - Error handling with shake animation
+   - Success feedback with redirect
+   - Session token stored in localStorage
+   - Added logout button to dashboard header
+   - Auth check on dashboard page load
+   - Auto-redirect to login if not authenticated
+
+**Performance Impact**:
+- Secure dashboard access with session-based authentication
+- Clean separation between login and dashboard
+- 24-hour session validity for user convenience
+- SQLite database consistent with existing DB structure
+
+**Files Created**:
+- `static/login.html`: Login page with modern UI
+
+**Files Modified**:
+- `nse_url_test.py`: Added auth endpoints, database tables, session verification
+- `static/index.html`: Added logout button in header
+- `static/js/dashboard.js`: Added auth check, logout function, auth headers
+
 ### 2025-10-17: Dashboard Default View - Show All Records
 
 **Problem**: Dashboard was showing only 100 messages on initial load instead of all records from the database.

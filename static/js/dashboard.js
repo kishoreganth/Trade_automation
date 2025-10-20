@@ -5,6 +5,25 @@ let aiAnalysisResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
 
+// Check authentication on page load
+function checkAuth() {
+    const sessionToken = localStorage.getItem('session_token');
+    if (!sessionToken) {
+        window.location.href = '/';
+        return false;
+    }
+    return true;
+}
+
+// Add auth header to fetch requests
+function getAuthHeaders() {
+    const sessionToken = localStorage.getItem('session_token');
+    return {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json'
+    };
+}
+
 // WebSocket connection
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -524,6 +543,11 @@ function setupFileUpload() {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
+    // Check authentication first
+    if (!checkAuth()) {
+        return;
+    }
+    
     // Initialize input event listeners
     document.getElementById('symbolFilter').addEventListener('input', renderMessages);
     document.getElementById('limitSelect').addEventListener('change', function() {
@@ -804,5 +828,27 @@ function showOrderStatus(type, icon, message) {
     statusIcon.textContent = icon;
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';
+}
+
+// Logout function
+async function logout() {
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        // Clear session token regardless of response
+        localStorage.removeItem('session_token');
+        
+        // Redirect to login
+        window.location.href = '/';
+        
+    } catch (error) {
+        console.error('Logout error:', error);
+        // Still clear session and redirect on error
+        localStorage.removeItem('session_token');
+        window.location.href = '/';
+    }
 }
 

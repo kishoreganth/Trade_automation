@@ -22,6 +22,10 @@ app.log
 # Exclude cookies file
 cookies.txt
 
+# Exclude documentation and context files
+memory_context.md
+AUTH_README.md
+
 # Exclude specific Python files
 older_final_nse_alerts.py
 

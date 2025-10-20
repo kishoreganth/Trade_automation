@@ -16,6 +16,8 @@ import pyotp
 import secrets
 import sqlite3
 import aiosqlite
+import hashlib
+from starlette.middleware.sessions import SessionMiddleware
 import httpx
 import aiofiles
 import aiofiles.os
@@ -423,6 +425,9 @@ async def lifespan(app: FastAPI):
 # Create the FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
 
+# Add session middleware for authentication
+app.add_middleware(SessionMiddleware, secret_key=secrets.token_hex(32))
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
@@ -475,6 +480,10 @@ class OrderRequest(BaseModel):
     quantity: int
     price: float
     order_type: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 class WebSocketManager:
     def __init__(self):
@@ -546,6 +555,29 @@ async def init_db():
             )
         """)
         
+        # Create users table for authentication
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_login TEXT
+            )
+        """)
+        
+        # Create sessions table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_token TEXT UNIQUE NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
+        
         # Check if option column exists, if not add it
         cursor = await db.execute("PRAGMA table_info(messages)")
         columns = await cursor.fetchall()
@@ -555,8 +587,25 @@ async def init_db():
             logger.info("Adding option column to existing database")
             await db.execute("ALTER TABLE messages ADD COLUMN option TEXT")
         
+        # Create default admin user if no users exist
+        cursor = await db.execute("SELECT COUNT(*) FROM users")
+        user_count = (await cursor.fetchone())[0]
+        
+        if user_count == 0:
+            # Default credentials: admin / admin123
+            default_username = "admin"
+            default_password = "admin123"
+            password_hash = hashlib.sha256(default_password.encode()).hexdigest()
+            
+            await db.execute("""
+                INSERT INTO users (username, password_hash, created_at)
+                VALUES (?, ?, ?)
+            """, (default_username, password_hash, datetime.now().isoformat()))
+            
+            logger.info(f"Created default admin user - Username: {default_username}, Password: {default_password}")
+        
         await db.commit()
-    logger.info("Database initialized with migration support")
+    logger.info("Database initialized with authentication tables")
 
 def parse_message_content(message: str) -> Dict:
     """Parse the HTML message to extract structured data"""
@@ -1854,9 +1903,58 @@ async def run_periodic_task_equities():
 
 
 
+async def verify_session(request: Request) -> Optional[Dict]:
+    """Verify session token and return user data"""
+    auth_header = request.headers.get('Authorization')
+    
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return None
+    
+    session_token = auth_header.replace('Bearer ', '')
+    
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                SELECT s.user_id, s.expires_at, u.username
+                FROM sessions s
+                JOIN users u ON s.user_id = u.id
+                WHERE s.session_token = ?
+            """, (session_token,))
+            
+            result = await cursor.fetchone()
+            
+            if not result:
+                return None
+            
+            user_id, expires_at, username = result
+            
+            # Check if session has expired
+            expires_time = datetime.fromisoformat(expires_at)
+            if datetime.now() > expires_time:
+                # Delete expired session
+                await db.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+                await db.commit()
+                return None
+            
+            return {
+                "user_id": user_id,
+                "username": username,
+                "session_token": session_token
+            }
+    except Exception as e:
+        logger.error(f"Error verifying session: {e}")
+        return None
+
 @app.get("/")
+async def root():
+    """Redirect to login page"""
+    return FileResponse('static/login.html')
+
+@app.get("/dashboard")
 async def get_dashboard():
-    """Serve the main dashboard"""
+    """Serve the main dashboard (authentication checked client-side)"""
+    # Authentication is checked on the client side via JavaScript
+    # The dashboard will redirect to login if no valid session token exists
     return FileResponse('static/index.html')
 
 @app.get("/home")
@@ -2480,6 +2578,95 @@ async def execute_orders():
         return {
             "success": False,
             "message": f"Error executing orders: {str(e)}"
+        }
+
+@app.post("/api/login")
+async def login(request: LoginRequest):
+    """Login endpoint - authenticate user and create session"""
+    try:
+        # Hash the password
+        password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Verify credentials
+            cursor = await db.execute("""
+                SELECT id, username FROM users 
+                WHERE username = ? AND password_hash = ?
+            """, (request.username, password_hash))
+            
+            user = await cursor.fetchone()
+            
+            if not user:
+                logger.warning(f"Failed login attempt for username: {request.username}")
+                return {
+                    "success": False,
+                    "message": "Invalid username or password"
+                }
+            
+            user_id, username = user
+            
+            # Generate session token
+            session_token = secrets.token_urlsafe(32)
+            created_at = datetime.now()
+            expires_at = created_at + timedelta(hours=24)  # Session expires in 24 hours
+            
+            # Create session
+            await db.execute("""
+                INSERT INTO sessions (session_token, user_id, created_at, expires_at)
+                VALUES (?, ?, ?, ?)
+            """, (session_token, user_id, created_at.isoformat(), expires_at.isoformat()))
+            
+            # Update last login
+            await db.execute("""
+                UPDATE users SET last_login = ? WHERE id = ?
+            """, (created_at.isoformat(), user_id))
+            
+            await db.commit()
+            
+            logger.info(f"Successful login for user: {username}")
+            
+            return {
+                "success": True,
+                "message": "Login successful",
+                "session_token": session_token,
+                "username": username,
+                "expires_at": expires_at.isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return {
+            "success": False,
+            "message": "An error occurred during login"
+        }
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    """Logout endpoint - invalidate session"""
+    try:
+        user = await verify_session(request)
+        
+        if not user:
+            return {"success": False, "message": "No active session"}
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                DELETE FROM sessions WHERE session_token = ?
+            """, (user['session_token'],))
+            await db.commit()
+        
+        logger.info(f"User {user['username']} logged out")
+        
+        return {
+            "success": True,
+            "message": "Logged out successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        return {
+            "success": False,
+            "message": "Error during logout"
         }
 
 @app.get("/status")
