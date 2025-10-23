@@ -25,6 +25,8 @@ cookies.txt
 # Exclude documentation and context files
 memory_context.md
 AUTH_README.md
+SESSION_AUTH_SUMMARY.md
+TIMEZONE_FIX_SUMMARY.md
 
 # Exclude specific Python files
 older_final_nse_alerts.py

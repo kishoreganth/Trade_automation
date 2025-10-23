@@ -5,14 +5,98 @@ let aiAnalysisResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
 
-// Check authentication on page load
-function checkAuth() {
+// Check authentication on page load with server-side validation
+async function checkAuth() {
     const sessionToken = localStorage.getItem('session_token');
     if (!sessionToken) {
         window.location.href = '/';
         return false;
     }
-    return true;
+    
+    // Validate session with server
+    try {
+        const response = await fetch('/api/verify_session', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.valid) {
+            // Session expired or invalid
+            console.log('Session expired or invalid. Redirecting to login...');
+            localStorage.removeItem('session_token');
+            window.location.href = '/';
+            return false;
+        }
+        
+        // Session is valid, start periodic validation
+        startSessionMonitoring();
+        return true;
+        
+    } catch (error) {
+        console.error('Session validation error:', error);
+        // On network error, allow but don't start monitoring
+        return true;
+    }
+}
+
+// Periodic session validation (every 5 minutes)
+let sessionMonitorInterval = null;
+
+function startSessionMonitoring() {
+    // Clear any existing interval
+    if (sessionMonitorInterval) {
+        clearInterval(sessionMonitorInterval);
+    }
+    
+    // Check session validity every 5 minutes
+    sessionMonitorInterval = setInterval(async () => {
+        const sessionToken = localStorage.getItem('session_token');
+        if (!sessionToken) {
+            handleSessionExpired();
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/verify_session', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${sessionToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok || !data.valid) {
+                handleSessionExpired();
+            }
+        } catch (error) {
+            console.error('Session monitoring error:', error);
+            // Don't logout on network errors, just log
+        }
+    }, 5 * 60 * 1000); // 5 minutes
+}
+
+function handleSessionExpired() {
+    // Clear interval
+    if (sessionMonitorInterval) {
+        clearInterval(sessionMonitorInterval);
+        sessionMonitorInterval = null;
+    }
+    
+    // Clear session
+    localStorage.removeItem('session_token');
+    
+    // Show alert
+    alert('Your session has expired. Please login again.');
+    
+    // Redirect to login
+    window.location.href = '/';
 }
 
 // Add auth header to fetch requests
@@ -312,6 +396,9 @@ function handleOptionFilter(optionValue) {
         document.querySelector('.content-area').style.display = 'none';
         document.getElementById('placeOrderPage').style.display = 'block';
         
+        // Setup open Google sheet button
+        setupOpenSheetButton();
+        
         // Check session status and load sheet data when page loads
         checkSessionStatus();
         loadPlaceOrderSheet();
@@ -542,9 +629,10 @@ function setupFileUpload() {
 }
 
 // Event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Check authentication first
-    if (!checkAuth()) {
+document.addEventListener('DOMContentLoaded', async function() {
+    // Check authentication first (async now)
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
         return;
     }
     
@@ -583,6 +671,25 @@ document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket();
     refreshMessages();
 });
+
+// Setup Open Google Sheet Button
+function setupOpenSheetButton() {
+    const openSheetBtn = document.getElementById('openSheetBtn');
+    if (openSheetBtn) {
+        // Remove existing listeners to prevent duplicates
+        openSheetBtn.replaceWith(openSheetBtn.cloneNode(true));
+        const newBtn = document.getElementById('openSheetBtn');
+        
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Opening Google Sheet in new tab...');
+            window.open('https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/edit?gid=0#gid=0', '_blank', 'noopener,noreferrer');
+        });
+        console.log('Open Sheet button setup complete');
+    } else {
+        console.error('Open Sheet button not found');
+    }
+}
 
 // Place Order functionality
 function setupPlaceOrder() {
@@ -833,6 +940,12 @@ function showOrderStatus(type, icon, message) {
 // Logout function
 async function logout() {
     try {
+        // Clear monitoring interval
+        if (sessionMonitorInterval) {
+            clearInterval(sessionMonitorInterval);
+            sessionMonitorInterval = null;
+        }
+        
         const response = await fetch('/api/logout', {
             method: 'POST',
             headers: getAuthHeaders()

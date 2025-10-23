@@ -25,7 +25,8 @@ import io
 from contextlib import asynccontextmanager
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz  # For timezone handling
 import aiohttp
 import time
 import psutil
@@ -52,6 +53,13 @@ load_dotenv()
 # Set up logging to both file and console
 logger = logging.getLogger()    
 logger.setLevel(logging.INFO)
+
+# Indian Standard Time timezone
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_ist_now():
+    """Get current time in IST timezone"""
+    return datetime.now(IST)
 
 # Cleanup configuration
 CLEANUP_CONFIG = {
@@ -189,7 +197,7 @@ async def cleanup_old_files_async(folder_path: str, retention_days: int) -> Dict
             logger.info(f"📁 Folder {folder_path} doesn't exist, skipping cleanup")
             return stats
         
-        cutoff_time = datetime.now() - timedelta(days=retention_days)
+        cutoff_time = get_ist_now() - timedelta(days=retention_days)
         cutoff_timestamp = cutoff_time.timestamp()
         
         logger.info(f"🧹 Starting cleanup in {folder_path} (files older than {retention_days} days)")
@@ -600,7 +608,7 @@ async def init_db():
             await db.execute("""
                 INSERT INTO users (username, password_hash, created_at)
                 VALUES (?, ?, ?)
-            """, (default_username, password_hash, datetime.now().isoformat()))
+            """, (default_username, password_hash, get_ist_now().isoformat()))
             
             logger.info(f"Created default admin user - Username: {default_username}, Password: {default_password}")
         
@@ -939,7 +947,7 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
         message_data = MessageData(
             chat_id=chat_idd,
             message=message,
-            timestamp=datetime.now().isoformat(),
+            timestamp=get_ist_now().isoformat(),
             symbol=symbol,
             company_name=company_name,
             description=description,
@@ -1007,7 +1015,7 @@ async def process_financial_metrics(financial_metrics, stock_symbol, message_id=
             return []
             
         quarterly_data = financial_metrics.get('quarterly_data', [])
-        reported_at = datetime.now().isoformat()
+        reported_at = get_ist_now().isoformat()
         
         stored_metrics = []
         
@@ -1930,7 +1938,7 @@ async def verify_session(request: Request) -> Optional[Dict]:
             
             # Check if session has expired
             expires_time = datetime.fromisoformat(expires_at)
-            if datetime.now() > expires_time:
+            if get_ist_now() > expires_time:
                 # Delete expired session
                 await db.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
                 await db.commit()
@@ -1985,7 +1993,7 @@ async def receive_trigger_message(message_data: MessageData):
     try:
         # Add timestamp if not provided
         if not message_data.timestamp:
-            message_data.timestamp = datetime.now().isoformat()
+            message_data.timestamp = get_ist_now().isoformat()
         
         # Parse message content if not already structured
         if not message_data.symbol and not message_data.company_name:
@@ -2052,6 +2060,20 @@ async def get_messages_from_db(limit: int = 100) -> List[Dict]:
         columns = [description[0] for description in cursor.description]
         
         return [dict(zip(columns, row)) for row in rows]
+
+@app.get("/api/verify_session")
+async def verify_session_endpoint(request: Request):
+    """Verify if session is valid"""
+    user = await verify_session(request)
+    if user:
+        return {
+            "valid": True,
+            "username": user["username"]
+        }
+    return {
+        "valid": False,
+        "message": "Session expired or invalid"
+    }
 
 @app.get("/api/messages")
 async def get_messages(limit: int = 0):
@@ -2390,9 +2412,8 @@ async def get_session_status():
             }
         
         # Parse expiry time
-        from datetime import datetime
         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
-        current_time = datetime.now()
+        current_time = get_ist_now()
         
         if current_time < expires_at:
             return {
@@ -2448,7 +2469,7 @@ async def verify_totp(request: TOTPRequest):
                     "sid": session_data.get('data', {}).get('sid', 'N/A'),
                     "expires_at": session_data.get('expires_at', 'N/A')
                 },
-                "timestamp": datetime.now().isoformat()
+                "timestamp": get_ist_now().isoformat()
             }
         else:
             logger.warning(f"Neo authentication failed for TOTP: {request.totp_code}")
@@ -2496,7 +2517,7 @@ async def place_order(request: OrderRequest):
             "order_type": request.order_type,
             "total_value": total_value,
             "status": "PLACED",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": get_ist_now().isoformat()
         }
         
         # Save order to database (optional)
@@ -2563,14 +2584,14 @@ async def execute_orders():
                 "success": True,
                 "message": "Orders executed successfully",
                 "result": result,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": get_ist_now().isoformat()
             }
         else:
             logger.warning("Order execution completed but returned None")
             return {
                 "success": True,
                 "message": "Order execution completed",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": get_ist_now().isoformat()
             }
             
     except Exception as e:
@@ -2607,8 +2628,8 @@ async def login(request: LoginRequest):
             
             # Generate session token
             session_token = secrets.token_urlsafe(32)
-            created_at = datetime.now()
-            expires_at = created_at + timedelta(hours=24)  # Session expires in 24 hours
+            created_at = get_ist_now()
+            expires_at = created_at + timedelta(hours=8)  # Session expires in 8 hours
             
             # Create session
             await db.execute("""

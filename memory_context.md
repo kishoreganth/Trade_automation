@@ -5,6 +5,87 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-10-23: Fixed Timezone Issue - All Timestamps Now in IST
+
+**Problem**: Dashboard was showing incorrect time for messages. Telegram showed messages at 4:10 PM and 4:18 PM IST, but dashboard displayed "10:48 AM" as last update. The issue was that `datetime.now()` was using server's local timezone (likely UTC) instead of IST (Indian Standard Time).
+
+**Solution Implemented**:
+1. **Added Timezone Support**:
+   - Imported `pytz` library (already in requirements.txt)
+   - Created IST timezone object: `IST = pytz.timezone('Asia/Kolkata')`
+   - Created helper function `get_ist_now()` to get current time in IST
+
+2. **Replaced All datetime.now() Calls**:
+   - Line 950: Message timestamps in `trigger_test_message()`
+   - Line 1018: Financial metrics reporting time
+   - Line 1996: API trigger message endpoint
+   - Line 2632: Session creation time
+   - Line 1941: Session expiry validation
+   - Line 2416: Session status check
+   - Line 2472: TOTP verification timestamp
+   - Line 2520: Order placement timestamp
+   - Line 2587 & 2594: Order execution timestamps
+   - Line 200: Cleanup cutoff time
+   - Line 611: User creation timestamp
+
+3. **Timezone-Aware datetime Objects**:
+   - All timestamps now use `get_ist_now().isoformat()` instead of `datetime.now().isoformat()`
+   - Consistent IST timezone across entire application
+   - Database stores ISO 8601 formatted strings with timezone info
+
+**Performance Impact**:
+- ✅ All messages now show correct IST time matching Telegram
+- ✅ Dashboard "Last Message" time matches actual message time
+- ✅ Session expiry calculations use IST
+- ✅ Consistent timezone across all features (messages, orders, sessions, metrics)
+
+**Files Modified**:
+- `nse_url_test.py`: Added IST timezone support, replaced all datetime.now() with get_ist_now()
+
+### 2025-10-23: Enhanced Session Validation & Auto-Logout
+
+**Problem**: Client-side authentication was weak - only checked token presence, not validity. Session expiry was too long (24 hours), and no auto-logout when expired.
+
+**Solution Implemented**:
+1. **Backend Changes**:
+   - Added `/api/verify_session` endpoint for real-time session validation
+   - Changed session expiry from 24 hours to 8 hours (line 2611 in nse_url_test.py)
+   - Server validates session token and expiry time on each verification request
+
+2. **Frontend Session Validation** (dashboard.js):
+   - `checkAuth()` now validates session with server before allowing dashboard access
+   - Async validation on page load prevents access with expired/invalid tokens
+   - Immediate logout and redirect if session invalid
+
+3. **Periodic Session Monitoring**:
+   - Auto-starts monitoring interval after successful auth validation
+   - Checks session validity every 5 minutes (300,000ms)
+   - Prevents silent expiry - user gets immediate feedback
+
+4. **Auto-Logout System**:
+   - `handleSessionExpired()` function handles expired sessions gracefully
+   - Clears monitoring interval to prevent memory leaks
+   - Shows user-friendly alert: "Your session has expired. Please login again."
+   - Clears localStorage and redirects to login page
+   - Also clears interval on manual logout
+
+**Security Improvements**:
+- ✅ Server-side session validation on dashboard load
+- ✅ Periodic validation prevents silent expiry
+- ✅ Automatic logout when session expires (8 hours)
+- ✅ Network error handling - doesn't logout on temporary connection issues
+- ✅ Clean session cleanup prevents memory leaks
+
+**Performance Impact**:
+- Reduced session duration (8h vs 24h) improves security
+- Minimal overhead - validation runs only every 5 minutes
+- Better UX - users know immediately when session expires
+- No silent failures - clear feedback on expiry
+
+**Files Modified**:
+- `nse_url_test.py`: Added `/api/verify_session` endpoint, changed expiry to 8 hours
+- `static/js/dashboard.js`: Added server-side validation, periodic monitoring, auto-logout
+
 ### 2025-10-20: Login Authentication System
 
 **Problem**: Dashboard needed authentication to protect access and track user sessions.
@@ -22,7 +103,7 @@ Stock Trading Automation project with OCR capabilities for financial document pr
    - Created `/api/logout` endpoint for session invalidation
    - Added `verify_session()` helper function for API endpoints
    - `/dashboard` route serves dashboard HTML (auth checked client-side)
-   - Session expires after 24 hours
+   - Session expires after 8 hours (updated from 24 hours)
 
 3. **Frontend**:
    - Created `static/login.html` with modern gradient UI
@@ -31,13 +112,13 @@ Stock Trading Automation project with OCR capabilities for financial document pr
    - Success feedback with redirect
    - Session token stored in localStorage
    - Added logout button to dashboard header
-   - Auth check on dashboard page load
+   - Auth check on dashboard page load with server validation
    - Auto-redirect to login if not authenticated
 
 **Performance Impact**:
 - Secure dashboard access with session-based authentication
 - Clean separation between login and dashboard
-- 24-hour session validity for user convenience
+- 8-hour session validity for security
 - SQLite database consistent with existing DB structure
 
 **Files Created**:

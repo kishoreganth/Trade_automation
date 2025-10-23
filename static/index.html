@@ -206,7 +206,10 @@
                     <div class="sheet-preview-section">
                         <div class="sheet-header">
                             <h4>📊 Market Open Orders</h4>
-                            <button id="refreshSheetBtn" class="refresh-sheet-btn">🔄 Refresh</button>
+                            <div style="display: flex; gap: 10px;">
+                                <button id="openSheetBtn" class="refresh-sheet-btn" style="background: #10b981;">📊 Open Google Sheet</button>
+                                <button id="refreshSheetBtn" class="refresh-sheet-btn">🔄 Refresh</button>
+                            </div>
                         </div>
                         <div class="sheet-container">
                             <table class="sheet-table" id="sheetTable">
@@ -233,6 +236,22 @@
                     
                     <!-- Right side - TOTP Section -->
                     <div class="totp-auth-section">
+                        <!-- Instructions Card -->
+                        <div class="instructions-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <h4 style="margin: 0 0 15px 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 20px;">📋</span>
+                                <span>Place Order Automation Steps</span>
+                            </h4>
+                            <ol style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+                                <li><strong>OPEN GOOGLE DOCS</strong></li>
+                                <li><strong>UPDATE LATEST BHAV COPY</strong></li>
+                                <li><strong>UPDATE SCRIP LIST IN GOOGLE DOCS</strong></li>
+                                <li><strong>REFRESH IN DASHBOARD</strong></li>
+                                <li><strong>PUT TOTP</strong> (Google Authenticator)</li>
+                                <li><strong>CLICK "PLACE ORDER"</strong></li>
+                            </ol>
+                        </div>
+                        
                         <div class="totp-container">
                             <div class="totp-header">
                                 <h4>🔐 Authentication</h4>
