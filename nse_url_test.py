@@ -467,8 +467,8 @@ app.mount("/files", StaticFiles(directory=files_dir, html=True, check_dir=True),
 # Mount static files for dashboard
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Database setup for dashboard
-DB_PATH = "messages.db"
+# Database setup for dashboard - use environment variable for Docker persistence
+DB_PATH = os.getenv('DB_PATH', 'messages.db')
 
 class MessageData(BaseModel):
     chat_id: str

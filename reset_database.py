@@ -12,7 +12,7 @@ from pathlib import Path
 
 def reset_database():
     """Delete the existing database file"""
-    db_path = Path("messages.db")
+    db_path = Path(os.getenv('DB_PATH', 'messages.db'))
     
     if db_path.exists():
         try:
@@ -29,7 +29,7 @@ def reset_database():
 
 async def remove_test_messages():
     """Remove all messages where option is 'test' from the database"""
-    db_path = Path("messages.db")
+    db_path = Path(os.getenv('DB_PATH', 'messages.db'))
     
     if not db_path.exists():
         print("ℹ️  No database found")

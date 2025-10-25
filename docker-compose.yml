@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  stock-trading:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount persistent data directory - this ensures database persists
+      - ./data:/Trade_automation/data
+    environment:
+      - DB_PATH=/Trade_automation/data/messages.db
+    restart: unless-stopped
+    container_name: stock-trading-app

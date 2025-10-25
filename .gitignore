@@ -9,6 +9,9 @@ messages.db
 *.sqlite
 *.sqlite3
 
+# Persistent data directory for Docker
+data/
+
 # Generated folders
 files/
 images/

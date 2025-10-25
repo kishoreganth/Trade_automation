@@ -9,7 +9,7 @@ import hashlib
 from datetime import datetime
 import getpass
 
-DB_PATH = "messages.db"
+DB_PATH = os.getenv('DB_PATH', 'messages.db')
 
 async def add_user():
     """Add a new user to the database"""
