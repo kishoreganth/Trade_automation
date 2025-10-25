@@ -239,17 +239,19 @@ async def main():
         # buy_price = round(ltp * 0.95, 2)
         # sell_price = round(ltp * 1.05, 2)
         
-        # BUY order
+        # refere the params description in the link below
+        # https://github.com/Kotak-Neo/Kotak-neo-api-v2/blob/main/docs/Place_Order.md
+        # BUY order 
         buy_order = {
             "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
-            "pc": "CNC", "pf": "N", "pr": str(row['BUY ORDER']), "pt": "L", 
+            "pc": "MIS", "pf": "N", "pr": str(row['BUY ORDER']), "pt": "L", 
             "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "B"
         }
         
         # SELL order
         sell_order = {
             "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
-            "pc": "CNC", "pf": "N", "pr": str(row['SELL ORDER']), "pt": "L", 
+            "pc": "MIS", "pf": "N", "pr": str(row['SELL ORDER']), "pt": "L", 
             "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "S"
         }
         
