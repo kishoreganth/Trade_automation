@@ -3,6 +3,7 @@ import json
 import urllib.parse
 import ssl
 import logging
+import time
 from pathlib import Path
 from neo_login.session_manager import KotakSessionManager
 from typing import Optional, Dict, Any
@@ -187,6 +188,83 @@ async def place_orders_batch(orders_list, max_concurrent=5):
     return results
 
 
+async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_concurrent=5):
+    """
+    Place orders with time-windowed rate limiting to respect API limits.
+    Executes orders in batches and waits between batches.
+    
+    Args:
+        orders_list: List of order dictionaries
+        orders_per_minute: Max orders per minute (default: 200, matching API limit)
+        max_concurrent: Concurrent orders within a batch (default: 5)
+        
+    Returns:
+        list: Combined list of all order responses
+    """
+    if not orders_list:
+        logger.warning("No orders to place")
+        return []
+    
+    total_orders = len(orders_list)
+    all_results = []
+    
+    # Split orders into batches of orders_per_minute
+    batch_size = orders_per_minute
+    total_batches = (total_orders + batch_size - 1) // batch_size  # Ceiling division
+    
+    logger.info(f"🚀 Starting rate-limited order execution")
+    logger.info(f"📊 Total orders: {total_orders}")
+    logger.info(f"📦 Batch size: {batch_size} orders/minute")
+    logger.info(f"🔢 Total batches: {total_batches}")
+    logger.info(f"⏱️ Estimated time: ~{total_batches} minutes")
+    
+    for batch_num in range(total_batches):
+        start_idx = batch_num * batch_size
+        end_idx = min(start_idx + batch_size, total_orders)
+        batch = orders_list[start_idx:end_idx]
+        
+        logger.info(f"\n{'='*60}")
+        logger.info(f"📋 Batch {batch_num + 1}/{total_batches}: Processing orders {start_idx + 1} to {end_idx}")
+        logger.info(f"{'='*60}")
+        
+        # Record batch start time
+        batch_start_time = time.time()
+        
+        # Execute batch
+        batch_results = await place_orders_batch(batch, max_concurrent=max_concurrent)
+        all_results.extend(batch_results)
+        
+        # Calculate batch execution time
+        batch_elapsed = time.time() - batch_start_time
+        logger.info(f"⏱️ Batch {batch_num + 1} completed in {batch_elapsed:.2f} seconds")
+        
+        # Count successes in this batch
+        batch_success = sum(1 for r in batch_results if r and r.get('status') != 'error')
+        logger.info(f"✅ Batch {batch_num + 1} success: {batch_success}/{len(batch)} orders")
+        
+        # Wait remaining time to complete 60-second window (except for last batch)
+        if batch_num < total_batches - 1:
+            wait_time = max(5, 60 - batch_elapsed)  # Minimum 5s buffer between batches
+            if batch_elapsed < 60:
+                logger.info(f"⏸️ Waiting {wait_time:.1f} seconds to complete 60-second window...")
+            else:
+                logger.info(f"⚠️ Batch took {batch_elapsed:.1f}s (>60s) - waiting minimum 5s buffer...")
+            await asyncio.sleep(wait_time)
+    
+    # Final summary
+    total_success = sum(1 for r in all_results if r and r.get('status') != 'error')
+    total_failed = total_orders - total_success
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🎯 FINAL SUMMARY")
+    logger.info(f"{'='*60}")
+    logger.info(f"✅ Successful orders: {total_success}/{total_orders} ({total_success/total_orders*100:.1f}%)")
+    logger.info(f"❌ Failed orders: {total_failed}/{total_orders} ({total_failed/total_orders*100:.1f}%)")
+    logger.info(f"{'='*60}\n")
+    
+    return all_results
+
+
 
 
 
@@ -259,8 +337,8 @@ async def main():
     
     print(f"\n📋 Prepared {len(all_orders)} orders for {len(all_rows)} stocks")
     
-    # Place all orders concurrently
-    results = await place_orders_batch(all_orders, max_concurrent=3)
+    # Place all orders with rate limiting (200 orders per minute = 100 stocks per minute)
+    results = await place_orders_with_rate_limit(all_orders, orders_per_minute=200, max_concurrent=5)
     
     # Print summary
     successful = sum(1 for r in results if r and r.get('status') != 'error')
