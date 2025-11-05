@@ -631,7 +631,7 @@ tr:hover {
     border-radius: 8px;
     border: 1px solid #e2e8f0;
     overflow: auto;
-    max-height: 500px;
+    max-height: 350px;
 }
 
 .sheet-table {
@@ -673,54 +673,137 @@ tr:hover {
     background: #f8fafc;
     border-radius: 12px;
     border: 1px solid #e2e8f0;
-    padding: 20px;
+    padding: 12px;
     height: fit-content;
 }
 
 .totp-container {
     background: #ffffff;
-    padding: 24px;
+    padding: 16px;
     border-radius: 12px;
     border: 1px solid #e2e8f0;
 }
 
 .totp-header {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .totp-header h4 {
     color: #374151;
-    font-size: 1.3rem;
-    margin-bottom: 8px;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
 }
 
 .totp-header p {
     color: #64748b;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 /* Place Order Section */
 .place-order-section {
-    margin-top: 30px;
-    padding-top: 24px;
+    margin-top: 16px;
+    padding-top: 16px;
     border-top: 1px solid #e2e8f0;
 }
 
 .order-header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .order-header h4 {
     color: #374151;
-    font-size: 1.2rem;
-    margin-bottom: 8px;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
 }
 
 .order-header p {
     color: #64748b;
-    font-size: 13px;
+    font-size: 12px;
+}
+
+/* Get Quotes Section */
+.get-quotes-section {
+    background: #ffffff;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+
+.quotes-header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.quotes-header h4 {
+    color: #374151;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+}
+
+.quotes-header p {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.get-quotes-btn {
+    background: #f59e0b;
+    color: white;
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.get-quotes-btn:hover {
+    background: #d97706;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.get-quotes-btn:disabled {
+    background: #6b7280 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.quotes-status {
+    margin-top: 12px;
+    padding: 12px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+}
+
+.quotes-status.success {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.quotes-status.success .status-message {
+    color: #166534;
+}
+
+.quotes-status.error {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.quotes-status.error .status-message {
+    color: #dc2626;
+}
+
+.quotes-status.loading {
+    background: #fefbf2;
+    border-color: #fed7aa;
+}
+
+.quotes-status.loading .status-message {
+    color: #d97706;
 }
 
 .order-description {
@@ -820,15 +903,15 @@ tr:hover {
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-weight: 600;
     color: #374151;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .totp-input, .order-input {
@@ -877,7 +960,7 @@ tr:hover {
     display: flex;
     gap: 12px;
     justify-content: center;
-    margin-top: 20px;
+    margin-top: 12px;
 }
 
 .check-btn, .clear-btn, .place-order-btn, .reset-btn {

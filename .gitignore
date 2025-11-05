@@ -27,9 +27,15 @@ cookies.txt
 
 # Exclude documentation and context files
 memory_context.md
+async_architecture_explained.md
+google_sheets_setup.md
+session_auth_summary.md
+timezone_fix_summary.md
 AUTH_README.md
 SESSION_AUTH_SUMMARY.md
 TIMEZONE_FIX_SUMMARY.md
+ASYNC_ARCHITECTURE_EXPLAINED.md
+GOOGLE_SHEETS_SETUP.md
 
 # Exclude specific Python files
 older_final_nse_alerts.py

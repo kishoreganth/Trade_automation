@@ -683,7 +683,7 @@ function setupOpenSheetButton() {
         newBtn.addEventListener('click', (e) => {
             e.preventDefault();
             console.log('Opening Google Sheet in new tab...');
-            window.open('https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/edit?gid=0#gid=0', '_blank', 'noopener,noreferrer');
+            window.open('https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/edit?gid=1933500776#gid=1933500776', '_blank', 'noopener,noreferrer');
         });
         console.log('Open Sheet button setup complete');
     } else {
@@ -696,6 +696,7 @@ function setupPlaceOrder() {
     const totpInput = document.getElementById('totpInput');
     const checkTotpBtn = document.getElementById('checkTotpBtn');
     const placeOrderBtn = document.getElementById('placeOrderBtn');
+    const getQuotesBtn = document.getElementById('getQuotesBtn');
     
     // TOTP input validation - only allow numbers
     totpInput.addEventListener('input', function(e) {
@@ -769,25 +770,104 @@ function setupPlaceOrder() {
         }
     });
     
-    // Place Order button functionality
+    // Get Quotes button functionality with job tracking
+    getQuotesBtn.addEventListener('click', async function() {
+        // Show loading status
+        showQuotesStatus('loading', '⏳', 'Starting quote fetch... (3-4 minutes)');
+        
+        // Disable button during processing
+        getQuotesBtn.disabled = true;
+        getQuotesBtn.innerHTML = '<span class="btn-icon">⏳</span>Fetching...';
+        
+        try {
+            // Start background job - returns immediately with job_id
+            const response = await fetch('/api/get_quotes_updated', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success && result.job_id) {
+                const jobId = result.job_id;
+                console.log(`GET QUOTES job started: ${jobId}`);
+                
+                showQuotesStatus('loading', '⏳', `Quote fetching in progress... (${result.estimated_time})`);
+                
+                // Poll job status every 5 seconds
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusResponse = await fetch(`/api/job_status/${jobId}`);
+                        const statusData = await statusResponse.json();
+                        
+                        if (statusData.success && statusData.job) {
+                            const job = statusData.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(pollInterval);
+                                showQuotesStatus('success', '✅', job.message || 'Quotes fetched and updated successfully!');
+                                
+                                // Re-enable button
+                                getQuotesBtn.disabled = false;
+                                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+                                
+                                // Refresh sheet data
+                                setTimeout(() => {
+                                    loadPlaceOrderSheet();
+                                }, 1000);
+                                
+                            } else if (job.status === 'failed') {
+                                clearInterval(pollInterval);
+                                showQuotesStatus('error', '❌', job.error || 'Failed to fetch quotes');
+                                
+                                // Re-enable button on error
+                                getQuotesBtn.disabled = false;
+                                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+                            } else {
+                                // Update progress
+                                showQuotesStatus('loading', '⏳', `${job.message} (Progress: ${job.progress}%)`);
+                            }
+                        }
+                    } catch (pollError) {
+                        console.error('Error polling job status:', pollError);
+                    }
+                }, 5000); // Poll every 5 seconds
+                
+            } else {
+                showQuotesStatus('error', '❌', result.message || 'Failed to start quote fetching');
+                getQuotesBtn.disabled = false;
+                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+            }
+            
+        } catch (error) {
+            console.error('Error starting quote fetch:', error);
+            showQuotesStatus('error', '❌', 'Error starting quote fetch. Please try again.');
+            getQuotesBtn.disabled = false;
+            getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+        }
+    });
+    
+    // Place Order button functionality with job tracking
     placeOrderBtn.addEventListener('click', async function() {
         // Show confirmation dialog
         const confirmMessage = 'Are you sure you want to execute all orders from the sheet?\n\n' +
-                              'This will place BUY orders (5% below LTP) and SELL orders (5% above LTP) ' +
-                              'for all stocks in the market data table.';
+                              'This will place BUY and SELL orders for all stocks in the market data table.';
         
         if (!confirm(confirmMessage)) {
             return;
         }
         
         // Show loading status
-        showOrderStatus('loading', '⏳', 'Processing orders...');
+        showOrderStatus('loading', '⏳', 'Starting order execution...');
         
         // Disable button during processing
         placeOrderBtn.disabled = true;
         placeOrderBtn.innerHTML = '<span class="btn-icon">⏳</span>Processing...';
         
         try {
+            // Start background job - returns immediately with job_id
             const response = await fetch('/api/execute_orders', {
                 method: 'POST',
                 headers: {
@@ -797,27 +877,57 @@ function setupPlaceOrder() {
             
             const result = await response.json();
             
-            if (response.ok && result.success) {
-                showOrderStatus('success', '✅', result.message || 'Orders executed successfully!');
+            if (response.ok && result.success && result.job_id) {
+                const jobId = result.job_id;
+                console.log(`PLACE ORDER job started: ${jobId}`);
                 
-                // Keep button disabled after successful execution
-                placeOrderBtn.innerHTML = '<span class="btn-icon">✅</span>Orders Executed';
-                placeOrderBtn.style.background = '#10b981';
+                showOrderStatus('loading', '⏳', `Executing orders in background... (${result.estimated_time})`);
+                
+                // Poll job status every 5 seconds
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusResponse = await fetch(`/api/job_status/${jobId}`);
+                        const statusData = await statusResponse.json();
+                        
+                        if (statusData.success && statusData.job) {
+                            const job = statusData.job;
+                            
+                            if (job.status === 'completed') {
+                                clearInterval(pollInterval);
+                                showOrderStatus('success', '✅', job.message || 'All orders executed successfully!');
+                                
+                                // Keep button disabled after successful execution
+                                placeOrderBtn.innerHTML = '<span class="btn-icon">✅</span>Orders Executed';
+                                placeOrderBtn.style.background = '#10b981';
+                                
+                            } else if (job.status === 'failed') {
+                                clearInterval(pollInterval);
+                                showOrderStatus('error', '❌', job.error || 'Order execution failed');
+                                
+                                // Re-enable button on error
+                                placeOrderBtn.disabled = false;
+                                placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
+                                placeOrderBtn.style.background = '#10b981';
+                            } else {
+                                // Update progress
+                                showOrderStatus('loading', '⏳', `${job.message} (Progress: ${job.progress}%)`);
+                            }
+                        }
+                    } catch (pollError) {
+                        console.error('Error polling job status:', pollError);
+                    }
+                }, 5000); // Poll every 5 seconds
                 
             } else {
-                showOrderStatus('error', '❌', result.message || 'Failed to execute orders');
-                
-                // Re-enable button on error
+                showOrderStatus('error', '❌', result.message || 'Failed to start order execution');
                 placeOrderBtn.disabled = false;
                 placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
                 placeOrderBtn.style.background = '#10b981';
             }
             
         } catch (error) {
-            console.error('Error executing orders:', error);
-            showOrderStatus('error', '❌', 'Error executing orders. Please try again.');
-            
-            // Re-enable button on error
+            console.error('Error starting order execution:', error);
+            showOrderStatus('error', '❌', 'Error starting order execution. Please try again.');
             placeOrderBtn.disabled = false;
             placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
             placeOrderBtn.style.background = '#10b981';
@@ -883,35 +993,55 @@ async function loadPlaceOrderSheet() {
         const response = await fetch('/api/place_order_sheet');
         const result = await response.json();
         
+        const thead = document.getElementById('sheetTableHead');
         const tbody = document.getElementById('sheetTableBody');
         
         if (result.success && result.data.length > 0) {
-            tbody.innerHTML = '';
+            // Get column names from first row
+            const columns = Object.keys(result.data[0]);
             
+            // Create dynamic header row
+            const headerRow = document.createElement('tr');
+            columns.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col;
+                headerRow.appendChild(th);
+            });
+            thead.innerHTML = '';
+            thead.appendChild(headerRow);
+            
+            // Create data rows
+            tbody.innerHTML = '';
             result.data.forEach(row => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${row.STOCK_NAME || ''}</td>
-                    <td>${row.EXCHANGE_TOKEN || ''}</td>
-                    <td>${row.GAP || ''}</td>
-                    <td>${row.MARKET || ''}</td>
-                    <td>${row.QUANTITY || ''}</td>
-                    <td>₹${row['CLOSE PRICE'] || ''}</td>
-                    <td>₹${row['BUY ORDER'] || ''}</td>
-                    <td>₹${row['SELL ORDER'] || ''}</td>
-                `;
+                columns.forEach(col => {
+                    const td = document.createElement('td');
+                    const value = row[col] || '';
+                    // Add ₹ symbol for price columns
+                    if (col.includes('PRICE') || col.includes('ORDER')) {
+                        td.textContent = value ? `₹${value}` : '';
+                    } else {
+                        td.textContent = value;
+                    }
+                    tr.appendChild(td);
+                });
                 tbody.appendChild(tr);
             });
             
-            console.log(`Loaded ${result.data.length} market orders from Google Sheet`);
+            console.log(`Loaded ${result.data.length} market orders with ${columns.length} columns from Google Sheet`);
         } else {
-            tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No market data available</td></tr>';
+            const colSpan = thead.querySelector('th') ? thead.querySelectorAll('th').length : 1;
+            thead.innerHTML = '<tr><th class="loading-cell">No Data</th></tr>';
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="loading-cell">No market data available</td></tr>`;
         }
         
     } catch (error) {
         console.error('Error loading place order sheet:', error);
+        const colSpan = document.getElementById('sheetTableHead').querySelector('th') ? 
+                       document.getElementById('sheetTableHead').querySelectorAll('th').length : 1;
+        document.getElementById('sheetTableHead').innerHTML = '<tr><th class="loading-cell">Error</th></tr>';
         document.getElementById('sheetTableBody').innerHTML = 
-            '<tr><td colspan="8" class="loading-cell">Error loading market data</td></tr>';
+            `<tr><td colspan="${colSpan}" class="loading-cell">Error loading market data</td></tr>`;
     }
 }
 
@@ -932,6 +1062,17 @@ function showOrderStatus(type, icon, message) {
     const statusMessage = document.getElementById('orderStatusMessage');
     
     statusDiv.className = `order-status ${type}`;
+    statusIcon.textContent = icon;
+    statusMessage.textContent = message;
+    statusDiv.style.display = 'block';
+}
+
+function showQuotesStatus(type, icon, message) {
+    const statusDiv = document.getElementById('quotesStatus');
+    const statusIcon = document.getElementById('quotesStatusIcon');
+    const statusMessage = document.getElementById('quotesStatusMessage');
+    
+    statusDiv.className = `quotes-status ${type}`;
     statusIcon.textContent = icon;
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';

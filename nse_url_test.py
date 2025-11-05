@@ -50,9 +50,38 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
+from get_quote import main as get_quote_main
+import uuid
+from dataclasses import dataclass, asdict, field as dataclass_field
+
 # Set up logging to both file and console
 logger = logging.getLogger()    
 logger.setLevel(logging.INFO)
+
+# ============================================================================
+# JOB STATUS TRACKING SYSTEM
+# ============================================================================
+
+@dataclass
+class JobStatus:
+    """Track status of long-running background jobs"""
+    job_id: str
+    type: str  # "get_quotes", "place_order", "ai_analyze"
+    status: str  # "running", "completed", "failed"
+    progress: int  # 0-100
+    message: str
+    started_at: str
+    completed_at: Optional[str] = None
+    result: Optional[Dict] = None
+    error: Optional[str] = None
+
+# In-memory job store (use DB for persistence across restarts)
+active_jobs: Dict[str, JobStatus] = {}
+
+# ============================================================================
+# END JOB STATUS TRACKING
+# ============================================================================
 
 # Indian Standard Time timezone
 IST = pytz.timezone('Asia/Kolkata')
@@ -2345,7 +2374,7 @@ async def get_place_order_sheet():
     """Get place order data from Google Sheets"""
     try:
         sheet_id = "1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM"
-        gid = "0"  # place_order sheet
+        gid = "1933500776"  # Market Open Order sheet
         sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
         
         async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -2485,120 +2514,80 @@ async def verify_totp(request: TOTPRequest):
             "message": f"Authentication error: {str(e)}"
         }
 
-@app.post("/api/place_order")
-async def place_order(request: OrderRequest):
-    """Place a trading order (mock implementation)"""
+
+@app.post("/api/execute_orders")
+async def execute_orders(background_tasks: BackgroundTasks):
+    """Execute place orders - runs in background, returns job_id immediately"""
     try:
-        # Validate order data
-        if request.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
         
-        if request.price <= 0:
-            raise HTTPException(status_code=400, detail="Price must be positive")
+        # Create job entry
+        active_jobs[job_id] = JobStatus(
+            job_id=job_id,
+            type="place_order",
+            status="running",
+            progress=0,
+            message="Starting order execution...",
+            started_at=get_ist_now().isoformat()
+        )
         
-        if request.order_type not in ["BUY", "SELL"]:
-            raise HTTPException(status_code=400, detail="Order type must be BUY or SELL")
-        
-        # Generate mock order ID
-        order_id = f"ORD{secrets.randbelow(1000000):06d}"
-        
-        # Calculate total value
-        total_value = request.quantity * request.price
-        
-        # Log the order (in production, this would place actual order)
-        logger.info(f"Order placed: {request.order_type} {request.quantity} {request.symbol} @ ₹{request.price} = ₹{total_value:.2f}")
-        
-        # Mock order placement - in production, integrate with actual trading API
-        order_data = {
-            "order_id": order_id,
-            "symbol": request.symbol.upper(),
-            "quantity": request.quantity,
-            "price": request.price,
-            "order_type": request.order_type,
-            "total_value": total_value,
-            "status": "PLACED",
-            "timestamp": get_ist_now().isoformat()
-        }
-        
-        # Save order to database (optional)
-        try:
-            async with aiosqlite.connect(DB_PATH) as db:
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS orders (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        order_id TEXT UNIQUE,
-                        symbol TEXT,
-                        quantity INTEGER,
-                        price REAL,
-                        order_type TEXT,
-                        total_value REAL,
-                        status TEXT,
-                        timestamp TEXT
-                    )
-                """)
+        # Define background task
+        async def run_place_orders_background():
+            try:
+                logger.info(f"[Job {job_id}] Starting PLACE ORDER background task")
+                active_jobs[job_id].message = "Executing buy/sell orders..."
+                active_jobs[job_id].progress = 20
                 
-                await db.execute("""
-                    INSERT INTO orders 
-                    (order_id, symbol, quantity, price, order_type, total_value, status, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    order_data["order_id"],
-                    order_data["symbol"],
-                    order_data["quantity"],
-                    order_data["price"],
-                    order_data["order_type"],
-                    order_data["total_value"],
-                    order_data["status"],
-                    order_data["timestamp"]
-                ))
-                await db.commit()
+                # Run the main order placement logic
+                result = await place_order_main()
                 
-        except Exception as db_error:
-            logger.warning(f"Failed to save order to database: {db_error}")
+                # Update job status
+                active_jobs[job_id].status = "completed"
+                active_jobs[job_id].progress = 100
+                active_jobs[job_id].message = "All orders executed successfully"
+                active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                active_jobs[job_id].result = result if result else {"status": "completed"}
+                
+                logger.info(f"[Job {job_id}] PLACE ORDER completed successfully")
+                
+                # Broadcast completion to all WebSocket clients
+                await ws_manager.broadcast_message({
+                    "type": "job_completed",
+                    "job": asdict(active_jobs[job_id])
+                })
+                
+            except Exception as e:
+                logger.error(f"[Job {job_id}] PLACE ORDER failed: {e}")
+                active_jobs[job_id].status = "failed"
+                active_jobs[job_id].progress = 0
+                active_jobs[job_id].message = f"Order execution failed: {str(e)}"
+                active_jobs[job_id].error = str(e)
+                active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                
+                # Broadcast failure to WebSocket clients
+                await ws_manager.broadcast_message({
+                    "type": "job_failed",
+                    "job": asdict(active_jobs[job_id])
+                })
+        
+        # Add task to background
+        background_tasks.add_task(run_place_orders_background)
+        
+        logger.info(f"[Job {job_id}] PLACE ORDER started in background")
         
         return {
             "success": True,
-            "message": "Order placed successfully",
-            "order_id": order_id,
-            "order_details": order_data
+            "job_id": job_id,
+            "message": "Order execution started in background",
+            "estimated_time": "1-2 minutes"
         }
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error placing order: {e}")
-        raise HTTPException(status_code=500, detail="Error placing order")
-
-@app.post("/api/execute_orders")
-async def execute_orders():
-    """Execute place orders using place_order.py main function"""
-    try:
-        logger.info("Starting order execution from place_order.py")
-        
-        # Call the main function from place_order.py
-        result = await place_order_main()
-        
-        if result:
-            logger.info("Order execution completed successfully")
-            return {
-                "success": True,
-                "message": "Orders executed successfully",
-                "result": result,
-                "timestamp": get_ist_now().isoformat()
-            }
-        else:
-            logger.warning("Order execution completed but returned None")
-            return {
-                "success": True,
-                "message": "Order execution completed",
-                "timestamp": get_ist_now().isoformat()
-            }
-            
-    except Exception as e:
-        logger.error(f"Error executing orders: {e}")
+        logger.error(f"Error starting PLACE ORDER background task: {e}")
         return {
             "success": False,
-            "message": f"Error executing orders: {str(e)}"
+            "message": f"Failed to start order execution: {str(e)}"
         }
 
 @app.post("/api/login")
@@ -2689,6 +2678,126 @@ async def logout(request: Request):
             "success": False,
             "message": "Error during logout"
         }
+        
+
+## Create an endpoint to get the quotes updated. call the get_quote.py main function        
+@app.get("/api/get_quotes_updated")
+async def get_quotes_updated(background_tasks: BackgroundTasks):
+    """Get quotes updated - runs in background, returns job_id immediately"""
+    try:
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
+        
+        # Create job entry
+        active_jobs[job_id] = JobStatus(
+            job_id=job_id,
+            type="get_quotes",
+            status="running",
+            progress=0,
+            message="Starting quote fetch process...",
+            started_at=get_ist_now().isoformat()
+        )
+        
+        # Define background task
+        async def run_get_quotes_background():
+            try:
+                logger.info(f"[Job {job_id}] Starting GET QUOTES background task")
+                active_jobs[job_id].message = "Fetching quotes from Kotak API..."
+                active_jobs[job_id].progress = 10
+                
+                # Run the main quote fetching logic
+                result = await get_quote_main()
+                
+                # Update job status
+                active_jobs[job_id].status = "completed"
+                active_jobs[job_id].progress = 100
+                active_jobs[job_id].message = "Quotes fetched and Google Sheet updated successfully"
+                active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                active_jobs[job_id].result = {"status": "success"}
+                
+                logger.info(f"[Job {job_id}] GET QUOTES completed successfully")
+                
+                # Broadcast completion to all WebSocket clients
+                await ws_manager.broadcast_message({
+                    "type": "job_completed",
+                    "job": asdict(active_jobs[job_id])
+                })
+                
+            except Exception as e:
+                logger.error(f"[Job {job_id}] GET QUOTES failed: {e}")
+                active_jobs[job_id].status = "failed"
+                active_jobs[job_id].progress = 0
+                active_jobs[job_id].message = f"Failed to fetch quotes: {str(e)}"
+                active_jobs[job_id].error = str(e)
+                active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                
+                # Broadcast failure to WebSocket clients
+                await ws_manager.broadcast_message({
+                    "type": "job_failed",
+                    "job": asdict(active_jobs[job_id])
+                })
+        
+        # Add task to background
+        background_tasks.add_task(run_get_quotes_background)
+        
+        logger.info(f"[Job {job_id}] GET QUOTES started in background")
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": "Quote fetching started in background (3-4 minutes)",
+            "estimated_time": "3-4 minutes"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting GET QUOTES background task: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to start quote fetching: {str(e)}"
+        }
+
+
+@app.get("/api/job_status/{job_id}")
+async def get_job_status(job_id: str):
+    """Get status of a background job by job_id"""
+    try:
+        job = active_jobs.get(job_id)
+        
+        if not job:
+            return {
+                "success": False,
+                "message": "Job not found or expired",
+                "job_id": job_id
+            }
+        
+        return {
+            "success": True,
+            "job": asdict(job)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting job status for {job_id}: {e}")
+        return {
+            "success": False,
+            "message": f"Error retrieving job status: {str(e)}"
+        }
+
+@app.get("/api/active_jobs")
+async def get_active_jobs():
+    """Get all active jobs (for debugging/monitoring)"""
+    try:
+        return {
+            "success": True,
+            "total_jobs": len(active_jobs),
+            "jobs": {job_id: asdict(job) for job_id, job in active_jobs.items()}
+        }
+    except Exception as e:
+        logger.error(f"Error getting active jobs: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+        
 
 @app.get("/status")
 async def status():

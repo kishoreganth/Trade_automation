@@ -8,6 +8,19 @@ from pathlib import Path
 from neo_login.session_manager import KotakSessionManager
 from typing import Optional, Dict, Any
 
+# Import required modules
+from gsheet_stock_get import GSheetStockClient
+import asyncio
+import pandas as pd
+from get_quote import get_multiple_quotes, get_single_quote, get_quotes_batch, get_quotes_with_rate_limit
+
+import os 
+from dotenv import load_dotenv
+load_dotenv()
+from neo_main_login import main as neo_main_login
+
+from itertools import chain
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,29 +69,28 @@ async def _get_order_headers() -> Optional[Dict[str, str]]:
 # RIIL-EQ
 # INFY-BL
 
-# Import required modules
-from gsheet_stock_get import GSheetStockClient
-import asyncio
-import pandas as pd
-from get_quote import get_multiple_quotes, get_single_quote
 
-async def get_gsheet_stocks_df():
+
+async def get_gsheet_stocks_df(sheet_url):
     """Get stock data from Google Sheet as pandas DataFrame"""
     client = GSheetStockClient()
-    df = await client.get_stock_dataframe()
+
+    df = await client.get_stock_dataframe(sheet_url)
+    all_rows = []
     
     if df is not None:
         print("\n📊 Stock Data DataFrame from Google Sheet:")
 
         # Convert to list of dicts for compatibility
-        stock_list = df.to_dict('records')
-
-        return df, stock_list
+        for index, row in df.iterrows():
+            # Convert row to key-value dictionary
+            row_dict = row.to_dict()
+            all_rows.append(row_dict)
+        return all_rows
     else:
         print("❌ Failed to fetch stock data from Google Sheet")
-        return None, None
-
-
+        return None
+    
 
 
 
@@ -268,46 +280,7 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_c
 
 
 
-
-
-
-
-# ## Create a for loop to place the order for each stock in the gsheets.
-async def main():
-    df , stocks = await get_gsheet_stocks_df()
-    all_rows = []
-    if df is not None:
-        for index, row in df.iterrows():
-                # Convert row to key-value dictionary
-                row_dict = row.to_dict()
-                all_rows.append(row_dict)
-    else:
-        print("❌ Failed to get DataFrame")
-    print(all_rows)
-
-##### ------ THIS IS TO GET QUOTE FOR EACH STOCK IN THE GSHEET ------ BUT ALREADY CALCULATED IN THE GSHEET SO COMMENTED OUT ------ #####
-
-    # for row in all_rows:
-    #     # extract market and exchange token and make to a string like MARKET|ExchangeToken for each row
-    #     market = row['MARKET']
-    #     exchange_token = row['EXCHANGE_TOKEN']
-    #     symbol = f"{market}|{exchange_token}"
-        
-    #     quote_result = await get_single_quote(symbol)
-    #     print(quote_result)
-        
-    #     # Check if quote_result is valid before accessing it
-    #     if quote_result and isinstance(quote_result, list) and len(quote_result) > 0:
-    #         print(quote_result[0]["ltp"])
-    #         row['LTP'] = quote_result[0]["ltp"]
-    #     else:
-    #         logger.error(f"Failed to get quote for {symbol}. Skipping this stock.")
-    #         print(f"❌ Failed to get quote for {row['STOCK_NAME']} ({symbol})")
-    #         continue  # Skip this stock if quote fails
-        
-    # print(all_rows)
-
-    
+async def get_order_data(all_rows):
     # Collect all orders for batch processing
     all_orders = []
     
@@ -335,6 +308,95 @@ async def main():
         
         all_orders.extend([buy_order, sell_order])
     
+    return all_orders
+
+
+async def get_login_session_tokens():
+        
+    # Get credentials from environment variables
+    client_credentials = os.getenv("CLIENT_CREDENTIALS")
+    mobile_number = os.getenv("MOBILE_NUMBER")
+    ucc = os.getenv("UCC")
+    mpin = os.getenv("MPIN")
+    totp = os.getenv("TOTP")
+    if not all([client_credentials, mobile_number, ucc, mpin]):
+        logger.error("Missing required environment variables")
+        return {
+            "success": False,
+            "message": "Server configuration error: Missing credentials"
+        }
+    
+    logger.info(f"Starting Neo authentication with TOTP from UI: {totp}")
+    
+    # Format client credentials for Basic auth
+    formatted_credentials = f'Basic {client_credentials}'
+    
+    # Call neo_main_login function with TOTP from UI, rest from .env
+    session_data = await neo_main_login(formatted_credentials, mobile_number, ucc, totp, mpin)
+    return session_data
+
+
+
+async def get_order_data_from_quote_ohlc(quote_ohlc):
+    
+    for item in quote_ohlc:
+        
+        
+        buy_order = {
+            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
+            "pc": "MIS", "pf": "N", "pr": str(row['BUY ORDER']), "pt": "L", 
+            "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "B"
+        }
+        
+        # SELL order
+        sell_order = {
+            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
+            "pc": "MIS", "pf": "N", "pr": str(row['SELL ORDER']), "pt": "L", 
+            "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "S"
+        }
+
+
+
+
+
+
+async def get_symbol_from_gsheet_stocks_df(all_rows):
+    symbols_list = []
+    for row in all_rows:
+        # Handle float, NaN, None, empty values - convert to int (0 if invalid)
+        token_value = row['EXCHANGE_TOKEN']
+        
+        if pd.isna(token_value) or token_value is None or token_value == '':
+            exchange_token = 0
+        else:
+            exchange_token = int(float(token_value))
+        
+        symbol = f"nse_cm|{exchange_token}"
+        symbols_list.append(symbol)
+
+    return symbols_list
+
+
+
+
+# ## Create a for loop to place the order for each stock in the gsheets.
+async def main():
+            
+    # algo_version = os.getenv("ALGO_VERSION",2)
+    # if algo_version == 1:
+    #     return "VERSION 1 BHAV DATA AVAILABLE"
+    
+    # sheet_url = f"{os.getenv("SHEET_URL")}{os.getenv("sheet_gid")}"
+    sheet_url = "https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/export?format=csv&gid=1933500776"
+
+    all_rows = await get_gsheet_stocks_df(sheet_url)
+
+
+
+    print(all_rows)
+    # THIS IS THE ORDER DATA AS PER GOOGLE SHEETS BHAV DATA FOR EACH STOCK
+    all_orders = await get_order_data(all_rows)
+
     print(f"\n📋 Prepared {len(all_orders)} orders for {len(all_rows)} stocks")
     
     # Place all orders with rate limiting (200 orders per minute = 100 stocks per minute)
@@ -344,10 +406,13 @@ async def main():
     successful = sum(1 for r in results if r and r.get('status') != 'error')
     print(f"\n✅ Order Summary: {successful}/{len(results)} orders successful")
 
+
+# This is the main function to place the order for each stock in the gsheets.
+# commented as we are calling this function from nse_url_test.py
 # asyncio.run(main())
 
 
-
+## EXAMPLS ORDER DATA FOR EACH STOCK
 # # Order data as dictionary
 # # order_data = {"am":"NO", "dq":"0","es":"nse_cm", "mp":"0", "pc":"CNC", "pf":"N", "pt":"MKT", "qt":"1", "rt":"DAY", "tp":"0", "ts":"RIIL-EQ", "tt":"B"}
 

@@ -213,22 +213,12 @@
                         </div>
                         <div class="sheet-container">
                             <table class="sheet-table" id="sheetTable">
-                                <thead>
+                                <thead id="sheetTableHead">
                                     <tr>
-                                        <th>Stock Name</th>
-                                        <th>Exchange Token</th>
-                                        <th>Gap</th>
-                                        <th>Market</th>
-                                        <th>Quantity</th>
-                                        <th>Close Price</th>
-                                        <th>Buy Order</th>
-                                        <th>Sell Order</th>
+                                        <th class="loading-cell">Loading market data...</th>
                                     </tr>
                                 </thead>
                                 <tbody id="sheetTableBody">
-                                    <tr>
-                                        <td colspan="8" class="loading-cell">Loading market data...</td>
-                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -237,19 +227,39 @@
                     <!-- Right side - TOTP Section -->
                     <div class="totp-auth-section">
                         <!-- Instructions Card -->
-                        <div class="instructions-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <h4 style="margin: 0 0 15px 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 20px;">📋</span>
+                        <div class="instructions-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <h4 style="margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 18px;">📋</span>
                                 <span>Place Order Automation Steps</span>
                             </h4>
-                            <ol style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8;">
+                            <ol style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
                                 <li><strong>OPEN GOOGLE DOCS</strong></li>
-                                <li><strong>UPDATE LATEST BHAV COPY</strong></li>
+                                <li><strong>UPDATE IN PLACE_ORDER_V2 sheet</strong></li>
                                 <li><strong>UPDATE SCRIP LIST IN GOOGLE DOCS</strong></li>
                                 <li><strong>REFRESH IN DASHBOARD</strong></li>
                                 <li><strong>PUT TOTP</strong> (Google Authenticator)</li>
                                 <li><strong>CLICK "PLACE ORDER"</strong></li>
                             </ol>
+                        </div>
+                        
+                        <!-- Get Quotes Section -->
+                        <div class="get-quotes-section">
+                            <div class="quotes-header">
+                                <h4>📊 Get Quotes</h4>
+                                <p>Fetch latest market quotes (3-4 mins)</p>
+                            </div>
+                            
+                            <div class="button-group">
+                                <button id="getQuotesBtn" class="get-quotes-btn">
+                                    <span class="btn-icon">📊</span>
+                                    GET QUOTES
+                                </button>
+                            </div>
+                            
+                            <div class="quotes-status" id="quotesStatus" style="display: none;">
+                                <div class="status-icon" id="quotesStatusIcon">⏳</div>
+                                <div class="status-message" id="quotesStatusMessage">Fetching quotes...</div>
+                            </div>
                         </div>
                         
                         <div class="totp-container">

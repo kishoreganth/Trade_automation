@@ -16,7 +16,7 @@ class GSheetStockClient:
         # Published Google Sheet URL in CSV format
         # Note: Sheet must be made public for this to work
         self.sheet_url = "https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/export?format=csv&gid=0"
-        
+
     async def get_stock_data(self) -> Optional[List[Dict[str, str]]]:
         """
         Fetch stock data from published Google Sheet
@@ -55,7 +55,7 @@ class GSheetStockClient:
             logger.error(f"Error fetching stock data: {str(e)}")
             return None
     
-    async def get_stock_dataframe(self) -> Optional[pd.DataFrame]:
+    async def get_stock_dataframe(self,sheet_url:str) -> Optional[pd.DataFrame]:
         """
         Fetch stock data from published Google Sheet as pandas DataFrame
         
@@ -65,7 +65,7 @@ class GSheetStockClient:
         """
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.sheet_url) as response:
+                async with session.get(sheet_url) as response:
                     if response.status == 200:
                         # Read CSV data directly into pandas DataFrame
                         csv_text = await response.text()
@@ -76,13 +76,27 @@ class GSheetStockClient:
                         # Clean column names (remove extra spaces)
                         df.columns = df.columns.str.strip()
                         
-                        # Convert GAP to numeric if possible
+                        # Convert GAP to numeric (handle % values)
                         if 'GAP' in df.columns:
+                            # Remove '%' symbol and convert to numeric
+                            df['GAP'] = df['GAP'].astype(str).str.replace('%', '').str.strip()
                             df['GAP'] = pd.to_numeric(df['GAP'], errors='coerce')
                         
                         # Convert QUANTITY to numeric if possible
                         if 'QUANTITY' in df.columns:
                             df['QUANTITY'] = pd.to_numeric(df['QUANTITY'], errors='coerce').fillna(0)
+                        
+                        # Convert OPEN PRICE to numeric if exists
+                        if 'OPEN PRICE' in df.columns:
+                            df['OPEN PRICE'] = pd.to_numeric(df['OPEN PRICE'], errors='coerce')
+                        
+                        # Convert BUY ORDER to numeric if exists
+                        if 'BUY ORDER' in df.columns:
+                            df['BUY ORDER'] = pd.to_numeric(df['BUY ORDER'], errors='coerce')
+                        
+                        # Convert SELL ORDER to numeric if exists
+                        if 'SELL ORDER' in df.columns:
+                            df['SELL ORDER'] = pd.to_numeric(df['SELL ORDER'], errors='coerce')
                         
                         logger.info(f"Successfully fetched DataFrame with {len(df)} rows and {len(df.columns)} columns")
                         logger.info(f"Columns: {list(df.columns)}")
