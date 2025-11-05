@@ -2,6 +2,7 @@
 .env
 *.env
 kotak_session.json
+google_sheets_credentials.json
 
 # Database files
 messages.db

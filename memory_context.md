@@ -5,17 +5,23 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
-### 2025-11-04: Updated .gitignore - Added Documentation Files
+### 2025-11-04: Fixed Git Push - Removed Google Service Account Credentials
 
-**Added to .gitignore**:
+**Issue**: Git push blocked by GitHub secret scanning - `google_sheets_credentials.json` contains private key.
+
+**Fix**:
+1. Added `google_sheets_credentials.json` to `.gitignore`
+2. Removed from git tracking: `git rm --cached google_sheets_credentials.json`
+
+**Files remain on local machine** but won't be pushed to GitHub.
+
+**Also added to .gitignore**:
 - `async_architecture_explained.md`
 - `google_sheets_setup.md`
-- `memory_context.md` (already existed)
 - `session_auth_summary.md`
 - `timezone_fix_summary.md`
-- Case variations (uppercase versions)
 
-**Reason**: Documentation files not needed in version control, reduces commit noise.
+**Action**: Run `git commit` and `git push` again - should work now.
 
 ---
 
