@@ -1,7 +1,6 @@
 aiofiles==25.1.0
 aiohappyeyeballs==2.6.1
 aiohttp
-apscheduler==3.13.0
 aiosignal==1.4.0
 aiosqlite==0.21.0
 annotated-types==0.7.0
