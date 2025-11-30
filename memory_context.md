@@ -5,15 +5,162 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
-### 2025-11-04: Fixed Git Push - Removed Google Service Account Credentials
+### 2025-11-04: Auto-Trigger NSE CM Data Fetch After TOTP Verification
 
-**Issue**: Git push blocked by GitHub secret scanning - `google_sheets_credentials.json` contains private key.
+**Feature**: NSE CM master data automatically fetches in background after successful TOTP login.
+
+**Flow**:
+1. User enters TOTP → `/api/verify_totp`
+2. Authentication succeeds → saves `kotak_session.json`
+3. **Auto-triggers background task**: `fetch_nse_cm_data_background()`
+4. Returns success immediately to user
+5. Background: Fetches NSE CM data (11,239 rows) → Writes to Google Sheet
+
+**Implementation**:
+- `verify_totp()` accepts `BackgroundTasks` parameter
+- On success: `background_tasks.add_task(fetch_nse_cm_data_background)`
+- Separate async function handles entire fetch+write process
+- Auto-expands Google Sheet if rows insufficient
+- Non-blocking (user doesn't wait for completion)
+
+**Benefits**:
+- ✅ User gets instant TOTP success response
+- ✅ Master data populates automatically
+- ✅ No manual endpoint call needed
+- ✅ Background processes (CA fetching) unaffected
+- ✅ Sheet auto-expands if needed
+
+**Auto-Expand Logic**:
+```python
+if worksheet.row_count < data_rows:
+    worksheet.add_rows(needed_rows)
+```
+
+**Timing**: TOTP success → instant return → 10s later sheet populated.
+
+---
+
+### 2025-11-04: NSE CM Data Auto-Write to Google Sheet
+
+**Enhancement**: `/api/nse_cm_scrip_data` now writes entire NSE CM master data to Google Sheet automatically.
+
+**Process**:
+1. Fetches NSE CM master scrip file paths from Kotak API
+2. Downloads nse_cm-v1.csv (~11,239 rows, 79 columns)
+3. Loads into pandas DataFrame
+4. Prints head (10 rows) to console
+5. **Writes entire DataFrame to Google Sheet** (new functionality)
+
+**Target Sheet**:
+- ID: `1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM`
+- GID: `1765483913` (nse_cm_neo tab)
+- URL: https://docs.google.com/spreadsheets/d/1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM/edit#gid=1765483913
+
+**Implementation**:
+- Uses gspread with service account credentials
+- Clears existing data before write
+- Batch writing (5000 rows per batch) to avoid API limits
+- Replaces NaN with empty strings for clean data
+- Handles all 79 columns dynamically
+
+**Response**:
+```json
+{
+  "success": true,
+  "total_rows": 11239,
+  "columns": [...79 columns...],
+  "google_sheet_url": "https://...",
+  "message": "NSE CM data loaded and written to Google Sheet successfully"
+}
+```
+
+**Use Case**: One-click master data refresh - fetch latest NSE CM data from Kotak and populate Google Sheet for analysis/reference.
+
+**Performance**: ~5-10 seconds total (download + write 11K rows).
+
+---
+
+### 2025-11-04: Added Master Scrip File Paths & NSE CM Data Endpoints (Async)
+
+**Endpoints**:
+
+**1. `GET /api/master_scrip_files`**:
+- Fetches all master scrip file paths from Kotak API
+- Returns baseFolder + filesPaths array
+- Authentication via `kotak_session.json`
+
+**2. `GET /api/nse_cm_scrip_data`** (NEW):
+- Extracts nse_cm-v1.csv URL from file paths
+- Downloads CSV file asynchronously
+- Loads into pandas DataFrame
+- Returns first 10 rows (head) + metadata
+
+**Implementation**:
+- Reads `access_token` from `kotak_session.json`
+- Two-step process: Get paths → Download specific CSV
+- Fully async (non-blocking, ~2-3 seconds)
+- Error handling for missing session/file
+
+**Response** (`/api/nse_cm_scrip_data`):
+```json
+{
+  "success": true,
+  "file_url": "https://lapi.kotaksecurities.com/.../nse_cm-v1.csv",
+  "total_rows": 2500,
+  "columns": ["pSymbol", "pTrdSymbol", "lExchSeg", ...],
+  "head": [{...}, {...}, ...],  // First 10 rows
+  "message": "NSE CM scrip data loaded successfully"
+}
+```
+
+**Use Case**: Verify NSE CM master data structure, get column names, preview data.
+
+**Location**: `nse_url_test.py` lines 2840-2970
+
+---
+
+### 2025-11-04: Implemented Daily Scheduled Task at 8:30 AM IST Using APScheduler
+
+**Feature**: Automated daily task execution at 8:30 AM IST without blocking other operations.
+
+**Implementation**:
+- **Library**: APScheduler (AsyncIOScheduler for async compatibility)
+- **Timezone**: Asia/Kolkata (IST)
+- **Schedule**: Every day at 8:30 AM
+
+**Code**:
+1. **Import** (lines 57-58): `AsyncIOScheduler`, `CronTrigger`
+2. **Scheduler Init** (lines 90-94): `scheduler = AsyncIOScheduler(timezone='Asia/Kolkata')`
+3. **Task Function** (lines 428-445): `daily_830am_task()` - runs `get_quote_main()`
+4. **Register Job** (lines 463-469): `scheduler.add_job()` with cron trigger
+5. **Start** (line 470): `scheduler.start()` in lifespan startup
+6. **Shutdown** (line 477): `scheduler.shutdown()` on app shutdown
+
+**Features**:
+- ✅ Non-blocking (async compatible)
+- ✅ Runs daily at exactly 8:30 AM IST
+- ✅ Pre-fetches quotes before market opens (9:15 AM)
+- ✅ Logs next scheduled run time on startup
+- ✅ Doesn't interfere with CA fetching, WebSocket, API endpoints
+- ✅ Easy to add more schedules (3:30 PM, etc.)
+
+**Usage**: Automatically fetches quotes every morning at 8:30 AM, preparing data before market opens.
+
+**Dependency Added**: `apscheduler` in `requirements.txt`
+
+---
+
+### 2025-11-04: Fixed Git Push - Removed Google Service Account Credentials from History
+
+**Issue**: Git push blocked by GitHub secret scanning - `google_sheets_credentials.json` contains private key in git history.
 
 **Fix**:
 1. Added `google_sheets_credentials.json` to `.gitignore`
-2. Removed from git tracking: `git rm --cached google_sheets_credentials.json`
+2. Removed from current commit: `git rm --cached google_sheets_credentials.json`
+3. **Removed from entire git history**: `git filter-branch` (rewrote 77 commits)
+4. Force pushed cleaned history: `git push origin main --force`
 
-**Files remain on local machine** but won't be pushed to GitHub.
+**Result**: Secret completely removed from GitHub, file remains on local machine.
 
 **Also added to .gitignore**:
 - `async_architecture_explained.md`
@@ -21,7 +168,7 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 - `session_auth_summary.md`
 - `timezone_fix_summary.md`
 
-**Action**: Run `git commit` and `git push` again - should work now.
+**Security**: ✅ Private key no longer exposed in public repository.
 
 ---
 

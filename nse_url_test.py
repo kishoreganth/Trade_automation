@@ -54,6 +54,8 @@ load_dotenv()
 from get_quote import main as get_quote_main
 import uuid
 from dataclasses import dataclass, asdict, field as dataclass_field
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Set up logging to both file and console
 logger = logging.getLogger()    
@@ -81,6 +83,17 @@ active_jobs: Dict[str, JobStatus] = {}
 
 # ============================================================================
 # END JOB STATUS TRACKING
+# ============================================================================
+
+# ============================================================================
+# SCHEDULER SETUP
+# ============================================================================
+
+# Initialize APScheduler with IST timezone
+scheduler = AsyncIOScheduler(timezone='Asia/Kolkata')
+
+# ============================================================================
+# END SCHEDULER SETUP
 # ============================================================================
 
 # Indian Standard Time timezone
@@ -400,6 +413,32 @@ async def post_ocr_cleanup_async(image_folder: str):
 # ============================================================================
 # END CLEANUP SYSTEM
 # ============================================================================
+
+# ============================================================================
+# DAILY SCHEDULED TASKS
+# ============================================================================
+
+async def daily_830am_task():
+    """
+    Task that runs every day at 8:30 AM IST
+    Add your daily automation here (e.g., GET QUOTES, session init, etc.)
+    """
+    try:
+        logger.info("🔔 8:30 AM Daily Task Started")
+        logger.info(f"⏰ Current IST time: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Example: Pre-fetch quotes before market opens (9:15 AM)
+        logger.info("📊 Running daily quote fetch...")
+        await get_quote_main()
+        
+        logger.info("✅ 8:30 AM Daily Task Completed Successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ 8:30 AM Daily Task Failed: {e}")
+
+# ============================================================================
+# END DAILY SCHEDULED TASKS
+# ============================================================================
     
 # Start the background tasks when the application starts
 @asynccontextmanager
@@ -437,10 +476,29 @@ async def lifespan(app: FastAPI):
     equities_task = asyncio.create_task(run_periodic_task_equities())
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
     
-    logger.info("✅ All background tasks started: SME, Equities, and Periodic Cleanup (24h interval)")
+    logger.info("✅ All background tasks started: Equities and Periodic Cleanup (24h interval)")
     logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
+    # Start APScheduler for daily scheduled tasks
+    scheduler.add_job(
+        daily_830am_task,
+        trigger=CronTrigger(hour=8, minute=30),
+        id='daily_830am_quotes',
+        name='Daily 8:30 AM Quote Fetch',
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("⏰ Scheduler started: Daily task set for 8:30 AM IST")
+    
+    # Show next scheduled run time
+    next_run = scheduler.get_job('daily_830am_quotes').next_run_time
+    logger.info(f"📅 Next scheduled run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    
     yield  # FastAPI will run the application here
+    
+    # Shutdown: Stop scheduler
+    scheduler.shutdown()
+    logger.info("⏰ Scheduler stopped")
     
     # Shutdown: Clean up tasks
     if sme_task and not sme_task.done():
@@ -2464,8 +2522,115 @@ async def get_session_status():
             "message": "Error checking session"
         }
 
+async def fetch_nse_cm_data_background():
+    """
+    Background task to fetch NSE CM data and write to Google Sheet
+    Runs after successful TOTP authentication
+    """
+    try:
+        logger.info("🔄 Background: Starting NSE CM data fetch...")
+        
+        # Load session data
+        session_file = "kotak_session.json"
+        if not os.path.exists(session_file):
+            logger.error("Background: Session file not found")
+            return
+        
+        async with aiofiles.open(session_file, 'r') as f:
+            content = await f.read()
+            session_data = json.loads(content)
+        
+        access_token = session_data.get('access_token')
+        if not access_token:
+            logger.error("Background: Access token not found")
+            return
+        
+        # Get file paths
+        url = "https://gw-napi.kotaksecurities.com/Files/1.0/masterscrip/v2/file-paths"
+        headers = {'accept': '*/*', 'Authorization': f'Bearer {access_token}'}
+        
+        async with httpx.AsyncClient(verify=False, timeout=30, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                logger.error(f"Background: Failed to fetch file paths")
+                return
+            
+            data = response.json()
+            file_paths = data.get('data', {}).get('filesPaths', [])
+            
+            # Find nse_cm-v1.csv
+            nse_cm_url = None
+            for path in file_paths:
+                if 'nse_cm-v1.csv' in path:
+                    nse_cm_url = path
+                    break
+            
+            if not nse_cm_url:
+                logger.error("Background: nse_cm-v1.csv not found")
+                return
+            
+            # Download CSV
+            logger.info(f"Background: Downloading {nse_cm_url}")
+            csv_response = await client.get(nse_cm_url)
+            
+            if csv_response.status_code != 200:
+                logger.error("Background: Failed to download CSV")
+                return
+            
+            # Load DataFrame
+            df = pd.read_csv(io.StringIO(csv_response.text))
+            logger.info(f"Background: Loaded {len(df)} rows, {len(df.columns)} columns")
+            
+            # Write to Google Sheet
+            import gspread
+            from oauth2client.service_account import ServiceAccountCredentials
+            import numpy as np
+            
+            scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+            creds = ServiceAccountCredentials.from_json_keyfile_name('google_sheets_credentials.json', scope)
+            gsheet_client = gspread.authorize(creds)
+            
+            spreadsheet = gsheet_client.open_by_key("1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM")
+            
+            # Find worksheet by gid
+            worksheet = None
+            for sheet in spreadsheet.worksheets():
+                if str(sheet.id) == "1765483913":
+                    worksheet = sheet
+                    break
+            
+            if not worksheet:
+                logger.error("Background: Worksheet not found")
+                return
+            
+            # Expand sheet if needed
+            if worksheet.row_count < len(df) + 1:
+                rows_to_add = (len(df) + 1) - worksheet.row_count
+                worksheet.add_rows(rows_to_add)
+                logger.info(f"Background: Expanded sheet by {rows_to_add} rows")
+            
+            # Prepare data
+            data = [df.columns.tolist()] + df.values.tolist()
+            data = [['' if (isinstance(cell, float) and np.isnan(cell)) else cell for cell in row] for row in data]
+            
+            # Clear and write
+            worksheet.clear()
+            
+            # Write in batches
+            batch_size = 5000
+            for batch_num in range(0, len(data), batch_size):
+                batch_data = data[batch_num:min(batch_num + batch_size, len(data))]
+                worksheet.update(f'A{batch_num + 1}', batch_data)
+                logger.info(f"Background: Batch written (rows {batch_num + 1}-{batch_num + len(batch_data)})")
+            
+            logger.info(f"✅ Background: NSE CM data written successfully to Google Sheet")
+            
+    except Exception as e:
+        logger.error(f"❌ Background: NSE CM data fetch failed: {e}")
+
 @app.post("/api/verify_totp")
-async def verify_totp(request: TOTPRequest):
+async def verify_totp(request: TOTPRequest, background_tasks: BackgroundTasks):
     """Verify TOTP code and authenticate with Neo trading system"""
     try:
         # Get credentials from environment variables
@@ -2491,6 +2656,11 @@ async def verify_totp(request: TOTPRequest):
         
         if session_data:
             logger.info("Neo authentication successful")
+            
+            # Trigger NSE CM data fetch in background after successful auth
+            background_tasks.add_task(fetch_nse_cm_data_background)
+            logger.info("🚀 Triggered NSE CM data fetch in background")
+            
             return {
                 "success": True,
                 "message": "TOTP verified and session established for the day",
@@ -2797,6 +2967,225 @@ async def get_active_jobs():
             "success": False,
             "message": str(e)
         }
+
+# @app.get("/api/nse_cm_scrip_data")
+# async def get_nse_cm_scrip_data():
+#     """
+#     Extract nse_cm-v1.csv from master scrip files, load as DataFrame, and return head
+#     Uses authentication from kotak_session.json
+#     """
+#     try:
+#         # Load session data from kotak_session.json
+#         session_file = "kotak_session.json"
+        
+#         if not os.path.exists(session_file):
+#             logger.error("Session file not found - please authenticate first")
+#             return {
+#                 "success": False,
+#                 "message": "No active session - please verify TOTP first"
+#             }
+        
+#         # Read session file
+#         async with aiofiles.open(session_file, 'r') as f:
+#             content = await f.read()
+#             session_data = json.loads(content)
+        
+#         # Extract access token
+#         access_token = session_data.get('access_token')
+        
+#         if not access_token:
+#             logger.error("Access token not found in session")
+#             return {
+#                 "success": False,
+#                 "message": "Invalid session data - missing access token"
+#             }
+        
+#         # Step 1: Get file paths
+#         url = "https://gw-napi.kotaksecurities.com/Files/1.0/masterscrip/v2/file-paths"
+#         headers = {
+#             'accept': '*/*',
+#             'Authorization': f'Bearer {access_token}'
+#         }
+        
+#         logger.info("📡 Step 1: Fetching master scrip file paths...")
+        
+#         async with httpx.AsyncClient(verify=False, timeout=30, follow_redirects=True) as client:
+#             response = await client.get(url, headers=headers)
+            
+#             if response.status_code != 200:
+#                 logger.error(f"Failed to fetch file paths. Status: {response.status_code}")
+#                 return {
+#                     "success": False,
+#                     "message": f"API returned status {response.status_code}"
+#                 }
+            
+#             data = response.json()
+#             file_paths = data.get('data', {}).get('filesPaths', [])
+            
+#             # Step 2: Find nse_cm-v1.csv URL
+#             nse_cm_url = None
+#             for path in file_paths:
+#                 if 'nse_cm-v1.csv' in path:
+#                     nse_cm_url = path
+#                     break
+            
+#             if not nse_cm_url:
+#                 logger.error("nse_cm-v1.csv not found in file paths")
+#                 return {
+#                     "success": False,
+#                     "message": "nse_cm-v1.csv not found in available files"
+#                 }
+            
+#             logger.info(f"📍 Found nse_cm-v1.csv: {nse_cm_url}")
+            
+#             # Step 3: Download and load CSV as DataFrame
+#             logger.info("📥 Downloading nse_cm-v1.csv...")
+#             csv_response = await client.get(nse_cm_url)
+            
+#             if csv_response.status_code != 200:
+#                 logger.error(f"Failed to download CSV. Status: {csv_response.status_code}")
+#                 return {
+#                     "success": False,
+#                     "message": f"Failed to download CSV file"
+#                 }
+            
+#             # Load into pandas DataFrame
+#             logger.info("📊 Loading CSV into pandas DataFrame...")
+#             df = pd.read_csv(io.StringIO(csv_response.text))
+            
+#             # Get DataFrame info
+#             total_rows = len(df)
+#             columns = df.columns.tolist()
+            
+#             logger.info(f"✅ Loaded nse_cm DataFrame: {total_rows} rows, {len(columns)} columns")
+            
+#             # Print head to console
+#             print("\n" + "="*80)
+#             print("NSE CM MASTER SCRIP DATA - HEAD (First 10 rows)")
+#             print("="*80)
+#             print(df.head(10).to_string())
+#             print("="*80)
+#             print(f"\nColumns: {columns}")
+#             print(f"Total Rows: {total_rows}")
+#             print("="*80 + "\n")
+            
+#             # Write entire DataFrame to Google Sheet
+#             logger.info("🔄 Writing NSE CM data to Google Sheet...")
+#             sheet_id = "1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM"
+#             gid = "1765483913"  # nse_cm_neo sheet
+            
+#             try:
+#                 import gspread
+#                 from oauth2client.service_account import ServiceAccountCredentials
+                
+#                 # Set up credentials
+#                 scope = [
+#                     'https://spreadsheets.google.com/feeds',
+#                     'https://www.googleapis.com/auth/drive'
+#                 ]
+#                 creds_file = 'google_sheets_credentials.json'
+                
+#                 if not os.path.exists(creds_file):
+#                     logger.error("❌ Google Sheets credentials file not found")
+#                     return {
+#                         "success": True,
+#                         "file_url": nse_cm_url,
+#                         "total_rows": total_rows,
+#                         "columns": columns,
+#                         "message": f"NSE CM data loaded ({total_rows} rows) but NOT written to Google Sheet (credentials missing)"
+#                     }
+                
+#                 # Authenticate with Google Sheets
+#                 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_file, scope)
+#                 gsheet_client = gspread.authorize(creds)
+#                 logger.info("✅ Authenticated with Google Sheets API")
+                
+#                 # Open spreadsheet
+#                 spreadsheet = gsheet_client.open_by_key(sheet_id)
+                
+#                 # Find worksheet by gid
+#                 worksheet = None
+#                 for sheet in spreadsheet.worksheets():
+#                     if str(sheet.id) == str(gid):
+#                         worksheet = sheet
+#                         break
+                
+#                 if worksheet is None:
+#                     logger.error(f"⚠️ GID {gid} not found")
+#                     return {
+#                         "success": True,
+#                         "total_rows": total_rows,
+#                         "message": f"Data loaded but worksheet GID {gid} not found"
+#                     }
+                
+#                 logger.info(f"✅ Found worksheet: {worksheet.title}")
+                
+#                 # Prepare data (convert DataFrame to list of lists)
+#                 import numpy as np
+#                 data = [df.columns.tolist()] + df.values.tolist()
+                
+#                 # Replace NaN with empty string
+#                 data = [['' if (isinstance(cell, float) and np.isnan(cell)) else cell for cell in row] for row in data]
+                
+#                 logger.info(f"📊 Prepared {len(data)} rows for upload (including header)")
+                
+#                 # Clear existing data
+#                 worksheet.clear()
+#                 logger.info("🗑️ Cleared existing worksheet data")
+                
+#                 # Write data in batches to avoid API limits (Google Sheets has 10MB limit per request)
+#                 batch_size = 5000
+#                 total_batches = (len(data) + batch_size - 1) // batch_size
+                
+#                 logger.info(f"📤 Writing data in {total_batches} batch(es)...")
+                
+#                 for batch_num in range(total_batches):
+#                     start_idx = batch_num * batch_size
+#                     end_idx = min(start_idx + batch_size, len(data))
+#                     batch_data = data[start_idx:end_idx]
+                    
+#                     # Calculate range
+#                     start_row = start_idx + 1
+#                     end_row = end_idx
+#                     range_name = f'A{start_row}'
+                    
+#                     worksheet.update(range_name, batch_data)
+#                     logger.info(f"✅ Batch {batch_num + 1}/{total_batches} written ({end_idx - start_idx} rows)")
+                
+#                 logger.info(f"✅ Successfully wrote {total_rows} rows to Google Sheet")
+                
+#                 return {
+#                     "success": True,
+#                     "file_url": nse_cm_url,
+#                     "total_rows": total_rows,
+#                     "columns": columns,
+#                     "google_sheet_url": f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit#gid={gid}",
+#                     "message": f"NSE CM data loaded ({total_rows} rows) and written to Google Sheet successfully"
+#                 }
+                
+#             except ImportError:
+#                 logger.error("❌ Missing gspread/oauth2client packages")
+#                 return {
+#                     "success": True,
+#                     "total_rows": total_rows,
+#                     "message": f"Data loaded but Google Sheets write failed (missing packages)"
+#                 }
+#             except Exception as write_error:
+#                 logger.error(f"❌ Failed to write to Google Sheet: {write_error}")
+#                 return {
+#                     "success": True,
+#                     "file_url": nse_cm_url,
+#                     "total_rows": total_rows,
+#                     "columns": columns,
+#                     "message": f"NSE CM data loaded ({total_rows} rows) but failed to write to Google Sheet: {str(write_error)}"
+#                 }
+                
+#     except Exception as e:
+#         logger.error(f"Error fetching NSE CM scrip data: {e}")
+#         return {
+#             "success": False,
+#             "message": f"Error: {str(e)}"
+#         }
         
 
 @app.get("/status")
