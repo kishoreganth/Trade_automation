@@ -377,16 +377,29 @@ async def update_df_with_quote_ohlc(df, quote_ohlc, valid_indices):
     Returns:
         Updated DataFrame with all rows preserved
     """
-    # Initialize OPEN PRICE column with empty strings for all rows
-    df['OPEN PRICE'] = ''
+    # Initialize OPEN PRICE column with None for all rows (will convert to NaN)
+    df['OPEN PRICE'] = None
     
     # Map quote results to correct row positions
     logger.info(f"📊 Mapping {len(quote_ohlc)} quotes to {len(valid_indices)} valid row positions out of {len(df)} total rows")
     
+    # Track how many actually mapped
+    mapped_count = 0
+    skipped_count = 0
+    
     for i, idx in enumerate(valid_indices):
-        if i < len(quote_ohlc):  # Safety check
+        if i < len(quote_ohlc):  # Safety check - only map if we have data
             open_price = quote_ohlc[i].get('open', '')
-            df.at[idx, 'OPEN PRICE'] = open_price
+            if open_price != '':  # Only set if we got valid price
+                df.at[idx, 'OPEN PRICE'] = open_price
+                mapped_count += 1
+            else:
+                skipped_count += 1
+        else:
+            # Explicitly log when we run out of quotes
+            skipped_count += 1
+    
+    logger.info(f"✅ Mapped {mapped_count} prices, skipped {skipped_count} positions (no quote data)")
     
     # Convert both OPEN PRICE and GAP to numeric (handle string/empty/None values)
     df['OPEN PRICE'] = pd.to_numeric(df['OPEN PRICE'], errors='coerce')

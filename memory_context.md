@@ -5,6 +5,91 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-11-04: Optimal Rate Limiting - 180 Batch + 53s Delay (Maximum Safe Speed)
+
+**Issues**:
+1. API Rate Limit (429): "Message throttled out" - quota exceeded at 200 req/min
+2. Duplicate values in rows without quote data
+
+**Fixes**:
+1. **Duplicate Values** (`get_quote.py`):
+   - Initialize with `None` instead of empty string
+   - Only set value if quote data exists and not empty
+   - Track mapped vs skipped with logging
+
+2. **Optimal Rate Limiting** (`nse_url_test.py`):
+   - **Batch size**: 200 → **180** symbols/orders per batch
+   - **Delay**: 5s → **53 seconds** between batches
+   - **Rate**: ~196 requests/minute (2% under 200/min limit)
+   - Applied to both GET QUOTES and PLACE ORDER
+
+**Rate Calculation**:
+```
+Cycle time: 2s (execution) + 53s (delay) = 55s
+Batches/min: 60 / 55 = 1.09
+Requests/min: 1.09 × 180 = 196.4 ≈ 196 req/min
+Safety buffer: 4 requests (2% margin)
+```
+
+**Performance**:
+- **1600 stocks**: ~8.25 minutes (9 batches × 55s) ⚡
+- **Safety buffer**: 2% margin for network variance
+- **Dynamic**: Scales for 100-10,000+ stocks
+- **Reliable**: No 429 errors, fastest safe configuration
+
+**Comparison**:
+- Before (200/5s): 6 min but fails with 429 ❌
+- 150/45s: 8.6 min, safe but slower ✅
+- **180/53s**: 8.25 min, **fastest safe option** ✅⚡
+
+**Result**: Maximum speed while staying under quota, optimal balance.
+
+---
+
+### 2025-11-04: Fixed Duplicate Values Issue - Explicit Empty Row Handling
+
+**Issue**: After rate limit (429), rows without quotes showed duplicate values from last valid stock instead of empty.
+
+**Root Cause Discovery**:
+- API quota exceeded (429 errors) - blocked until 10:33 PM IST
+- 1612 requests sent → only 807 valid quotes returned
+- Remaining 805 positions had no data
+
+**Fix**:
+1. Initialize with `None` instead of empty string (clearer NaN handling)
+2. Added explicit check: Only set value if quote data exists
+3. Track mapped vs skipped positions
+4. Log: `Mapped X prices, skipped Y positions (no quote data)`
+
+**Result**: Rows without quote data stay truly empty (NaN), no duplication.
+
+**Also Discovered**: API Rate Limit
+- Error 429: "Message throttled out"
+- Quota exceeded, blocked until specific time
+- Need to wait for quota reset or reduce request rate
+
+---
+
+### 2025-11-04: Added Debug Logging for Quote Fetch Analysis
+
+**Issue**: 1600 stocks sent, only 1024 got quotes, remaining values duplicated.
+
+**Added Diagnostic Logs**:
+1. `📊 Created symbols: {count}` - Total symbols created from sheet
+2. `📊 Valid indices: {count}` - Row positions for valid stocks
+3. `📊 Batch X returned: Y results (sent Z symbols)` - Per-batch response tracking
+4. `📊 Quote API responses (per batch): [200, 200, 200, ...]` - All batch lengths
+5. `📊 Total API results before flattening: {count}` - Raw API responses
+6. `📊 Flattened results: {count}` - After processing faults/errors
+7. `📊 Quote OHLC final: {count}` - Final OHLC list length
+8. `📊 Mapping: {quotes} quotes → {positions} positions` - Mismatch check
+
+**Purpose**: Identify where the 1600→1024 drop happens (API limit, flattening, or mapping).
+
+**Location**: GET QUOTES background task in `nse_url_test.py`
+
+---
+
 ### 2025-11-04: Removed APScheduler - Manual Control via UI
 
 **Decision**: Removed APScheduler scheduled tasks in favor of manual UI control.

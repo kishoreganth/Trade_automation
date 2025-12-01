@@ -2692,9 +2692,8 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 active_jobs[job_id].message = f"Placing {total_orders} orders..."
                 active_jobs[job_id].progress = 25
                 
-                # Calculate batches (200 orders per minute)
-                orders_per_minute = 200
-                batch_size = orders_per_minute
+                # Calculate batches (180 per batch with 53s delay = ~196 req/min, 2% under limit)
+                batch_size = 180
                 total_batches = (total_orders + batch_size - 1) // batch_size
                 
                 logger.info(f"[Job {job_id}] Will process {total_batches} batches")
@@ -2721,9 +2720,9 @@ async def execute_orders(background_tasks: BackgroundTasks):
                     batch_results = await place_orders_batch(batch_orders, max_concurrent=5)
                     all_results.extend(batch_results)
                     
-                    # Wait if not last batch (rate limiting)
+                    # Wait if not last batch (rate limiting: 180 orders per 53s = ~196 req/min, 2% buffer)
                     if batch_num < total_batches - 1:
-                        await asyncio.sleep(5)  # Small delay between batches
+                        await asyncio.sleep(53)  # 53 seconds for optimal speed with safety margin
                 
                 # Step 4: Count successes (90% progress)
                 active_jobs[job_id].message = "Processing results..."
@@ -2927,15 +2926,16 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
                 total_symbols = len(symbols_list)
                 
+                logger.info(f"📊 Created symbols: {total_symbols}")
+                logger.info(f"📊 Valid indices: {len(valid_indices)}")
                 logger.info(f"[Job {job_id}] Created {total_symbols} valid symbols")
                 
                 # Step 3: Fetch quotes with rate limiting and progress tracking (10% → 80%)
                 active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks..."
                 active_jobs[job_id].progress = 15
                 
-                # Calculate batches (200 per minute)
-                requests_per_minute = 200
-                batch_size = requests_per_minute
+                # Calculate batches (180 per batch with 53s delay = ~196 req/min, 2% under limit)
+                batch_size = 180
                 total_batches = (total_symbols + batch_size - 1) // batch_size
                 
                 logger.info(f"[Job {job_id}] Will process {total_batches} batches")
@@ -2947,6 +2947,8 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 progress_start = 15
                 progress_end = 75
                 progress_range = progress_end - progress_start
+                
+                batch_lengths = []  # Track response lengths per batch
                 
                 for batch_num in range(total_batches):
                     start_idx = batch_num * batch_size
@@ -2962,22 +2964,34 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                     
                     # Fetch quotes for this batch
                     batch_result = await quote_client.get_quotes_concurrent(batch_symbols)
+                    batch_lengths.append(len(batch_result) if batch_result else 0)
+                    logger.info(f"📊 Batch {batch_num + 1} returned: {batch_lengths[-1]} results (sent {len(batch_symbols)} symbols)")
+                    
                     all_quote_results.extend(batch_result)
                     
-                    # Wait if not last batch (rate limiting)
+                    # Wait if not last batch (rate limiting: 180 requests per 53s = ~196 req/min, 2% buffer)
                     if batch_num < total_batches - 1:
-                        await asyncio.sleep(5)  # Small delay between batches
+                        await asyncio.sleep(53)  # 53 seconds for optimal speed with safety margin
+                
+                logger.info(f"📊 Quote API responses (per batch): {batch_lengths}")
                 
                 # Step 4: Process results (80% progress)
                 active_jobs[job_id].message = "Processing quote results..."
                 active_jobs[job_id].progress = 80
                 
+                logger.info(f"📊 Total API results before flattening: {len(all_quote_results)}")
+                
                 flattened_quote_result = await flatten_quote_result_list(all_quote_results)
+                logger.info(f"📊 Flattened results: {len(flattened_quote_result)}")
+                
                 quote_ohlc = await fetch_ohlc_from_quote_result(flattened_quote_result)
+                logger.info(f"📊 Quote OHLC final: {len(quote_ohlc)}")
                 
                 # Step 5: Update DataFrame (85% progress)
                 active_jobs[job_id].message = "Calculating prices..."
                 active_jobs[job_id].progress = 85
+                
+                logger.info(f"📊 Mapping: {len(quote_ohlc)} quotes → {len(valid_indices)} positions (DataFrame has {len(df)} rows)")
                 
                 df = await update_df_with_quote_ohlc(df, quote_ohlc, valid_indices)
                 
