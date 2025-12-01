@@ -2582,6 +2582,15 @@ async def fetch_nse_cm_data_background():
             df = pd.read_csv(io.StringIO(csv_response.text))
             logger.info(f"Background: Loaded {len(df)} rows, {len(df.columns)} columns")
             
+            # Filter only EQ (Equity) stocks from pGroup column
+            if 'pGroup' in df.columns:
+                original_count = len(df)
+                df = df[df['pGroup'] == 'EQ'].copy()
+                filtered_count = len(df)
+                logger.info(f"Background: Filtered pGroup='EQ' → {filtered_count} rows (removed {original_count - filtered_count} non-EQ stocks)")
+            else:
+                logger.warning("Background: pGroup column not found, writing all data")
+            
             # Write to Google Sheet
             import gspread
             from oauth2client.service_account import ServiceAccountCredentials
@@ -2702,22 +2711,98 @@ async def execute_orders(background_tasks: BackgroundTasks):
             started_at=get_ist_now().isoformat()
         )
         
-        # Define background task
+        # Define background task with real-time progress tracking
         async def run_place_orders_background():
             try:
                 logger.info(f"[Job {job_id}] Starting PLACE ORDER background task")
-                active_jobs[job_id].message = "Executing buy/sell orders..."
+                
+                # Import order placement modules
+                from place_order import get_gsheet_stocks_df as get_order_stocks, get_order_data, place_orders_batch
+                from gsheet_stock_get import GSheetStockClient
+                
+                # Step 1: Load stock data from Google Sheet (10% progress)
+                active_jobs[job_id].message = "Loading stock data from Google Sheet..."
+                active_jobs[job_id].progress = 10
+                
+                sheet_url = f"{os.getenv('BASE_SHEET_URL')}{os.getenv('sheet_gid')}"
+                gsheet_client = GSheetStockClient()
+                df = await gsheet_client.get_stock_dataframe(sheet_url)
+                
+                all_rows = []
+                if df is not None:
+                    for index, row in df.iterrows():
+                        row_dict = row.to_dict()
+                        all_rows.append(row_dict)
+                
+                total_stocks = len(all_rows)
+                logger.info(f"[Job {job_id}] Loaded {total_stocks} stocks from sheet")
+                
+                # Step 2: Create order data (20% progress)
+                active_jobs[job_id].message = f"Creating orders for {total_stocks} stocks..."
                 active_jobs[job_id].progress = 20
                 
-                # Run the main order placement logic
-                result = await place_order_main()
+                all_orders = await get_order_data(all_rows)
+                total_orders = len(all_orders)
                 
-                # Update job status
+                logger.info(f"[Job {job_id}] Created {total_orders} orders ({total_orders//2} stocks × 2 orders)")
+                
+                # Step 3: Place orders with rate limiting and progress tracking (20% → 90%)
+                active_jobs[job_id].message = f"Placing {total_orders} orders..."
+                active_jobs[job_id].progress = 25
+                
+                # Calculate batches (200 orders per minute)
+                orders_per_minute = 200
+                batch_size = orders_per_minute
+                total_batches = (total_orders + batch_size - 1) // batch_size
+                
+                logger.info(f"[Job {job_id}] Will process {total_batches} batches")
+                
+                progress_start = 25
+                progress_end = 85
+                progress_range = progress_end - progress_start
+                
+                all_results = []
+                
+                for batch_num in range(total_batches):
+                    start_idx = batch_num * batch_size
+                    end_idx = min(start_idx + batch_size, total_orders)
+                    batch_orders = all_orders[start_idx:end_idx]
+                    
+                    # Update progress for this batch
+                    batch_progress = progress_start + int((batch_num / total_batches) * progress_range)
+                    active_jobs[job_id].progress = batch_progress
+                    active_jobs[job_id].message = f"Placing orders batch {batch_num + 1}/{total_batches} ({end_idx}/{total_orders} orders)"
+                    
+                    logger.info(f"[Job {job_id}] Processing batch {batch_num + 1}/{total_batches}")
+                    
+                    # Place orders for this batch
+                    batch_results = await place_orders_batch(batch_orders, max_concurrent=5)
+                    all_results.extend(batch_results)
+                    
+                    # Wait if not last batch (rate limiting)
+                    if batch_num < total_batches - 1:
+                        await asyncio.sleep(5)  # Small delay between batches
+                
+                # Step 4: Count successes (90% progress)
+                active_jobs[job_id].message = "Processing results..."
+                active_jobs[job_id].progress = 90
+                
+                successful = sum(1 for r in all_results if r and r.get('status') != 'error')
+                failed = total_orders - successful
+                
+                logger.info(f"[Job {job_id}] Order summary: {successful}/{total_orders} successful")
+                
+                # Complete (100% progress)
                 active_jobs[job_id].status = "completed"
                 active_jobs[job_id].progress = 100
-                active_jobs[job_id].message = "All orders executed successfully"
+                active_jobs[job_id].message = f"Orders executed: {successful} successful, {failed} failed"
                 active_jobs[job_id].completed_at = get_ist_now().isoformat()
-                active_jobs[job_id].result = result if result else {"status": "completed"}
+                active_jobs[job_id].result = {
+                    "status": "completed",
+                    "total_orders": total_orders,
+                    "successful": successful,
+                    "failed": failed
+                }
                 
                 logger.info(f"[Job {job_id}] PLACE ORDER completed successfully")
                 
@@ -2868,22 +2953,108 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
             started_at=get_ist_now().isoformat()
         )
         
-        # Define background task
+        # Define background task with real-time progress tracking
         async def run_get_quotes_background():
             try:
                 logger.info(f"[Job {job_id}] Starting GET QUOTES background task")
-                active_jobs[job_id].message = "Fetching quotes from Kotak API..."
+                
+                # Import quote fetching modules
+                from get_quote import (
+                    get_gsheet_stocks_df, get_symbol_from_gsheet_stocks_df,
+                    flatten_quote_result_list, fetch_ohlc_from_quote_result,
+                    update_df_with_quote_ohlc, write_quote_ohlc_to_gsheet,
+                    KotakQuoteClient
+                )
+                from gsheet_stock_get import GSheetStockClient
+                
+                # Step 1: Get sheet data (5% progress)
+                active_jobs[job_id].message = "Loading stock data from Google Sheet..."
+                active_jobs[job_id].progress = 5
+                
+                sheet_url = f"{os.getenv('BASE_SHEET_URL')}{os.getenv('sheet_gid')}"
+                gsheet_client = GSheetStockClient()
+                df = await gsheet_client.get_stock_dataframe(sheet_url)
+                all_rows = await get_gsheet_stocks_df(df)
+                
+                logger.info(f"[Job {job_id}] Loaded {len(all_rows)} stocks from sheet")
+                
+                # Step 2: Create symbols list (10% progress)
+                active_jobs[job_id].message = "Creating symbol list..."
                 active_jobs[job_id].progress = 10
                 
-                # Run the main quote fetching logic
-                result = await get_quote_main()
+                symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
+                total_symbols = len(symbols_list)
                 
-                # Update job status
+                logger.info(f"[Job {job_id}] Created {total_symbols} valid symbols")
+                
+                # Step 3: Fetch quotes with rate limiting and progress tracking (10% → 80%)
+                active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks..."
+                active_jobs[job_id].progress = 15
+                
+                # Calculate batches (200 per minute)
+                requests_per_minute = 200
+                batch_size = requests_per_minute
+                total_batches = (total_symbols + batch_size - 1) // batch_size
+                
+                logger.info(f"[Job {job_id}] Will process {total_batches} batches")
+                
+                # Manually call KotakQuoteClient with progress tracking
+                quote_client = KotakQuoteClient()
+                all_quote_results = []
+                
+                progress_start = 15
+                progress_end = 75
+                progress_range = progress_end - progress_start
+                
+                for batch_num in range(total_batches):
+                    start_idx = batch_num * batch_size
+                    end_idx = min(start_idx + batch_size, total_symbols)
+                    batch_symbols = symbols_list[start_idx:end_idx]
+                    
+                    # Update progress for this batch
+                    batch_progress = progress_start + int((batch_num / total_batches) * progress_range)
+                    active_jobs[job_id].progress = batch_progress
+                    active_jobs[job_id].message = f"Fetching batch {batch_num + 1}/{total_batches} ({end_idx}/{total_symbols} stocks)"
+                    
+                    logger.info(f"[Job {job_id}] Processing batch {batch_num + 1}/{total_batches}")
+                    
+                    # Fetch quotes for this batch
+                    batch_result = await quote_client.get_quotes_concurrent(batch_symbols)
+                    all_quote_results.extend(batch_result)
+                    
+                    # Wait if not last batch (rate limiting)
+                    if batch_num < total_batches - 1:
+                        await asyncio.sleep(5)  # Small delay between batches
+                
+                # Step 4: Process results (80% progress)
+                active_jobs[job_id].message = "Processing quote results..."
+                active_jobs[job_id].progress = 80
+                
+                flattened_quote_result = await flatten_quote_result_list(all_quote_results)
+                quote_ohlc = await fetch_ohlc_from_quote_result(flattened_quote_result)
+                
+                # Step 5: Update DataFrame (85% progress)
+                active_jobs[job_id].message = "Calculating prices..."
+                active_jobs[job_id].progress = 85
+                
+                df = await update_df_with_quote_ohlc(df, quote_ohlc, valid_indices)
+                
+                # Step 6: Write to Google Sheet (90% progress)
+                active_jobs[job_id].message = "Writing to Google Sheet..."
+                active_jobs[job_id].progress = 90
+                
+                write_success = await write_quote_ohlc_to_gsheet(
+                    df,
+                    os.getenv("sheet_id"),
+                    os.getenv("sheet_gid")
+                )
+                
+                # Complete (100% progress)
                 active_jobs[job_id].status = "completed"
                 active_jobs[job_id].progress = 100
                 active_jobs[job_id].message = "Quotes fetched and Google Sheet updated successfully"
                 active_jobs[job_id].completed_at = get_ist_now().isoformat()
-                active_jobs[job_id].result = {"status": "success"}
+                active_jobs[job_id].result = {"status": "success", "stocks_processed": total_symbols}
                 
                 logger.info(f"[Job {job_id}] GET QUOTES completed successfully")
                 

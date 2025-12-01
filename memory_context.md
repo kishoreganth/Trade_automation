@@ -5,6 +5,91 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-11-04: Real-Time Progress Tracking for GET QUOTES & PLACE ORDER (5% → 100%)
+
+**Enhancement**: Both GET QUOTES and PLACE ORDER now show accurate real-time progress based on actual batch completion.
+
+**GET QUOTES Progress**:
+- 5%: Loading stock data
+- 10%: Creating symbol list
+- 15-75%: Fetching quotes (incremental per batch)
+- 80%: Processing results
+- 85%: Calculating prices
+- 90%: Writing to Google Sheet
+- 100%: Complete
+
+**PLACE ORDER Progress**:
+- 10%: Loading stock data
+- 20%: Creating order data (BUY/SELL for each stock)
+- 25-85%: Placing orders (incremental per batch)
+  - Example: 200 orders, 1 batch → 25% → 85%
+  - Example: 400 orders, 2 batches → 25% → 55% → 85%
+  - Example: 1000 orders, 5 batches → 25% → 37% → 49% → 61% → 73% → 85%
+- 90%: Processing results (count success/failures)
+- 100%: Complete with summary
+
+**Dynamic Calculation Examples**:
+
+| Stocks | Orders (×2) | Batches | Progress Updates | Time |
+|--------|-------------|---------|------------------|------|
+| 100 | 200 | 1 | 25% → 85% | ~1 min |
+| 500 | 1000 | 5 | 25% → 37% → 49% → 61% → 73% → 85% | ~5 min |
+| 900 | 1800 | 9 | 25% → 32% → 38% → ... → 85% | ~9 min |
+
+**UX Improvement**:
+- Before: Stuck at 20% entire time
+- After: Live updates every ~30s showing batch progress
+- Messages: "Placing orders batch 3/9 (600/1800 orders) - 45%"
+
+**Implementation**: Step-by-step execution with `active_jobs[job_id].progress` update after each batch, matching GET QUOTES pattern.
+
+---
+
+### 2025-11-04: Real-Time Progress Tracking for GET QUOTES (5% → 100%)
+
+**Enhancement**: GET QUOTES now shows accurate real-time progress based on actual batch completion.
+
+**Progress Breakdown**:
+- **5%**: Loading stock data from Google Sheet
+- **10%**: Creating symbol list
+- **15-75%**: Fetching quotes (incremental per batch)
+  - Example: 7 batches → 15%, 24%, 33%, 42%, 51%, 60%, 69%, 75%
+  - Updates live as each batch of 200 quotes completes
+- **80%**: Processing quote results (flatten, extract OHLC)
+- **85%**: Calculating BUY/SELL prices
+- **90%**: Writing to Google Sheet
+- **100%**: Complete
+
+**Implementation**:
+- Replaced single `get_quote_main()` call with step-by-step execution
+- Manually processes quote batches with progress update per batch
+- Uses `KotakQuoteClient.get_quotes_concurrent()` directly
+- Updates `active_jobs[job_id].progress` after each batch
+- Frontend polling picks up real-time updates every 5 seconds
+
+**UX Improvement**:
+- Before: Stuck at 10% for entire 3-4 minutes
+- After: Live progress: "Fetching batch 3/7 (600/1322 stocks) - 42%"
+
+**Performance**: Same 3-4 min execution, but user sees live progress throughout.
+
+---
+
+### 2025-11-04: NSE CM Data Filter - Only EQ (Equity) Stocks
+
+**Enhancement**: Background NSE CM data fetch now filters only EQ (Equity) stocks before writing to Google Sheet.
+
+**Filter**: `df[df['pGroup'] == 'EQ']`
+
+**Result**:
+- Original NSE CM data: ~11,239 rows (all instrument types)
+- Filtered EQ only: ~2,500-3,000 rows (equity stocks only)
+- Removes: FO (Futures/Options), other instrument types
+
+**Benefit**: Cleaner data, faster writes, only relevant equity stocks for trading.
+
+---
+
 ### 2025-11-04: Auto-Trigger NSE CM Data Fetch After TOTP Verification
 
 **Feature**: NSE CM master data automatically fetches in background after successful TOTP login.
