@@ -5,6 +5,37 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-11-04: Removed APScheduler - Manual Control via UI
+
+**Decision**: Removed APScheduler scheduled tasks in favor of manual UI control.
+
+**Reason**:
+- TOTP authentication required for Kotak API (expires at midnight)
+- Scheduled 8:30 AM task would fail without valid session
+- User prefers manual control via GET QUOTES button
+- Simpler architecture, one less dependency
+
+**Removed**:
+- APScheduler imports (AsyncIOScheduler, CronTrigger)
+- Scheduler initialization
+- `daily_830am_task()` function
+- Scheduler startup/shutdown in lifespan
+- `apscheduler` from requirements.txt
+
+**Current Approach**:
+- ✅ Manual GET QUOTES via UI button (user-controlled)
+- ✅ Background tasks for CA fetching, cleanup (no auth needed)
+- ✅ Auto NSE CM fetch after TOTP (one-time, not scheduled)
+
+**Kept**:
+- Background CA fetching (60s intervals)
+- Periodic cleanup (24h intervals)
+- All manual UI controls
+
+**Performance**: Cleaner startup, removed unused scheduling overhead.
+
+---
+
 ### 2025-11-04: Real-Time Progress Tracking for GET QUOTES & PLACE ORDER (5% → 100%)
 
 **Enhancement**: Both GET QUOTES and PLACE ORDER now show accurate real-time progress based on actual batch completion.

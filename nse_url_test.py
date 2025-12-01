@@ -54,8 +54,6 @@ load_dotenv()
 from get_quote import main as get_quote_main
 import uuid
 from dataclasses import dataclass, asdict, field as dataclass_field
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 
 # Set up logging to both file and console
 logger = logging.getLogger()    
@@ -83,17 +81,6 @@ active_jobs: Dict[str, JobStatus] = {}
 
 # ============================================================================
 # END JOB STATUS TRACKING
-# ============================================================================
-
-# ============================================================================
-# SCHEDULER SETUP
-# ============================================================================
-
-# Initialize APScheduler with IST timezone
-scheduler = AsyncIOScheduler(timezone='Asia/Kolkata')
-
-# ============================================================================
-# END SCHEDULER SETUP
 # ============================================================================
 
 # Indian Standard Time timezone
@@ -413,32 +400,6 @@ async def post_ocr_cleanup_async(image_folder: str):
 # ============================================================================
 # END CLEANUP SYSTEM
 # ============================================================================
-
-# ============================================================================
-# DAILY SCHEDULED TASKS
-# ============================================================================
-
-async def daily_830am_task():
-    """
-    Task that runs every day at 8:30 AM IST
-    Add your daily automation here (e.g., GET QUOTES, session init, etc.)
-    """
-    try:
-        logger.info("🔔 8:30 AM Daily Task Started")
-        logger.info(f"⏰ Current IST time: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Example: Pre-fetch quotes before market opens (9:15 AM)
-        logger.info("📊 Running daily quote fetch...")
-        await get_quote_main()
-        
-        logger.info("✅ 8:30 AM Daily Task Completed Successfully")
-        
-    except Exception as e:
-        logger.error(f"❌ 8:30 AM Daily Task Failed: {e}")
-
-# ============================================================================
-# END DAILY SCHEDULED TASKS
-# ============================================================================
     
 # Start the background tasks when the application starts
 @asynccontextmanager
@@ -479,26 +440,7 @@ async def lifespan(app: FastAPI):
     logger.info("✅ All background tasks started: Equities and Periodic Cleanup (24h interval)")
     logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
-    # Start APScheduler for daily scheduled tasks
-    scheduler.add_job(
-        daily_830am_task,
-        trigger=CronTrigger(hour=8, minute=30),
-        id='daily_830am_quotes',
-        name='Daily 8:30 AM Quote Fetch',
-        replace_existing=True
-    )
-    scheduler.start()
-    logger.info("⏰ Scheduler started: Daily task set for 8:30 AM IST")
-    
-    # Show next scheduled run time
-    next_run = scheduler.get_job('daily_830am_quotes').next_run_time
-    logger.info(f"📅 Next scheduled run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    
     yield  # FastAPI will run the application here
-    
-    # Shutdown: Stop scheduler
-    scheduler.shutdown()
-    logger.info("⏰ Scheduler stopped")
     
     # Shutdown: Clean up tasks
     if sme_task and not sme_task.done():
