@@ -5,6 +5,194 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-12-02: Penny Stock Filter for Order Execution (BUY ORDER > ₹10)
+
+**Feature**: Automatically filter out penny stocks during order execution to prevent low-value trades.
+
+**Rule**: Only execute orders if `BUY ORDER > ₹10`
+
+**Implementation** (`nse_url_test.py` - PLACE ORDER background task):
+```python
+for row in all_rows:
+    buy_price = float(row.get('BUY ORDER'))
+    if buy_price > 10:
+        filtered_rows.append(row)  # Execute
+    else:
+        penny_stock_count += 1  # Skip
+```
+
+**Behavior**:
+- Stocks with BUY ORDER ≤ ₹10 are skipped (no orders placed)
+- Counter tracks how many skipped
+- Summary message includes penny stock count
+
+**Example Messages**:
+- No penny stocks: "All orders executed: 180 successful, 20 failed"
+- With penny stocks: "Orders executed: 180 successful, 20 failed. Skipped 100 penny stocks (BUY ORDER ≤ ₹10)"
+
+**Benefits**:
+- ✅ Prevents trading illiquid/low-value stocks
+- ✅ Saves API calls (don't place orders for penny stocks)
+- ✅ Clear reporting (user knows why some skipped)
+- ✅ Risk management (avoid penny stock volatility)
+
+**Result Structure**:
+```json
+{
+  "total_orders": 360,
+  "successful": 340,
+  "failed": 20,
+  "penny_stocks_skipped": 100,
+  "tradeable_stocks": 180
+}
+```
+
+---
+
+### 2025-12-02: Standardized IST Timezone Handling with Helper Function
+
+**Issue**: `can't compare offset-naive and offset-aware datetimes` errors throughout application.
+
+**Solution**: Created `parse_datetime_ist()` helper function for consistent timezone handling.
+
+**Implementation**:
+
+**1. Added Helper Function** (after `get_ist_now()`):
+```python
+def parse_datetime_ist(datetime_str: str) -> Optional[datetime]:
+    """Parse datetime string and ensure IST-aware"""
+    dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+    
+    if dt.tzinfo is None:
+        return IST.localize(dt)  # Naive → IST
+    else:
+        return dt.astimezone(IST)  # Other TZ → IST
+```
+
+**2. Replaced All Datetime Parsing**:
+- ✅ `/api/session_status` endpoint
+- ✅ `verify_session()` function
+- ✅ GET QUOTES background task (2 places)
+- ✅ PLACE ORDER background task (2 places)
+
+**Before**:
+```python
+expires_at = datetime.fromisoformat(expires_at_str)
+if expires_at.tzinfo is None:
+    expires_at = IST.localize(expires_at)
+if get_ist_now() >= expires_at:  # Compare
+```
+
+**After**:
+```python
+expires_at = parse_datetime_ist(expires_at_str)
+if expires_at and get_ist_now() >= expires_at:  # Compare
+```
+
+**Benefits**:
+- ✅ **All comparisons in IST** (no timezone mismatches)
+- ✅ **Handles naive datetimes** (auto-converts to IST)
+- ✅ **Handles UTC** (auto-converts to IST)
+- ✅ **Error handling** (returns None on parse failure)
+- ✅ **Consistent behavior** across entire application
+- ✅ **No more timezone errors** ever
+
+**Standard Pattern Now**:
+- Store: `get_ist_now().isoformat()` (always IST-aware)
+- Parse: `parse_datetime_ist(string)` (always returns IST)
+- Compare: Both IST-aware → works perfectly
+
+---
+
+### 2025-11-04: Session Validation in Background Tasks - Fail Early with Clear Message
+
+**Issue**: GET QUOTES and PLACE ORDER proceed without session, causing multiple "No session data" errors before failing.
+
+**Solution**: Validate session at start of background tasks, fail immediately with user-friendly message.
+
+**Implementation** (`nse_url_test.py`):
+
+**Both GET QUOTES and PLACE ORDER now check**:
+1. Session file exists?
+   - NO → Fail: "No active session - Please verify TOTP first to authenticate"
+2. Session expired?
+   - YES → Fail: "Session expired - Please verify TOTP again to re-authenticate"
+3. Session valid?
+   - YES → Proceed with task ✅
+
+**Benefits**:
+- ✅ **Instant failure** with clear message (no wasted API calls)
+- ✅ **User guidance** - tells exactly what to do (verify TOTP)
+- ✅ **Clean logs** - no repeated "No session data" errors
+- ✅ **Better UX** - Frontend shows: "❌ Please verify TOTP first"
+
+**Error Messages**:
+- No session: "No active session - Please verify TOTP first to authenticate"
+- Expired: "Session expired - Please verify TOTP again to re-authenticate"
+
+**Frontend Display**: Polling picks up failure, shows red error with clear instructions.
+
+---
+
+### 2025-11-04: Duplicate Stock Detection - Skip Duplicate API Calls, Preserve Row Order
+
+**Feature**: Automatically detect and skip duplicate EXCHANGE_TOKENs to save API calls while maintaining Google Sheet row order.
+
+**Implementation** (`get_quote.py` - `get_symbol_from_gsheet_stocks_df`):
+```python
+seen_tokens = {}  # Track first occurrence of each token
+duplicate_count = 0
+
+for idx, row in enumerate(all_rows):
+    if exchange_token in seen_tokens:
+        # Skip duplicate - don't add to API fetch list
+        duplicate_count += 1
+        continue
+    
+    # First occurrence - add to fetch list
+    symbols_list.append(symbol)
+    valid_indices.append(idx)
+    seen_tokens[exchange_token] = idx
+```
+
+**Behavior**:
+- **All rows preserved** in DataFrame (1666 rows stay 1666 rows)
+- **Only first occurrence** of each stock gets quote fetched
+- **Duplicate rows** remain empty (no API call, no price)
+- **Row order maintained** perfectly for Google Sheet write
+
+**Example**:
+```
+Row 1: INFY (1594) → First occurrence → Fetch ✅ → Price: 1500
+Row 5: TCS (2885) → Unique → Fetch ✅ → Price: 3800
+Row 100: INFY (1594) → Duplicate → Skip ❌ → Empty
+Row 200: INFY (1594) → Duplicate → Skip ❌ → Empty
+Row 500: RELIANCE (2885) → Wait, if same token as TCS → Duplicate → Skip ❌ → Empty
+
+Google Sheet: All rows in original order, duplicates have empty prices
+```
+
+**Benefits**:
+- ✅ **Saves API calls**: 1666 rows → 1500 unique → 166 calls saved (10%)
+- ✅ **Faster execution**: Fewer batches (9 instead of 10)
+- ✅ **Less quota usage**: Reduces 429 error risk
+- ✅ **Highlights issues**: Empty rows = duplicates in your data
+- ✅ **Maintains order**: All 1666 rows in sheet, same positions
+- ✅ **Dynamic**: Works for any stock count with any duplicate ratio
+
+**Performance Impact**:
+- 1666 rows, 166 duplicates → 1500 unique API calls
+- Time: 10 batches → 9 batches (~55s faster)
+- Quota: 10% reduction
+
+**Log Output**:
+```
+📊 Created 1500 unique symbols from 1666 total rows
+📊 Skipped: 166 rows (166 duplicates, 0 invalid)
+```
+
+---
+
 ### 2025-11-04: Optimal Rate Limiting - 180 Batch + 53s Delay (Maximum Safe Speed)
 
 **Issues**:

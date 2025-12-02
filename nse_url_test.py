@@ -90,6 +90,34 @@ def get_ist_now():
     """Get current time in IST timezone"""
     return datetime.now(IST)
 
+def parse_datetime_ist(datetime_str: str) -> Optional[datetime]:
+    """
+    Parse datetime string and ensure it's IST-aware
+    Handles: naive, UTC, other timezones - always returns IST
+    
+    Args:
+        datetime_str: ISO format datetime string
+        
+    Returns:
+        IST-aware datetime object, or None if parsing fails
+    """
+    if not datetime_str:
+        return None
+    
+    try:
+        # Parse ISO format, handle 'Z' suffix for UTC
+        dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+        
+        if dt.tzinfo is None:
+            # Naive datetime - assume IST
+            return IST.localize(dt)
+        else:
+            # Has timezone - convert to IST
+            return dt.astimezone(IST)
+    except Exception as e:
+        logger.error(f"Failed to parse datetime '{datetime_str}': {e}")
+        return None
+
 # Cleanup configuration
 CLEANUP_CONFIG = {
     "pdf_retention_days": 30,      # Keep PDFs for 30 days
@@ -1966,8 +1994,8 @@ async def verify_session(request: Request) -> Optional[Dict]:
             user_id, expires_at, username = result
             
             # Check if session has expired
-            expires_time = datetime.fromisoformat(expires_at)
-            if get_ist_now() > expires_time:
+            expires_time = parse_datetime_ist(expires_at)
+            if expires_time and get_ist_now() > expires_time:
                 # Delete expired session
                 await db.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
                 await db.commit()
@@ -2440,8 +2468,15 @@ async def get_session_status():
                 "message": "Invalid session data"
             }
         
-        # Parse expiry time
-        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        # Parse expiry time using IST-aware helper
+        expires_at = parse_datetime_ist(expires_at_str)
+        
+        if not expires_at:
+            return {
+                "session_active": False,
+                "message": "Invalid expiry datetime"
+            }
+        
         current_time = get_ist_now()
         
         if current_time < expires_at:
@@ -2658,6 +2693,47 @@ async def execute_orders(background_tasks: BackgroundTasks):
             try:
                 logger.info(f"[Job {job_id}] Starting PLACE ORDER background task")
                 
+                # Validate session first before starting
+                session_file = "kotak_session.json"
+                if not os.path.exists(session_file):
+                    logger.error(f"[Job {job_id}] No session file found")
+                    active_jobs[job_id].status = "failed"
+                    active_jobs[job_id].progress = 0
+                    active_jobs[job_id].message = "No active session - Please verify TOTP first to authenticate"
+                    active_jobs[job_id].error = "Session not found. Authentication required."
+                    active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                    
+                    await ws_manager.broadcast_message({
+                        "type": "job_failed",
+                        "job": asdict(active_jobs[job_id])
+                    })
+                    return
+                
+                # Check if session is expired
+                async with aiofiles.open(session_file, 'r') as f:
+                    content = await f.read()
+                    session_data = json.loads(content)
+                
+                expires_at_str = session_data.get('expires_at')
+                if expires_at_str:
+                    expires_at = parse_datetime_ist(expires_at_str)
+                    
+                    if expires_at and get_ist_now() >= expires_at:
+                        logger.error(f"[Job {job_id}] Session expired")
+                        active_jobs[job_id].status = "failed"
+                        active_jobs[job_id].progress = 0
+                        active_jobs[job_id].message = "Session expired - Please verify TOTP again to re-authenticate"
+                        active_jobs[job_id].error = "Session expired. Please authenticate again."
+                        active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                        
+                        await ws_manager.broadcast_message({
+                            "type": "job_failed",
+                            "job": asdict(active_jobs[job_id])
+                        })
+                        return
+                
+                logger.info(f"[Job {job_id}] Session validated successfully")
+                
                 # Import order placement modules
                 from place_order import get_gsheet_stocks_df as get_order_stocks, get_order_data, place_orders_batch
                 from gsheet_stock_get import GSheetStockClient
@@ -2679,14 +2755,35 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 total_stocks = len(all_rows)
                 logger.info(f"[Job {job_id}] Loaded {total_stocks} stocks from sheet")
                 
-                # Step 2: Create order data (20% progress)
+                # Step 2: Create order data and filter penny stocks (20% progress)
                 active_jobs[job_id].message = f"Creating orders for {total_stocks} stocks..."
                 active_jobs[job_id].progress = 20
                 
-                all_orders = await get_order_data(all_rows)
+                # Filter out penny stocks (BUY ORDER <= 10)
+                filtered_rows = []
+                penny_stock_count = 0
+                
+                for row in all_rows:
+                    buy_order_value = row.get('BUY ORDER')
+                    
+                    # Convert to numeric and check if > 10
+                    try:
+                        buy_price = float(buy_order_value) if buy_order_value else 0
+                        if buy_price > 10:
+                            filtered_rows.append(row)
+                        else:
+                            penny_stock_count += 1
+                            logger.debug(f"Skipping penny stock: {row.get('STOCK_NAME', 'Unknown')} (BUY ORDER: {buy_price})")
+                    except (ValueError, TypeError):
+                        penny_stock_count += 1
+                        logger.debug(f"Skipping invalid BUY ORDER: {row.get('STOCK_NAME', 'Unknown')}")
+                
+                logger.info(f"[Job {job_id}] Filtered stocks: {len(filtered_rows)} tradeable, {penny_stock_count} penny stocks (BUY ORDER ≤ ₹10) skipped")
+                
+                all_orders = await get_order_data(filtered_rows)
                 total_orders = len(all_orders)
                 
-                logger.info(f"[Job {job_id}] Created {total_orders} orders ({total_orders//2} stocks × 2 orders)")
+                logger.info(f"[Job {job_id}] Created {total_orders} orders ({len(filtered_rows)} stocks × 2 orders)")
                 
                 # Step 3: Place orders with rate limiting and progress tracking (20% → 90%)
                 active_jobs[job_id].message = f"Placing {total_orders} orders..."
@@ -2736,13 +2833,22 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 # Complete (100% progress)
                 active_jobs[job_id].status = "completed"
                 active_jobs[job_id].progress = 100
-                active_jobs[job_id].message = f"Orders executed: {successful} successful, {failed} failed"
+                
+                # Create summary message
+                if penny_stock_count > 0:
+                    summary_msg = f"Orders executed: {successful} successful, {failed} failed. Skipped {penny_stock_count} penny stocks (BUY ORDER ≤ ₹10)"
+                else:
+                    summary_msg = f"All orders executed: {successful} successful, {failed} failed"
+                
+                active_jobs[job_id].message = summary_msg
                 active_jobs[job_id].completed_at = get_ist_now().isoformat()
                 active_jobs[job_id].result = {
                     "status": "completed",
                     "total_orders": total_orders,
                     "successful": successful,
-                    "failed": failed
+                    "failed": failed,
+                    "penny_stocks_skipped": penny_stock_count,
+                    "tradeable_stocks": len(filtered_rows)
                 }
                 
                 logger.info(f"[Job {job_id}] PLACE ORDER completed successfully")
@@ -2898,6 +3004,47 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
         async def run_get_quotes_background():
             try:
                 logger.info(f"[Job {job_id}] Starting GET QUOTES background task")
+                
+                # Validate session first before starting
+                session_file = "kotak_session.json"
+                if not os.path.exists(session_file):
+                    logger.error(f"[Job {job_id}] No session file found")
+                    active_jobs[job_id].status = "failed"
+                    active_jobs[job_id].progress = 0
+                    active_jobs[job_id].message = "No active session - Please verify TOTP first to authenticate"
+                    active_jobs[job_id].error = "Session not found. Authentication required."
+                    active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                    
+                    await ws_manager.broadcast_message({
+                        "type": "job_failed",
+                        "job": asdict(active_jobs[job_id])
+                    })
+                    return
+                
+                # Check if session is expired
+                async with aiofiles.open(session_file, 'r') as f:
+                    content = await f.read()
+                    session_data = json.loads(content)
+                
+                expires_at_str = session_data.get('expires_at')
+                if expires_at_str:
+                    expires_at = parse_datetime_ist(expires_at_str)
+                    
+                    if expires_at and get_ist_now() >= expires_at:
+                        logger.error(f"[Job {job_id}] Session expired")
+                        active_jobs[job_id].status = "failed"
+                        active_jobs[job_id].progress = 0
+                        active_jobs[job_id].message = "Session expired - Please verify TOTP again to re-authenticate"
+                        active_jobs[job_id].error = "Session expired. Please authenticate again."
+                        active_jobs[job_id].completed_at = get_ist_now().isoformat()
+                        
+                        await ws_manager.broadcast_message({
+                            "type": "job_failed",
+                            "job": asdict(active_jobs[job_id])
+                        })
+                        return
+                
+                logger.info(f"[Job {job_id}] Session validated successfully")
                 
                 # Import quote fetching modules
                 from get_quote import (

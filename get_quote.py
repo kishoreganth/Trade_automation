@@ -262,11 +262,14 @@ async def get_gsheet_stocks_df(df):
     
 async def get_symbol_from_gsheet_stocks_df(all_rows):
     """
-    Create symbols list and track valid row indices
-    Returns: (symbols_list, valid_indices) - only valid symbols, with their original row positions
+    Create symbols list and track valid row indices with duplicate detection
+    Returns: (symbols_list, valid_indices) - only UNIQUE valid symbols, with their first occurrence positions
+    Duplicates are skipped to save API calls
     """
     symbols_list = []
     valid_indices = []  # Track which rows have valid data
+    seen_tokens = {}  # Track duplicate tokens: {token: first_row_index}
+    duplicate_count = 0
     
     for idx, row in enumerate(all_rows):
         # Check if row has valid EXCHANGE_TOKEN and GAP
@@ -286,14 +289,24 @@ async def get_symbol_from_gsheet_stocks_df(all_rows):
         try:
             exchange_token = int(float(token_value))
             if exchange_token > 0:  # Only valid positive tokens
+                # Check for duplicate token
+                if exchange_token in seen_tokens:
+                    # Duplicate found - skip to save API call
+                    duplicate_count += 1
+                    logger.debug(f"Row {idx}: Duplicate token {exchange_token} (first seen at row {seen_tokens[exchange_token]}), skipping")
+                    continue
+                
+                # First occurrence - add to fetch list
                 symbol = f"nse_cm|{exchange_token}"
                 symbols_list.append(symbol)
                 valid_indices.append(idx)  # Track original row position
+                seen_tokens[exchange_token] = idx  # Mark as seen
         except (ValueError, TypeError):
             logger.debug(f"Row {idx}: Skipping - could not convert EXCHANGE_TOKEN to int")
             continue
 
-    logger.info(f"📊 Created {len(symbols_list)} valid symbols from {len(all_rows)} total rows ({len(all_rows) - len(symbols_list)} skipped)")
+    logger.info(f"📊 Created {len(symbols_list)} unique symbols from {len(all_rows)} total rows")
+    logger.info(f"📊 Skipped: {len(all_rows) - len(symbols_list)} rows ({duplicate_count} duplicates, {len(all_rows) - len(symbols_list) - duplicate_count} invalid)")
     return symbols_list, valid_indices
 
 async def flatten_quote_result_list(data):
