@@ -5,6 +5,28 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-12-02: Increased TOTP Login Timeout to 90 Seconds
+
+**Issue**: TOTP authentication timing out with "Request timed out while logging in with TOTP" error.
+
+**Root Cause**: Kotak TOTP API slow response (>30 seconds), especially during peak hours.
+
+**Fix**: Increased timeout from 30s → 90s in `neo_login/get_token_totp.py` line 58.
+
+**Before**:
+```python
+timeout=aiohttp.ClientTimeout(total=30)  # Too short
+```
+
+**After**:
+```python
+timeout=aiohttp.ClientTimeout(total=90)  # Handles slow API
+```
+
+**Impact**: TOTP authentication now succeeds even when Kotak API is slow (market hours, high traffic).
+
+---
+
 ### 2025-12-02: Penny Stock Filter for Order Execution (BUY ORDER > ₹10)
 
 **Feature**: Automatically filter out penny stocks during order execution to prevent low-value trades.
