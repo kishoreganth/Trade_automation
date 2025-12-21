@@ -135,6 +135,12 @@ function connectWebSocket() {
             updateAIAnalysisStatus(data);
         } else if (data.type === 'ai_analysis_complete') {
             handleAIAnalysisComplete(data);
+        } else if (data.type === 'scheduled_task') {
+            handleScheduledTaskUpdate(data);
+        } else if (data.type === 'job_completed') {
+            handleJobCompleted(data.job);
+        } else if (data.type === 'job_failed') {
+            handleJobFailed(data.job);
         }
     };
     
@@ -669,6 +675,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize WebSocket and load messages
     connectWebSocket();
+    restoreScheduledTaskStatus();
     refreshMessages();
 });
 
@@ -1105,4 +1112,279 @@ async function logout() {
         window.location.href = '/';
     }
 }
+
+// ============================================================================
+// SCHEDULED TASK & NOTIFICATION SYSTEM
+// ============================================================================
+
+function handleScheduledTaskUpdate(data) {
+    console.log('Scheduled task update:', data);
+    
+    const { status, task, message, progress, timestamp } = data;
+    
+    // Show notification toast
+    showNotificationToast(message, status);
+    
+    // Update scheduled task indicator (persistent)
+    if (task === 'fetch_quotes') {
+        updateScheduledTaskIndicator(status, message, progress);
+    }
+    
+    // Update quotes status if on place order page and task is fetch_quotes
+    if (task === 'fetch_quotes' && document.getElementById('placeOrderPage').style.display !== 'none') {
+        if (status === 'started' || status === 'progress') {
+            showQuotesStatus('info', '⏳', message);
+        } else if (status === 'completed') {
+            showQuotesStatus('success', '✅', message);
+            // Auto-refresh sheet data after quotes update
+            setTimeout(() => loadPlaceOrderSheet(), 2000);
+        } else if (status === 'failed') {
+            showQuotesStatus('error', '❌', message);
+        } else if (status === 'skipped') {
+            showQuotesStatus('warning', '⚠️', message);
+        }
+    }
+}
+
+function updateScheduledTaskIndicator(status, message, progress) {
+    const indicator = document.getElementById('scheduledTaskIndicator');
+    const titleEl = document.getElementById('scheduledTaskTitle');
+    const messageEl = document.getElementById('scheduledTaskMessage');
+    const progressContainer = document.getElementById('scheduledProgressContainer');
+    const progressBar = document.getElementById('scheduledTaskProgress');
+    const percentEl = document.getElementById('scheduledTaskPercent');
+    const timeEl = document.getElementById('scheduledTaskTime');
+    
+    if (!indicator) return;
+    
+    const currentTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    
+    if (status === 'started' || status === 'progress') {
+        // Show running state with progress
+        indicator.className = 'scheduled-task-status running';
+        titleEl.textContent = '🔄 Auto Fetch Running';
+        messageEl.textContent = message;
+        progressContainer.style.display = 'flex';
+        timeEl.textContent = `Started at ${currentTime}`;
+        
+        if (progress !== undefined) {
+            progressBar.style.width = `${progress}%`;
+            percentEl.textContent = `${progress}%`;
+        }
+    } else if (status === 'completed') {
+        // Show completed state (stays visible)
+        indicator.className = 'scheduled-task-status completed';
+        titleEl.textContent = '✅ Auto Fetch Completed';
+        messageEl.textContent = message;
+        progressContainer.style.display = 'none';
+        timeEl.textContent = `Completed at ${currentTime}`;
+    } else if (status === 'failed') {
+        // Show failed state (stays visible)
+        indicator.className = 'scheduled-task-status failed';
+        titleEl.textContent = '❌ Auto Fetch Failed';
+        messageEl.textContent = message;
+        progressContainer.style.display = 'none';
+        timeEl.textContent = `Failed at ${currentTime}`;
+    } else if (status === 'skipped') {
+        // Show skipped state (stays visible)
+        indicator.className = 'scheduled-task-status skipped';
+        titleEl.textContent = '⚠️ Auto Fetch Skipped';
+        messageEl.textContent = message;
+        progressContainer.style.display = 'none';
+        timeEl.textContent = `Skipped at ${currentTime}`;
+    }
+    
+    // Save last status to localStorage for persistence across page refresh
+    localStorage.setItem('scheduledTaskStatus', JSON.stringify({
+        status, message, progress, time: currentTime
+    }));
+}
+
+// Restore scheduled task status on page load
+function restoreScheduledTaskStatus() {
+    const saved = localStorage.getItem('scheduledTaskStatus');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            const indicator = document.getElementById('scheduledTaskIndicator');
+            const titleEl = document.getElementById('scheduledTaskTitle');
+            const messageEl = document.getElementById('scheduledTaskMessage');
+            const timeEl = document.getElementById('scheduledTaskTime');
+            const progressContainer = document.getElementById('scheduledProgressContainer');
+            
+            if (!indicator) return;
+            
+            if (data.status === 'completed') {
+                indicator.className = 'scheduled-task-status completed';
+                titleEl.textContent = '✅ Last Auto Fetch Completed';
+                messageEl.textContent = data.message;
+                progressContainer.style.display = 'none';
+                timeEl.textContent = `Completed at ${data.time}`;
+            } else if (data.status === 'failed') {
+                indicator.className = 'scheduled-task-status failed';
+                titleEl.textContent = '❌ Last Auto Fetch Failed';
+                messageEl.textContent = data.message;
+                progressContainer.style.display = 'none';
+                timeEl.textContent = `Failed at ${data.time}`;
+            } else if (data.status === 'skipped') {
+                indicator.className = 'scheduled-task-status skipped';
+                titleEl.textContent = '⚠️ Last Auto Fetch Skipped';
+                messageEl.textContent = data.message;
+                progressContainer.style.display = 'none';
+                timeEl.textContent = `Skipped at ${data.time}`;
+            }
+            // If running, don't restore - will get fresh update from WebSocket
+        } catch (e) {
+            console.error('Error restoring scheduled task status:', e);
+        }
+    }
+}
+
+function handleJobCompleted(job) {
+    console.log('Job completed:', job);
+    showNotificationToast(job.message, 'completed');
+    
+    // Update specific status areas based on job type
+    if (job.type === 'get_quotes') {
+        showQuotesStatus('success', '✅', job.message);
+        setTimeout(() => loadPlaceOrderSheet(), 2000);
+    } else if (job.type === 'place_order') {
+        showOrderStatus('success', '✅', job.message);
+    }
+}
+
+function handleJobFailed(job) {
+    console.log('Job failed:', job);
+    showNotificationToast(job.message, 'failed');
+    
+    // Update specific status areas based on job type
+    if (job.type === 'get_quotes') {
+        showQuotesStatus('error', '❌', job.message);
+    } else if (job.type === 'place_order') {
+        showOrderStatus('error', '❌', job.message);
+    }
+}
+
+function showNotificationToast(message, type = 'info') {
+    // Create or get notification container
+    let container = document.getElementById('notificationContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notificationContainer';
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 400px;
+        `;
+        document.body.appendChild(container);
+    }
+    
+    // Create notification toast
+    const toast = document.createElement('div');
+    toast.className = `notification-toast ${type}`;
+    
+    // Set colors based on type
+    let bgColor, borderColor, icon;
+    switch(type) {
+        case 'completed':
+        case 'success':
+            bgColor = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            borderColor = '#059669';
+            icon = '✅';
+            break;
+        case 'failed':
+        case 'error':
+            bgColor = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+            borderColor = '#dc2626';
+            icon = '❌';
+            break;
+        case 'warning':
+        case 'skipped':
+            bgColor = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+            borderColor = '#d97706';
+            icon = '⚠️';
+            break;
+        case 'started':
+        case 'progress':
+            bgColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+            borderColor = '#2563eb';
+            icon = '🔄';
+            break;
+        default:
+            bgColor = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)';
+            borderColor = '#4f46e5';
+            icon = 'ℹ️';
+    }
+    
+    toast.style.cssText = `
+        background: ${bgColor};
+        border: 1px solid ${borderColor};
+        color: white;
+        padding: 12px 16px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        animation: slideIn 0.3s ease-out;
+        cursor: pointer;
+    `;
+    
+    toast.innerHTML = `
+        <span style="font-size: 18px;">${icon}</span>
+        <span style="flex: 1;">${message}</span>
+        <span style="opacity: 0.7; font-size: 12px;">${new Date().toLocaleTimeString('en-IN')}</span>
+    `;
+    
+    // Click to dismiss
+    toast.onclick = () => {
+        toast.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => toast.remove(), 300);
+    };
+    
+    container.appendChild(toast);
+    
+    // Auto-remove after 10 seconds (longer for important notifications)
+    const duration = (type === 'completed' || type === 'failed') ? 15000 : 8000;
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.style.animation = 'slideOut 0.3s ease-in';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, duration);
+}
+
+// Add CSS animation for notifications
+const notificationStyles = document.createElement('style');
+notificationStyles.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(notificationStyles);
 

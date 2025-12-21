@@ -5,6 +5,72 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-12-21: Always-Visible Scheduled Task Status Indicator
+
+**Feature**: Persistent status indicator that ALWAYS shows the current/last state of scheduled fetch quotes.
+
+**States**:
+| State | Icon | Description |
+|-------|------|-------------|
+| `waiting` | ⏳ | Default - waiting for next scheduled time (9:07:10 AM) |
+| `running` | 🔄 | Auto-fetch in progress with progress bar |
+| `completed` | ✅ | Fetch completed successfully - stays visible |
+| `failed` | ❌ | Fetch failed - stays visible |
+| `skipped` | ⚠️ | Skipped (weekend/session invalid) - stays visible |
+
+**Persistence**: Status saved to `localStorage`, restored on page refresh.
+
+**Files Modified**:
+- `static/index.html` - Added `scheduledTaskIndicator` with status classes
+- `static/js/dashboard.js` - `updateScheduledTaskIndicator()` + `restoreScheduledTaskStatus()`
+- `static/css/styles.css` - `.scheduled-task-status` with state colors
+
+---
+
+### 2025-12-08: Scheduled Fetch Quotes at 9:07:10 AM IST (Mon-Fri)
+
+**Feature**: Auto-fetch quotes at market open time with frontend notifications.
+
+**Schedule**: 9:07:10 AM IST, Monday to Friday only.
+
+**Implementation** (`nse_url_test.py`):
+- `run_scheduled_fetch_quotes()` - Background task that sleeps until target time
+- Skips weekends automatically
+- Broadcasts progress via WebSocket to frontend
+- Validates session before running
+
+**WebSocket Events**:
+```javascript
+type: "scheduled_task"
+status: "started" | "progress" | "completed" | "failed" | "skipped"
+task: "fetch_quotes"
+progress: 0-100
+message: "Human readable status"
+```
+
+**Frontend can listen for these events to show notifications/progress.**
+
+---
+
+### 2025-12-08: Increased All Neo Login Timeouts for Linux Server Stability
+
+**Issue**: `/api/verify_totp` endpoint failing with timeout on Linux server after restart. Works fine locally on Windows.
+
+**Root Cause**: Network latency/SSL handshake delays on remote Linux server causing timeouts on Kotak API calls.
+
+**Fix**: Increased timeouts across all neo_login modules with explicit connect timeout:
+
+| File | Before | After |
+|------|--------|-------|
+| `neo_login/get_access_token.py` | `total=30` | `total=120, connect=60` |
+| `neo_login/get_token_totp.py` | `total=90` | `total=120, connect=60` |
+| `neo_login/get_final_session.py` | `total=30` | `total=120, connect=60` |
+| `neo_login/session_manager.py` | `total=10` | `total=60, connect=30` |
+
+**Impact**: TOTP authentication now handles slow network/SSL connections on remote Linux servers.
+
+---
+
 ### 2025-12-02: Increased TOTP Login Timeout to 90 Seconds
 
 **Issue**: TOTP authentication timing out with "Request timed out while logging in with TOTP" error.

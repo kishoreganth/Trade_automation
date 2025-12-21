@@ -172,7 +172,7 @@ class KotakSessionManager:
             }
             
             # Use the proven portfolio holdings endpoint for validation
-            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60, connect=30)) as session:
                 async with session.get(
                     f"{self.base_url}/Portfolio/1.0/portfolio/v1/holdings?alt=false",
                     headers=headers

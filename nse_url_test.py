@@ -464,8 +464,10 @@ async def lifespan(app: FastAPI):
     # sme_task = asyncio.create_task(run_periodic_task_sme())
     equities_task = asyncio.create_task(run_periodic_task_equities())
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
+    scheduled_quotes_task = asyncio.create_task(run_scheduled_fetch_quotes())
     
-    logger.info("✅ All background tasks started: Equities and Periodic Cleanup (24h interval)")
+    logger.info("✅ All background tasks started: Equities, Periodic Cleanup, and Scheduled Fetch Quotes")
+    logger.info(f"📅 Scheduled fetch quotes: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
     logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
     yield  # FastAPI will run the application here
@@ -486,6 +488,14 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             print("Equities task was cancelled")
             logger.info("Equities task was cancelled")
+    
+    if scheduled_quotes_task and not scheduled_quotes_task.done():
+        scheduled_quotes_task.cancel()
+        try:
+            await scheduled_quotes_task
+        except asyncio.CancelledError:
+            print("Scheduled quotes task was cancelled")
+            logger.info("Scheduled quotes task was cancelled")
     
 # Create the FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
@@ -787,7 +797,214 @@ logger.addHandler(console_handler)
 sme_task = None
 equities_task = None
 cleanup_task = None
+scheduled_quotes_task = None  # Scheduled fetch quotes task
 ai_processing_active = False  # Flag to pause background tasks during AI processing
+
+# Scheduled fetch quotes configuration
+SCHEDULED_FETCH_CONFIG = {
+    "enabled": True,
+    "hour": 9,
+    "minute": 7,
+    "second": 10,
+    "weekdays_only": True  # Mon-Fri only
+}
+
+async def run_scheduled_fetch_quotes():
+    """
+    Background task that runs fetch quotes at scheduled time (9:07:10 AM IST) Mon-Fri
+    """
+    logger.info(f"📅 Scheduled fetch quotes task started - will run at {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
+    
+    while True:
+        try:
+            if not SCHEDULED_FETCH_CONFIG["enabled"]:
+                await asyncio.sleep(60)
+                continue
+            
+            now = get_ist_now()
+            
+            # Check if weekday (Mon=0, Fri=4)
+            if SCHEDULED_FETCH_CONFIG["weekdays_only"] and now.weekday() > 4:
+                # Weekend - sleep until Monday
+                days_until_monday = 7 - now.weekday()
+                next_monday = now + timedelta(days=days_until_monday)
+                next_run = next_monday.replace(
+                    hour=SCHEDULED_FETCH_CONFIG["hour"],
+                    minute=SCHEDULED_FETCH_CONFIG["minute"],
+                    second=SCHEDULED_FETCH_CONFIG["second"],
+                    microsecond=0
+                )
+                sleep_seconds = (next_run - now).total_seconds()
+                logger.info(f"📅 Weekend - next scheduled fetch: {next_run.strftime('%Y-%m-%d %H:%M:%S')} IST")
+                await asyncio.sleep(max(sleep_seconds, 60))
+                continue
+            
+            # Calculate next run time today
+            target_time = now.replace(
+                hour=SCHEDULED_FETCH_CONFIG["hour"],
+                minute=SCHEDULED_FETCH_CONFIG["minute"],
+                second=SCHEDULED_FETCH_CONFIG["second"],
+                microsecond=0
+            )
+            
+            # If target time has passed today, schedule for tomorrow
+            if now >= target_time:
+                target_time = target_time + timedelta(days=1)
+                # Skip to Monday if tomorrow is weekend
+                if SCHEDULED_FETCH_CONFIG["weekdays_only"] and target_time.weekday() > 4:
+                    days_until_monday = 7 - target_time.weekday()
+                    target_time = target_time + timedelta(days=days_until_monday)
+            
+            sleep_seconds = (target_time - now).total_seconds()
+            logger.info(f"📅 Next scheduled fetch: {target_time.strftime('%Y-%m-%d %H:%M:%S')} IST (in {sleep_seconds/3600:.1f} hours)")
+            
+            # Sleep until target time
+            await asyncio.sleep(sleep_seconds)
+            
+            # Double-check we're at the right time
+            now = get_ist_now()
+            if now.weekday() > 4 and SCHEDULED_FETCH_CONFIG["weekdays_only"]:
+                continue
+            
+            # Broadcast start notification to frontend
+            logger.info("🚀 SCHEDULED FETCH QUOTES STARTING...")
+            await ws_manager.broadcast_message({
+                "type": "scheduled_task",
+                "status": "started",
+                "task": "fetch_quotes",
+                "message": "📊 Scheduled fetch quotes started (9:07:10 AM IST)",
+                "timestamp": now.isoformat()
+            })
+            
+            # Check if session is valid before running
+            session_file = "kotak_session.json"
+            if not os.path.exists(session_file):
+                logger.warning("⚠️ Scheduled fetch skipped - no active session")
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "skipped",
+                    "task": "fetch_quotes",
+                    "message": "⚠️ Scheduled fetch skipped - Please verify TOTP first",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                continue
+            
+            # Run the fetch quotes logic
+            try:
+                from get_quote import (
+                    get_gsheet_stocks_df, get_symbol_from_gsheet_stocks_df,
+                    flatten_quote_result_list, fetch_ohlc_from_quote_result,
+                    update_df_with_quote_ohlc, write_quote_ohlc_to_gsheet,
+                    KotakQuoteClient
+                )
+                from gsheet_stock_get import GSheetStockClient
+                
+                # Broadcast progress
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "progress",
+                    "task": "fetch_quotes",
+                    "progress": 10,
+                    "message": "📊 Loading stock data from Google Sheet...",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                
+                sheet_url = f"{os.getenv('BASE_SHEET_URL')}{os.getenv('sheet_gid')}"
+                gsheet_client = GSheetStockClient()
+                df = await gsheet_client.get_stock_dataframe(sheet_url)
+                all_rows = await get_gsheet_stocks_df(df)
+                
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "progress",
+                    "task": "fetch_quotes",
+                    "progress": 20,
+                    "message": f"📊 Creating symbols for {len(all_rows)} stocks...",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                
+                symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
+                total_symbols = len(symbols_list)
+                
+                # Fetch quotes in batches
+                quote_client = KotakQuoteClient()
+                all_quote_results = []
+                batch_size = 180
+                total_batches = (total_symbols + batch_size - 1) // batch_size
+                
+                for batch_num in range(total_batches):
+                    start_idx = batch_num * batch_size
+                    end_idx = min(start_idx + batch_size, total_symbols)
+                    batch_symbols = symbols_list[start_idx:end_idx]
+                    
+                    progress = 20 + int((batch_num / total_batches) * 50)
+                    await ws_manager.broadcast_message({
+                        "type": "scheduled_task",
+                        "status": "progress",
+                        "task": "fetch_quotes",
+                        "progress": progress,
+                        "message": f"📊 Fetching batch {batch_num + 1}/{total_batches} ({end_idx}/{total_symbols} stocks)...",
+                        "timestamp": get_ist_now().isoformat()
+                    })
+                    
+                    batch_result = await quote_client.get_quotes_concurrent(batch_symbols)
+                    all_quote_results.extend(batch_result)
+                    
+                    if batch_num < total_batches - 1:
+                        await asyncio.sleep(53)
+                
+                # Process results
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "progress",
+                    "task": "fetch_quotes",
+                    "progress": 80,
+                    "message": "📊 Processing quote results...",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                
+                flattened_quote_result = await flatten_quote_result_list(all_quote_results)
+                quote_ohlc = await fetch_ohlc_from_quote_result(flattened_quote_result)
+                df = await update_df_with_quote_ohlc(df, quote_ohlc, valid_indices)
+                
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "progress",
+                    "task": "fetch_quotes",
+                    "progress": 90,
+                    "message": "📊 Writing to Google Sheet...",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                
+                await write_quote_ohlc_to_gsheet(df, os.getenv("sheet_id"), os.getenv("sheet_gid"))
+                
+                # Broadcast completion
+                logger.info(f"✅ Scheduled fetch quotes completed - {total_symbols} stocks processed")
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "completed",
+                    "task": "fetch_quotes",
+                    "progress": 100,
+                    "message": f"✅ Scheduled fetch completed - {total_symbols} stocks updated",
+                    "timestamp": get_ist_now().isoformat()
+                })
+                
+            except Exception as e:
+                logger.error(f"❌ Scheduled fetch quotes failed: {e}")
+                await ws_manager.broadcast_message({
+                    "type": "scheduled_task",
+                    "status": "failed",
+                    "task": "fetch_quotes",
+                    "message": f"❌ Scheduled fetch failed: {str(e)}",
+                    "timestamp": get_ist_now().isoformat()
+                })
+            
+            # Small delay before next cycle
+            await asyncio.sleep(60)
+            
+        except Exception as e:
+            logger.error(f"Error in scheduled fetch quotes task: {e}")
+            await asyncio.sleep(60)
 
 csv_file_path = "files/all_corporate_announcements.csv"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"

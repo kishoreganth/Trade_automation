@@ -42,7 +42,7 @@ class KotakAccessTokenClient:
         }
         
         try:
-            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=30)) as session:
+            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=120, connect=60)) as session:
                 async with session.post(
                     f"{self.base_url}/oauth2/token",
                     data=payload,

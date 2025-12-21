@@ -55,7 +55,7 @@ class KotakTOTPClient:
         }
         
         try:
-            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=90)) as session:
+            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=120, connect=60)) as session:
                 async with session.post(
                     f"{self.base_url}/login/1.0/login/v6/totp/login",
                     json=payload,
