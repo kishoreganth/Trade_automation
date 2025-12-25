@@ -5,6 +5,39 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2025-12-24: Robust Scheduled Task with Short Sleep Intervals
+
+**Problem**: Long `asyncio.sleep()` (hours) was unreliable - task would crash silently after server restarts.
+
+**Solution**: Replaced long sleeps with 60-second polling intervals + heartbeat logging.
+
+**Key Changes** (`nse_url_test.py` - `run_scheduled_fetch_quotes()`):
+- **Short sleep**: Now sleeps 60 seconds, checks time, repeats (instead of sleeping for hours)
+- **Heartbeat log**: Logs every 30 minutes to confirm task is alive: `💓 Scheduled task heartbeat`
+- **Startup log**: Shows next scheduled run time with day name at startup
+- **Duplicate prevention**: `last_run_date` tracks if already ran today
+- **Auto-recovery**: Catches exceptions, logs recovery message, continues
+- **30-second window**: Runs if current time is within 30 seconds after 9:07:10 AM
+- **Weekend handling**: If restarted on Sat/Sun, calculates next Monday
+
+**Log Messages to Monitor**:
+```bash
+grep "heartbeat" app.log                    # Every 30 min
+grep "Next scheduled run" app.log           # At startup
+grep "Scheduled time reached" app.log       # When running
+grep "SCHEDULED FETCH QUOTES STARTING" app.log
+grep "Scheduled fetch quotes completed" app.log
+```
+
+**Frontend Status Persistence** (`static/js/dashboard.js`):
+- Status saved with DATE to localStorage
+- On page refresh: checks if saved date = today
+- If previous day → resets to "waiting" state (midnight reset)
+- If today → restores saved status (completed/failed/skipped stays visible)
+- Shows: "✓ Completed: 24 Dec at 09:07 AM"
+
+---
+
 ### 2025-12-21: Always-Visible Scheduled Task Status Indicator
 
 **Feature**: Persistent status indicator that ALWAYS shows the current/last state of scheduled fetch quotes.

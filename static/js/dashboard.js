@@ -1157,7 +1157,10 @@ function updateScheduledTaskIndicator(status, message, progress) {
     
     if (!indicator) return;
     
-    const currentTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const currentDate = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const dateTimeStr = `${currentDate} at ${currentTime}`;
     
     if (status === 'started' || status === 'progress') {
         // Show running state with progress
@@ -1165,38 +1168,42 @@ function updateScheduledTaskIndicator(status, message, progress) {
         titleEl.textContent = '🔄 Auto Fetch Running';
         messageEl.textContent = message;
         progressContainer.style.display = 'flex';
-        timeEl.textContent = `Started at ${currentTime}`;
+        timeEl.textContent = `Started: ${dateTimeStr}`;
         
         if (progress !== undefined) {
             progressBar.style.width = `${progress}%`;
             percentEl.textContent = `${progress}%`;
         }
     } else if (status === 'completed') {
-        // Show completed state (stays visible)
+        // Show completed state (stays visible until midnight)
         indicator.className = 'scheduled-task-status completed';
         titleEl.textContent = '✅ Auto Fetch Completed';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `Completed at ${currentTime}`;
+        timeEl.textContent = `✓ Completed: ${dateTimeStr}`;
     } else if (status === 'failed') {
         // Show failed state (stays visible)
         indicator.className = 'scheduled-task-status failed';
         titleEl.textContent = '❌ Auto Fetch Failed';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `Failed at ${currentTime}`;
+        timeEl.textContent = `✗ Failed: ${dateTimeStr}`;
     } else if (status === 'skipped') {
         // Show skipped state (stays visible)
         indicator.className = 'scheduled-task-status skipped';
         titleEl.textContent = '⚠️ Auto Fetch Skipped';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `Skipped at ${currentTime}`;
+        timeEl.textContent = `⚠ Skipped: ${dateTimeStr}`;
     }
     
-    // Save last status to localStorage for persistence across page refresh
+    // Save last status to localStorage with DATE for midnight reset check
     localStorage.setItem('scheduledTaskStatus', JSON.stringify({
-        status, message, progress, time: currentTime
+        status, 
+        message, 
+        progress, 
+        time: currentTime,
+        date: now.toDateString()  // Used for midnight reset check
     }));
 }
 
@@ -1214,24 +1221,42 @@ function restoreScheduledTaskStatus() {
             
             if (!indicator) return;
             
+            // Check if saved status is from today - if not, reset to waiting
+            const today = new Date().toDateString();
+            const savedDate = data.date || '';
+            
+            if (savedDate !== today) {
+                // Previous day's status - reset to waiting for new day
+                indicator.className = 'scheduled-task-status waiting';
+                titleEl.textContent = '⏳ Waiting for 9:07:10 AM';
+                messageEl.textContent = 'Next auto-fetch scheduled for market open';
+                progressContainer.style.display = 'none';
+                timeEl.textContent = '';
+                localStorage.removeItem('scheduledTaskStatus');  // Clear old status
+                return;
+            }
+            
+            // Today's status - restore it
+            const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+            
             if (data.status === 'completed') {
                 indicator.className = 'scheduled-task-status completed';
-                titleEl.textContent = '✅ Last Auto Fetch Completed';
+                titleEl.textContent = '✅ Auto Fetch Completed Today';
                 messageEl.textContent = data.message;
                 progressContainer.style.display = 'none';
-                timeEl.textContent = `Completed at ${data.time}`;
+                timeEl.textContent = `✓ Completed: ${dateStr} at ${data.time}`;
             } else if (data.status === 'failed') {
                 indicator.className = 'scheduled-task-status failed';
-                titleEl.textContent = '❌ Last Auto Fetch Failed';
+                titleEl.textContent = '❌ Auto Fetch Failed Today';
                 messageEl.textContent = data.message;
                 progressContainer.style.display = 'none';
-                timeEl.textContent = `Failed at ${data.time}`;
+                timeEl.textContent = `✗ Failed: ${dateStr} at ${data.time}`;
             } else if (data.status === 'skipped') {
                 indicator.className = 'scheduled-task-status skipped';
-                titleEl.textContent = '⚠️ Last Auto Fetch Skipped';
+                titleEl.textContent = '⚠️ Auto Fetch Skipped Today';
                 messageEl.textContent = data.message;
                 progressContainer.style.display = 'none';
-                timeEl.textContent = `Skipped at ${data.time}`;
+                timeEl.textContent = `⚠ Skipped: ${dateStr} at ${data.time}`;
             }
             // If running, don't restore - will get fresh update from WebSocket
         } catch (e) {
