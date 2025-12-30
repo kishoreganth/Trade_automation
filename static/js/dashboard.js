@@ -675,7 +675,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize WebSocket and load messages
     connectWebSocket();
-    restoreScheduledTaskStatus();
+    
+    // Always load config first (even if Place Order page not visible)
+    // This ensures scheduledTimeDisplay is updated everywhere
+    loadScheduledFetchConfig().then((config) => {
+        // Restore status after config is loaded
+        restoreScheduledTaskStatus();
+        
+        // If Place Order page is visible, also update the indicator
+        if (document.getElementById('placeOrderPage') && 
+            document.getElementById('placeOrderPage').style.display !== 'none') {
+            // Indicator will be updated by restoreScheduledTaskStatus
+        }
+    });
+    
     refreshMessages();
 });
 
@@ -1219,7 +1232,11 @@ function restoreScheduledTaskStatus() {
             const timeEl = document.getElementById('scheduledTaskTime');
             const progressContainer = document.getElementById('scheduledProgressContainer');
             
-            if (!indicator) return;
+            if (!indicator) {
+                // If indicator doesn't exist yet, try to load config anyway to update display
+                loadScheduledFetchConfig();
+                return;
+            }
             
             // Check if saved status is from today - if not, reset to waiting
             const today = new Date().toDateString();
@@ -1227,12 +1244,40 @@ function restoreScheduledTaskStatus() {
             
             if (savedDate !== today) {
                 // Previous day's status - reset to waiting for new day
-                indicator.className = 'scheduled-task-status waiting';
-                titleEl.textContent = '⏳ Waiting for 9:07:10 AM';
-                messageEl.textContent = 'Next auto-fetch scheduled for market open';
-                progressContainer.style.display = 'none';
-                timeEl.textContent = '';
-                localStorage.removeItem('scheduledTaskStatus');  // Clear old status
+                // Load current config to show correct time
+                loadScheduledFetchConfig().then(config => {
+                    if (config) {
+                        const hour = config.hour || 12;
+                        const minute = config.minute || 40;
+                        const second = config.second || 0;
+                        const period = hour >= 12 ? 'PM' : 'AM';
+                        const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                        const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+                        
+                        indicator.className = 'scheduled-task-status waiting';
+                        titleEl.textContent = `⏳ Waiting for ${timeStr}`;
+                        messageEl.textContent = 'Next auto-fetch scheduled';
+                        progressContainer.style.display = 'none';
+                        timeEl.textContent = '';
+                        localStorage.removeItem('scheduledTaskStatus');  // Clear old status
+                    } else {
+                        // Fallback to default
+                        indicator.className = 'scheduled-task-status waiting';
+                        titleEl.textContent = '⏳ Waiting for scheduled time';
+                        messageEl.textContent = 'Next auto-fetch scheduled';
+                        progressContainer.style.display = 'none';
+                        timeEl.textContent = '';
+                        localStorage.removeItem('scheduledTaskStatus');
+                    }
+                }).catch(() => {
+                    // Fallback on error
+                    indicator.className = 'scheduled-task-status waiting';
+                    titleEl.textContent = '⏳ Waiting for scheduled time';
+                    messageEl.textContent = 'Next auto-fetch scheduled';
+                    progressContainer.style.display = 'none';
+                    timeEl.textContent = '';
+                    localStorage.removeItem('scheduledTaskStatus');
+                });
                 return;
             }
             
@@ -1262,6 +1307,30 @@ function restoreScheduledTaskStatus() {
         } catch (e) {
             console.error('Error restoring scheduled task status:', e);
         }
+    } else {
+        // No saved status - load config and show waiting state
+        loadScheduledFetchConfig().then(config => {
+            const indicator = document.getElementById('scheduledTaskIndicator');
+            const titleEl = document.getElementById('scheduledTaskTitle');
+            const messageEl = document.getElementById('scheduledTaskMessage');
+            const progressContainer = document.getElementById('scheduledProgressContainer');
+            const timeEl = document.getElementById('scheduledTaskTime');
+            
+            if (config && indicator) {
+                const hour = config.hour || 12;
+                const minute = config.minute || 40;
+                const second = config.second || 0;
+                const period = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+                
+                indicator.className = 'scheduled-task-status waiting';
+                if (titleEl) titleEl.textContent = `⏳ Waiting for ${timeStr}`;
+                if (messageEl) messageEl.textContent = 'Next auto-fetch scheduled';
+                if (progressContainer) progressContainer.style.display = 'none';
+                if (timeEl) timeEl.textContent = '';
+            }
+        });
     }
 }
 
@@ -1412,4 +1481,138 @@ notificationStyles.textContent = `
     }
 `;
 document.head.appendChild(notificationStyles);
+
+// ============================================================================
+// SCHEDULED FETCH CONFIG MANAGEMENT
+// ============================================================================
+
+async function loadScheduledFetchConfig() {
+    try {
+        const response = await fetch('/api/scheduled_fetch_config');
+        const result = await response.json();
+        
+        if (result.success && result.config) {
+            const config = result.config;
+            updateScheduledTimeDisplay(config);
+            setupScheduleEditor(config);
+            return config; // Return config for chaining
+        } else {
+            console.error('Failed to load config:', result.message);
+            return null;
+        }
+    } catch (error) {
+        console.error('Error loading scheduled fetch config:', error);
+        return null;
+    }
+}
+
+function updateScheduledTimeDisplay(config) {
+    const displayEl = document.getElementById('scheduledTimeDisplay');
+    if (!displayEl) return;
+    
+    const hour = config.hour || 12;
+    const minute = config.minute || 40;
+    const second = config.second || 0;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+    
+    displayEl.textContent = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period} IST`;
+    
+    // Also update the scheduled task indicator title if it exists
+    const titleEl = document.getElementById('scheduledTaskTitle');
+    if (titleEl && titleEl.textContent.includes('Loading')) {
+        titleEl.textContent = `⏳ Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+        const messageEl = document.getElementById('scheduledTaskMessage');
+        if (messageEl) {
+            messageEl.textContent = 'Next auto-fetch scheduled';
+        }
+    }
+}
+
+function setupScheduleEditor(config) {
+    const editBtn = document.getElementById('editScheduleBtn');
+    const editor = document.getElementById('scheduleEditor');
+    const saveBtn = document.getElementById('saveScheduleBtn');
+    const cancelBtn = document.getElementById('cancelScheduleBtn');
+    
+    if (!editBtn || !editor) return;
+    
+    // Set initial values
+    document.getElementById('scheduleHour').value = config.hour || 12;
+    document.getElementById('scheduleMinute').value = config.minute || 40;
+    document.getElementById('scheduleSecond').value = config.second || 0;
+    document.getElementById('scheduleEnabled').checked = config.enabled !== false;
+    document.getElementById('scheduleWeekdaysOnly').checked = config.weekdays_only !== false;
+    
+    // Toggle editor
+    editBtn.addEventListener('click', () => {
+        editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+        editor.style.display = 'none';
+        // Reset to current config
+        document.getElementById('scheduleHour').value = config.hour || 12;
+        document.getElementById('scheduleMinute').value = config.minute || 40;
+        document.getElementById('scheduleSecond').value = config.second || 0;
+        document.getElementById('scheduleEnabled').checked = config.enabled !== false;
+        document.getElementById('scheduleWeekdaysOnly').checked = config.weekdays_only !== false;
+    });
+    
+    // Save config
+    saveBtn.addEventListener('click', async () => {
+        const hour = parseInt(document.getElementById('scheduleHour').value);
+        const minute = parseInt(document.getElementById('scheduleMinute').value);
+        const second = parseInt(document.getElementById('scheduleSecond').value);
+        const enabled = document.getElementById('scheduleEnabled').checked;
+        const weekdaysOnly = document.getElementById('scheduleWeekdaysOnly').checked;
+        
+        // Validate
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+            alert('Invalid time values. Hour: 0-23, Minute: 0-59, Second: 0-59');
+            return;
+        }
+        
+        saveBtn.disabled = true;
+        saveBtn.textContent = '💾 Saving...';
+        
+        try {
+            const response = await fetch('/api/scheduled_fetch_config', {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    hour,
+                    minute,
+                    second,
+                    enabled,
+                    weekdays_only: weekdaysOnly
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                showNotificationToast(result.message, 'success');
+                updateScheduledTimeDisplay({ hour, minute, second, enabled, weekdays_only: weekdaysOnly });
+                editor.style.display = 'none';
+                
+                // Update the waiting message in scheduled task indicator
+                const titleEl = document.getElementById('scheduledTaskTitle');
+                if (titleEl) {
+                    const period = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                    titleEl.textContent = `⏳ Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+                }
+            } else {
+                showNotificationToast(result.message || 'Failed to update schedule', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving schedule config:', error);
+            showNotificationToast('Error saving schedule configuration', 'error');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Save';
+        }
+    });
+}
 

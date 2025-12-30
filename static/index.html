@@ -248,7 +248,39 @@
                                 <h4>📊 Get Quotes</h4>
                                 <p>Fetch latest market quotes (3-4 mins)</p>
                                 <div class="scheduled-info" style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 6px 10px; margin-top: 8px; font-size: 11px; color: #818cf8;">
-                                    ⏰ Auto-scheduled: <strong>9:07:10 AM IST</strong> (Mon-Fri)
+                                    ⏰ Auto-scheduled: <strong id="scheduledTimeDisplay">12:40:00 PM IST</strong> (Mon-Fri)
+                                    <button id="editScheduleBtn" style="margin-left: 8px; padding: 2px 6px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 4px; color: #818cf8; cursor: pointer; font-size: 10px;">✏️ Edit</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Schedule Editor (hidden by default) -->
+                            <div id="scheduleEditor" style="display: none; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; padding: 12px; margin-top: 8px;">
+                                <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #6366f1;">Edit Scheduled Time</div>
+                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <label style="font-size: 11px; color: #6b7280;">Hour:</label>
+                                        <input type="number" id="scheduleHour" min="0" max="23" value="12" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <label style="font-size: 11px; color: #6b7280;">Min:</label>
+                                        <input type="number" id="scheduleMinute" min="0" max="59" value="40" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <label style="font-size: 11px; color: #6b7280;">Sec:</label>
+                                        <input type="number" id="scheduleSecond" min="0" max="59" value="0" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <input type="checkbox" id="scheduleEnabled" checked style="width: 16px; height: 16px;">
+                                        <label style="font-size: 11px; color: #6b7280;">Enabled</label>
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <input type="checkbox" id="scheduleWeekdaysOnly" checked style="width: 16px; height: 16px;">
+                                        <label style="font-size: 11px; color: #6b7280;">Weekdays Only</label>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                                    <button id="saveScheduleBtn" style="padding: 4px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">💾 Save</button>
+                                    <button id="cancelScheduleBtn" style="padding: 4px 12px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">✖ Cancel</button>
                                 </div>
                             </div>
                             
@@ -258,8 +290,8 @@
                                     <div class="status-dot"></div>
                                 </div>
                                 <div class="status-info">
-                                    <div class="status-title" id="scheduledTaskTitle">⏳ Waiting for 9:07:10 AM</div>
-                                    <div class="status-message" id="scheduledTaskMessage">Next auto-fetch scheduled for market open</div>
+                                    <div class="status-title" id="scheduledTaskTitle">⏳ Loading...</div>
+                                    <div class="status-message" id="scheduledTaskMessage">Loading schedule configuration...</div>
                                     <div class="status-progress" id="scheduledProgressContainer" style="display: none;">
                                         <div class="progress-bar-mini">
                                             <div class="progress-fill-mini" id="scheduledTaskProgress" style="width: 0%"></div>

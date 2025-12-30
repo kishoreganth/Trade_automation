@@ -445,6 +445,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Dashboard database initialized")
     
+    # Load scheduled fetch config from config.json (single source of truth)
+    load_scheduled_fetch_config_sync()
+    
     # Load Google Sheets data asynchronously during startup
     logger.info("Loading Google Sheets data...")
     await asyncio.gather(
@@ -653,6 +656,29 @@ async def init_db():
             )
         """)
         
+        # Create scheduled_fetch_config table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_fetch_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                hour INTEGER NOT NULL DEFAULT 12,
+                minute INTEGER NOT NULL DEFAULT 40,
+                second INTEGER NOT NULL DEFAULT 0,
+                weekdays_only INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        # Initialize default config if not exists
+        cursor = await db.execute("SELECT COUNT(*) FROM scheduled_fetch_config")
+        config_count = (await cursor.fetchone())[0]
+        if config_count == 0:
+            await db.execute("""
+                INSERT INTO scheduled_fetch_config (enabled, hour, minute, second, weekdays_only, updated_at)
+                VALUES (1, 12, 40, 0, 1, ?)
+            """, (get_ist_now().isoformat(),))
+            logger.info("Initialized default scheduled fetch config: 12:40:00 IST (Mon-Fri)")
+        
         # Check if option column exists, if not add it
         cursor = await db.execute("PRAGMA table_info(messages)")
         columns = await cursor.fetchall()
@@ -800,21 +826,90 @@ cleanup_task = None
 scheduled_quotes_task = None  # Scheduled fetch quotes task
 ai_processing_active = False  # Flag to pause background tasks during AI processing
 
-# Scheduled fetch quotes configuration
+# Scheduled fetch quotes configuration (loaded from config.json - single source of truth)
+CONFIG_FILE = "config.json"
 SCHEDULED_FETCH_CONFIG = {
     "enabled": True,
-    "hour": 9,
-    "minute": 7,
-    "second": 10,
-    "weekdays_only": True  # Mon-Fri only
+    "hour": 12,
+    "minute": 40,
+    "second": 0,
+    "weekdays_only": True
 }
+
+def load_scheduled_fetch_config_sync():
+    """Load scheduled fetch config from config.json file (synchronous)"""
+    global SCHEDULED_FETCH_CONFIG
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                scheduled_config = config_data.get('scheduled_fetch', {})
+                SCHEDULED_FETCH_CONFIG = {
+                    "enabled": scheduled_config.get("enabled", True),
+                    "hour": scheduled_config.get("hour", 12),
+                    "minute": scheduled_config.get("minute", 40),
+                    "second": scheduled_config.get("second", 0),
+                    "weekdays_only": scheduled_config.get("weekdays_only", True)
+                }
+                logger.info(f"✅ Loaded scheduled fetch config from {CONFIG_FILE}: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST")
+            return True
+        else:
+            logger.warning(f"⚠️ {CONFIG_FILE} not found, using defaults: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Error loading {CONFIG_FILE}: {e}")
+        return False
+
+async def load_scheduled_fetch_config():
+    """Load scheduled fetch config from config.json file (async wrapper)"""
+    await asyncio.to_thread(load_scheduled_fetch_config_sync)
+
+def save_scheduled_fetch_config(config: Dict) -> bool:
+    """Save scheduled fetch config to config.json file"""
+    try:
+        # Load existing config or create new
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        else:
+            config_data = {}
+        
+        # Update scheduled_fetch section
+        config_data['scheduled_fetch'] = {
+            "enabled": config.get("enabled", True),
+            "hour": config.get("hour", 12),
+            "minute": config.get("minute", 40),
+            "second": config.get("second", 0),
+            "weekdays_only": config.get("weekdays_only", True)
+        }
+        
+        # Save to file
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2, ensure_ascii=False)
+        
+        # Update global config
+        global SCHEDULED_FETCH_CONFIG
+        SCHEDULED_FETCH_CONFIG = config_data['scheduled_fetch']
+        
+        logger.info(f"✅ Saved scheduled fetch config to {CONFIG_FILE}: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error saving {CONFIG_FILE}: {e}")
+        return False
+
+async def update_scheduled_fetch_config(config: Dict):
+    """Update scheduled fetch config in config.json file"""
+    return await asyncio.to_thread(save_scheduled_fetch_config, config)
 
 async def run_scheduled_fetch_quotes():
     """
-    Background task that runs fetch quotes at scheduled time (9:07:10 AM IST) Mon-Fri
+    Background task that runs fetch quotes at scheduled time from config.json
     Uses short sleep intervals (60s) for reliability instead of long sleeps.
     Includes heartbeat logging and auto-recovery.
+    Reloads config.json on each loop to pick up changes.
     """
+    # Load config first
+    load_scheduled_fetch_config_sync()
     target_time_str = f"{SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d}"
     logger.info(f"📅 Scheduled fetch quotes task started - will run at {target_time_str} IST (Mon-Fri)")
     
@@ -843,6 +938,9 @@ async def run_scheduled_fetch_quotes():
     
     while True:
         try:
+            # Reload config from file every loop to pick up changes
+            load_scheduled_fetch_config_sync()
+            
             if not SCHEDULED_FETCH_CONFIG["enabled"]:
                 await asyncio.sleep(60)
                 continue
@@ -3484,6 +3582,72 @@ async def get_active_jobs():
             "success": False,
             "message": str(e)
         }
+
+@app.get("/api/scheduled_fetch_config")
+async def get_scheduled_fetch_config():
+    """Get current scheduled fetch configuration from config.json"""
+    try:
+        # Reload from file to get latest (in case file was edited manually)
+        load_scheduled_fetch_config_sync()
+        return {
+            "success": True,
+            "config": SCHEDULED_FETCH_CONFIG
+        }
+    except Exception as e:
+        logger.error(f"Error getting scheduled fetch config: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+@app.put("/api/scheduled_fetch_config")
+async def update_scheduled_fetch_config_endpoint(request: Request):
+    """Update scheduled fetch configuration in config.json"""
+    try:
+        user = await verify_session(request)
+        if not user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        data = await request.json()
+        
+        # Validate input
+        hour = int(data.get("hour", 12))
+        minute = int(data.get("minute", 40))
+        second = int(data.get("second", 0))
+        enabled = bool(data.get("enabled", True))
+        weekdays_only = bool(data.get("weekdays_only", True))
+        
+        if not (0 <= hour <= 23):
+            raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
+        if not (0 <= minute <= 59):
+            raise HTTPException(status_code=400, detail="Minute must be between 0 and 59")
+        if not (0 <= second <= 59):
+            raise HTTPException(status_code=400, detail="Second must be between 0 and 59")
+        
+        config = {
+            "enabled": enabled,
+            "hour": hour,
+            "minute": minute,
+            "second": second,
+            "weekdays_only": weekdays_only
+        }
+        
+        success = await update_scheduled_fetch_config(config)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Scheduled fetch config updated in config.json: {hour:02d}:{minute:02d}:{second:02d} IST",
+                "config": SCHEDULED_FETCH_CONFIG
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update config.json")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating scheduled fetch config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # @app.get("/api/nse_cm_scrip_data")
 # async def get_nse_cm_scrip_data():
