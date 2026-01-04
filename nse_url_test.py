@@ -819,6 +819,18 @@ for handler in logger.handlers[:]:
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+# Separate logger for scheduled fetch events (start/completion only)
+scheduled_fetch_logger = logging.getLogger('scheduled_fetch')
+scheduled_fetch_logger.setLevel(logging.INFO)
+scheduled_fetch_logger.propagate = False  # Don't propagate to root logger
+
+# File handler for scheduled fetch log
+scheduled_fetch_handler = logging.FileHandler('scheduled_fetch.log', encoding='utf-8')
+scheduled_fetch_handler.setLevel(logging.INFO)
+scheduled_fetch_formatter = logging.Formatter('%(asctime)s - %(message)s')
+scheduled_fetch_handler.setFormatter(scheduled_fetch_formatter)
+scheduled_fetch_logger.addHandler(scheduled_fetch_handler)
+
 # Store task references globally
 sme_task = None
 equities_task = None
@@ -976,18 +988,19 @@ async def run_scheduled_fetch_quotes():
             target_seconds = target_hour * 3600 + target_min * 60 + target_sec
             current_seconds = current_hour * 3600 + current_min * 60 + current_sec
             
-            # Check if we're within the execution window (0-30 seconds after target time)
+            # Check if we're within the execution window (0-20 seconds after target time)
             time_diff = current_seconds - target_seconds
             today_date = now.date()
             
             should_run = (
-                0 <= time_diff <= 30 and  # Within 30 second window after target
+                0 <= time_diff <= 20 and  # Within 20 second window after target
                 last_run_date != today_date and  # Haven't run today
                 is_weekday  # Is a weekday
             )
             
             if should_run:
                 logger.info(f"⏰ Scheduled time reached! Running fetch quotes at {now.strftime('%Y-%m-%d %H:%M:%S')} IST")
+                scheduled_fetch_logger.info(f"STARTED - {now.strftime('%Y-%m-%d %H:%M:%S')} IST")
                 last_run_date = today_date  # Mark as run for today
             
                 # Broadcast start notification to frontend
@@ -1004,6 +1017,7 @@ async def run_scheduled_fetch_quotes():
                 session_file = "kotak_session.json"
                 if not os.path.exists(session_file):
                     logger.warning("⚠️ Scheduled fetch skipped - no active session")
+                    scheduled_fetch_logger.info(f"SKIPPED - {now.strftime('%Y-%m-%d %H:%M:%S')} IST - No active session")
                     await ws_manager.broadcast_message({
                         "type": "scheduled_task",
                         "status": "skipped",
@@ -1103,6 +1117,7 @@ async def run_scheduled_fetch_quotes():
                         
                         # Broadcast completion
                         logger.info(f"✅ Scheduled fetch quotes completed - {total_symbols} stocks processed")
+                        scheduled_fetch_logger.info(f"COMPLETED - {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')} IST - {total_symbols} stocks processed")
                         await ws_manager.broadcast_message({
                             "type": "scheduled_task",
                             "status": "completed",
@@ -1114,6 +1129,7 @@ async def run_scheduled_fetch_quotes():
                         
                     except Exception as e:
                         logger.error(f"❌ Scheduled fetch quotes failed: {e}")
+                        scheduled_fetch_logger.info(f"FAILED - {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')} IST - {str(e)}")
                         await ws_manager.broadcast_message({
                             "type": "scheduled_task",
                             "status": "failed",
@@ -1122,13 +1138,13 @@ async def run_scheduled_fetch_quotes():
                             "timestamp": get_ist_now().isoformat()
                         })
             
-            # Always sleep 60 seconds before checking again (short intervals for reliability)
-            await asyncio.sleep(60)
+            # Always sleep 10 seconds before checking again (frequent checks to catch exact time)
+            await asyncio.sleep(10)
             
         except Exception as e:
             logger.error(f"Error in scheduled fetch quotes task: {e}")
-            logger.info("🔄 Scheduled task recovering in 60 seconds...")
-            await asyncio.sleep(60)
+            logger.info("🔄 Scheduled task recovering in 10 seconds...")
+            await asyncio.sleep(10)
 
 csv_file_path = "files/all_corporate_announcements.csv"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
