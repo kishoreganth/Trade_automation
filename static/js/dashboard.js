@@ -4,6 +4,7 @@ let financialMetrics = [];
 let aiAnalysisResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
+let readMessages = new Set(); // Track read message IDs
 
 // Check authentication on page load with server-side validation
 async function checkAuth() {
@@ -172,6 +173,7 @@ function addNewMessage(message) {
         uniqueSymbols.add(message.symbol);
     }
     updateStats();
+    updateUnreadBadges();
     renderMessages();
 }
 
@@ -182,6 +184,7 @@ function loadMessages(messagesList) {
         if (msg.symbol) uniqueSymbols.add(msg.symbol);
     });
     updateStats();
+    updateUnreadBadges();
     renderMessages();
 }
 
@@ -224,6 +227,18 @@ function renderMessages() {
     const symbolFilter = document.getElementById('symbolFilter').value.toLowerCase();
     const limit = parseInt(document.getElementById('limitSelect').value);
     
+    // Show/hide OPTION and CHAT ID columns based on selected filter
+    const showOptionColumn = selectedOption === 'all';
+    const optionHeader = document.getElementById('optionHeader');
+    const chatIdHeader = document.getElementById('chatIdHeader');
+    
+    if (optionHeader) {
+        optionHeader.style.display = showOptionColumn ? '' : 'none';
+    }
+    if (chatIdHeader) {
+        chatIdHeader.style.display = showOptionColumn ? '' : 'none';
+    }
+    
     let filteredMessages = messages;
     
     // Filter by symbol
@@ -244,10 +259,13 @@ function renderMessages() {
         filteredMessages = filteredMessages.slice(0, limit);
     }
     
+    // Calculate colspan based on whether columns are visible
+    const colspan = showOptionColumn ? 7 : 5;
+    
     if (filteredMessages.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="no-messages">
+                <td colspan="${colspan}" class="no-messages">
                     ${symbolFilter || selectedOption !== 'all' ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
                 </td>
             </tr>
@@ -265,15 +283,18 @@ function renderMessages() {
             `<span class="option-badge" style="background: #27ae60; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${msg.option.replace('_', ' ').toUpperCase()}</span>` : 
             '-';
         
+        const optionCell = showOptionColumn ? `<td>${optionBadge}</td>` : '';
+        const chatIdCell = showOptionColumn ? `<td>${msg.chat_id}</td>` : '';
+        
         return `
             <tr class="new-message">
                 <td class="timestamp">${time.toLocaleString()}</td>
                 <td>${msg.symbol ? `<span class="symbol-badge">${msg.symbol}</span>` : '-'}</td>
                 <td>${msg.company_name || '-'}</td>
                 <td class="message-cell" title="${msg.description}">${msg.description || '-'}</td>
-                <td>${optionBadge}</td>
+                ${optionCell}
                 <td>${fileLink}</td>
-                <td>${msg.chat_id}</td>
+                ${chatIdCell}
             </tr>
         `;
     }).join('');
@@ -358,6 +379,67 @@ function refreshData() {
 
 // Clear messages functionality removed by user request
 
+// Calculate unread count for a specific option
+function getUnreadCount(option) {
+    if (option === 'all') {
+        return messages.filter(msg => {
+            const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
+            return !readMessages.has(msgId);
+        }).length;
+    }
+    return messages.filter(msg => {
+        const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
+        return msg.option === option && !readMessages.has(msgId);
+    }).length;
+}
+
+// Update unread badges on all filter buttons
+function updateUnreadBadges() {
+    // Only show badges for message-related filters (not AI Analyzer or Place Order)
+    const messageOptions = ['all', 'quarterly_result', 'investor_presentation', 'concall', 
+                           'monthly_business_update', 'fund_raising', 'result_concall'];
+    
+    messageOptions.forEach(option => {
+        const filterButton = document.querySelector(`[data-option="${option}"]`);
+        if (!filterButton) return;
+        
+        // Remove existing badge
+        const existingBadge = filterButton.querySelector('.unread-badge');
+        if (existingBadge) {
+            existingBadge.remove();
+        }
+        
+        // Calculate unread count
+        const unreadCount = getUnreadCount(option);
+        
+        // Add badge if there are unread messages
+        if (unreadCount > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'unread-badge';
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount.toString();
+            filterButton.appendChild(badge);
+        }
+    });
+}
+
+// Mark messages as read when viewing a filter
+function markMessagesAsRead(option) {
+    if (option === 'all') {
+        messages.forEach(msg => {
+            const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
+            readMessages.add(msgId);
+        });
+    } else {
+        messages.forEach(msg => {
+            if (msg.option === option) {
+                const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
+                readMessages.add(msgId);
+            }
+        });
+    }
+    updateUnreadBadges();
+}
+
 // Option filter functionality
 function handleOptionFilter(optionValue) {
     // Remove active class from all filters
@@ -367,6 +449,9 @@ function handleOptionFilter(optionValue) {
     
     // Add active class to selected filter
     document.querySelector(`[data-option="${optionValue}"]`).classList.add('active');
+    
+    // Mark messages as read when viewing
+    markMessagesAsRead(optionValue);
     
     // Update selected option
     selectedOption = optionValue;
@@ -417,6 +502,9 @@ function handleOptionFilter(optionValue) {
         aiAnalyzerContainer.style.display = 'none';
         renderMessages();
     }
+    
+    // Update badges after filter change
+    updateUnreadBadges();
 }
 
 // AI Analyzer Functions
@@ -675,6 +763,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize WebSocket and load messages
     connectWebSocket();
+    
+    // Initialize unread badges after messages are loaded
+    setTimeout(() => {
+        updateUnreadBadges();
+    }, 1000);
     
     // Always load config first (even if Place Order page not visible)
     // This ensures scheduledTimeDisplay is updated everywhere
@@ -1286,10 +1379,10 @@ function restoreScheduledTaskStatus() {
             
             if (data.status === 'completed') {
                 indicator.className = 'scheduled-task-status completed';
-                titleEl.textContent = '✅ Auto Fetch Completed Today';
-                messageEl.textContent = data.message;
+                titleEl.textContent = '✅ Already Fetched Today';
+                messageEl.textContent = data.message || 'Auto-fetch completed successfully';
                 progressContainer.style.display = 'none';
-                timeEl.textContent = `✓ Completed: ${dateStr} at ${data.time}`;
+                timeEl.textContent = `Already fetched: ${dateStr} at ${data.time}`;
             } else if (data.status === 'failed') {
                 indicator.className = 'scheduled-task-status failed';
                 titleEl.textContent = '❌ Auto Fetch Failed Today';
@@ -1308,7 +1401,7 @@ function restoreScheduledTaskStatus() {
             console.error('Error restoring scheduled task status:', e);
         }
     } else {
-        // No saved status - load config and show waiting state
+        // No saved status - load config and check if already fetched today from log
         loadScheduledFetchConfig().then(config => {
             const indicator = document.getElementById('scheduledTaskIndicator');
             const titleEl = document.getElementById('scheduledTaskTitle');
@@ -1317,18 +1410,21 @@ function restoreScheduledTaskStatus() {
             const timeEl = document.getElementById('scheduledTaskTime');
             
             if (config && indicator) {
-                const hour = config.hour || 12;
-                const minute = config.minute || 40;
-                const second = config.second || 0;
-                const period = hour >= 12 ? 'PM' : 'AM';
-                const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
-                const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
-                
-                indicator.className = 'scheduled-task-status waiting';
-                if (titleEl) titleEl.textContent = `⏳ Waiting for ${timeStr}`;
-                if (messageEl) messageEl.textContent = 'Next auto-fetch scheduled';
-                if (progressContainer) progressContainer.style.display = 'none';
-                if (timeEl) timeEl.textContent = '';
+                // If checkIfAlreadyFetchedToday didn't set status, show waiting
+                if (indicator.className === 'scheduled-task-status' || !indicator.className.includes('completed')) {
+                    const hour = config.hour || 12;
+                    const minute = config.minute || 40;
+                    const second = config.second || 0;
+                    const period = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+                    const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+                    
+                    indicator.className = 'scheduled-task-status waiting';
+                    if (titleEl) titleEl.textContent = `⏳ Waiting for ${timeStr}`;
+                    if (messageEl) messageEl.textContent = 'Next auto-fetch scheduled';
+                    if (progressContainer) progressContainer.style.display = 'none';
+                    if (timeEl) timeEl.textContent = '';
+                }
             }
         });
     }
@@ -1495,6 +1591,12 @@ async function loadScheduledFetchConfig() {
             const config = result.config;
             updateScheduledTimeDisplay(config);
             setupScheduleEditor(config);
+            
+            // Check if already fetched today from log file
+            if (config.last_completion) {
+                checkIfAlreadyFetchedToday(config.last_completion, config);
+            }
+            
             return config; // Return config for chaining
         } else {
             console.error('Failed to load config:', result.message);
@@ -1503,6 +1605,57 @@ async function loadScheduledFetchConfig() {
     } catch (error) {
         console.error('Error loading scheduled fetch config:', error);
         return null;
+    }
+}
+
+function checkIfAlreadyFetchedToday(lastCompletionStr, config) {
+    try {
+        const indicator = document.getElementById('scheduledTaskIndicator');
+        const titleEl = document.getElementById('scheduledTaskTitle');
+        const messageEl = document.getElementById('scheduledTaskMessage');
+        const timeEl = document.getElementById('scheduledTaskTime');
+        const progressContainer = document.getElementById('scheduledProgressContainer');
+        
+        if (!indicator || !titleEl) return;
+        
+        // Parse last completion time (format: "2026-01-02 09:15:31")
+        const lastCompletion = new Date(lastCompletionStr.replace(' ', 'T') + '+05:30'); // IST
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const lastCompletionDate = new Date(lastCompletion);
+        lastCompletionDate.setHours(0, 0, 0, 0);
+        
+        // Check if last completion was today
+        if (lastCompletionDate.getTime() === today.getTime()) {
+            // Already fetched today
+            const timeStr = lastCompletion.toLocaleTimeString('en-IN', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: true 
+            });
+            const dateStr = lastCompletion.toLocaleDateString('en-IN', { 
+                day: '2-digit', 
+                month: 'short' 
+            });
+            
+            indicator.className = 'scheduled-task-status completed';
+            titleEl.textContent = '✅ Already Fetched Today';
+            messageEl.textContent = 'Auto-fetch completed successfully';
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (timeEl) timeEl.textContent = `Already fetched: ${dateStr} at ${timeStr} IST`;
+            
+            // Save to localStorage
+            localStorage.setItem('scheduledTaskStatus', JSON.stringify({
+                status: 'completed',
+                message: 'Auto-fetch completed successfully',
+                time: timeStr,
+                date: new Date().toDateString()
+            }));
+        }
+    } catch (error) {
+        console.error('Error checking last completion:', error);
     }
 }
 

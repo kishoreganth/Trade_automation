@@ -3605,9 +3605,39 @@ async def get_scheduled_fetch_config():
     try:
         # Reload from file to get latest (in case file was edited manually)
         load_scheduled_fetch_config_sync()
+        
+        # Get last completion time from scheduled_fetch.log
+        last_completion = None
+        log_file = "scheduled_fetch.log"
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # Search backwards for last COMPLETED entry
+                    for line in reversed(lines):
+                        if 'COMPLETED' in line:
+                            # Extract timestamp from log line
+                            # Format: 2026-01-02 09:15:31,456 - COMPLETED - 2026-01-02 09:15:31 IST
+                            parts = line.split(' - ')
+                            if len(parts) >= 2:
+                                timestamp_part = parts[0].strip()
+                                # Parse: 2026-01-02 09:15:31,456
+                                try:
+                                    dt_str = timestamp_part.split(',')[0]  # Remove milliseconds
+                                    last_completion = dt_str
+                                except:
+                                    pass
+                            break
+            except Exception as e:
+                logger.debug(f"Could not read scheduled_fetch.log: {e}")
+        
+        config_data = SCHEDULED_FETCH_CONFIG.copy()
+        if last_completion:
+            config_data['last_completion'] = last_completion
+        
         return {
             "success": True,
-            "config": SCHEDULED_FETCH_CONFIG
+            "config": config_data
         }
     except Exception as e:
         logger.error(f"Error getting scheduled fetch config: {e}")
