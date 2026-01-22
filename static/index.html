@@ -308,6 +308,10 @@
                                     GET QUOTES (Manual)
                                 </button>
                             </div>
+                            <div class="last-action-hint" id="lastQuotesHint">
+                                <span class="hint-icon">🕐</span>
+                                <span class="hint-text">Last fetch: <span id="lastQuotesTime">--</span></span>
+                            </div>
                             
                             <div class="quotes-status" id="quotesStatus" style="display: none;">
                                 <div class="status-icon" id="quotesStatusIcon">⏳</div>
@@ -381,6 +385,10 @@
                                     PLACE ORDERS
                                 </button>
                             </div>
+                            <div class="last-action-hint" id="lastOrderHint">
+                                <span class="hint-icon">🕐</span>
+                                <span class="hint-text">Last order: <span id="lastOrderTime">--</span></span>
+                            </div>
                             
                             <div class="order-status" id="orderStatus" style="display: none;">
                                 <div class="status-icon" id="orderStatusIcon">⏳</div>
@@ -389,6 +397,28 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Place Order Confirmation Modal -->
+    <div class="confirm-modal-overlay" id="placeOrderModal" style="display: none;">
+        <div class="confirm-modal">
+            <div class="confirm-modal-header">
+                <span class="confirm-modal-icon">⚠️</span>
+                <h3>Confirm Order Execution</h3>
+            </div>
+            <div class="confirm-modal-body">
+                <p>Are you sure you want to <strong>execute all orders</strong> from the sheet?</p>
+                <p class="confirm-modal-warning">This will place BUY and SELL orders for all stocks in the market data table.</p>
+            </div>
+            <div class="confirm-modal-footer">
+                <button class="confirm-modal-btn cancel" id="cancelOrderBtn">
+                    <span>✕</span> Cancel
+                </button>
+                <button class="confirm-modal-btn confirm" id="confirmOrderBtn">
+                    <span>🚀</span> Yes, Place Orders
+                </button>
             </div>
         </div>
     </div>

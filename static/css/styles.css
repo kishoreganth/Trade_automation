@@ -1354,3 +1354,190 @@ tr:hover {
     min-width: 40px;
     text-align: right;
 }
+
+/* ============================================
+   CONFIRMATION MODAL STYLES
+   ============================================ */
+
+.confirm-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { 
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+    to { 
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.confirm-modal {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 16px;
+    padding: 0;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(251, 191, 36, 0.1);
+    animation: slideIn 0.3s ease;
+    overflow: hidden;
+}
+
+.confirm-modal-header {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.1));
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.confirm-modal-icon {
+    font-size: 1.8rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.confirm-modal-header h3 {
+    margin: 0;
+    color: #fbbf24;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.confirm-modal-body {
+    padding: 24px;
+    text-align: center;
+}
+
+.confirm-modal-body p {
+    color: #e2e8f0;
+    font-size: 1rem;
+    margin: 0 0 12px 0;
+    line-height: 1.6;
+}
+
+.confirm-modal-body p strong {
+    color: #fbbf24;
+}
+
+.confirm-modal-warning {
+    color: #94a3b8 !important;
+    font-size: 0.9rem !important;
+    padding: 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 8px;
+    border-left: 3px solid #fbbf24;
+}
+
+.confirm-modal-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.confirm-modal-btn {
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    min-width: 140px;
+    justify-content: center;
+}
+
+.confirm-modal-btn.cancel {
+    background: rgba(100, 116, 139, 0.3);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.confirm-modal-btn.cancel:hover {
+    background: rgba(100, 116, 139, 0.5);
+    color: #e2e8f0;
+    transform: translateY(-2px);
+}
+
+.confirm-modal-btn.confirm {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.confirm-modal-btn.confirm:hover {
+    background: linear-gradient(135deg, #34d399, #10b981);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+/* ============================================
+   LAST ACTION HINT STYLES
+   ============================================ */
+
+.last-action-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: rgba(100, 116, 139, 0.15);
+    border-radius: 6px;
+    border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+.last-action-hint .hint-icon {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.last-action-hint .hint-text {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.last-action-hint .hint-text span {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+/* Success state - show green when recently completed */
+.last-action-hint.recent {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.last-action-hint.recent .hint-text span {
+    color: #34d399;
+}

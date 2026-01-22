@@ -493,6 +493,7 @@ function handleOptionFilter(optionValue) {
         // Check session status and load sheet data when page loads
         checkSessionStatus();
         loadPlaceOrderSheet();
+        loadLastActions();  // Load last action timestamps
     } else {
         // Show messages table for all other options
         document.querySelector('.content-area').style.display = 'flex';
@@ -804,6 +805,118 @@ function setupOpenSheetButton() {
     }
 }
 
+// ============================================
+// LAST ACTIONS TRACKING (persistent timestamps)
+// ============================================
+
+// Load and display last action timestamps
+async function loadLastActions() {
+    try {
+        const response = await fetch('/api/last_actions');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update quotes hint
+            const lastQuotesEl = document.getElementById('lastQuotesTime');
+            const lastQuotesHint = document.getElementById('lastQuotesHint');
+            if (lastQuotesEl && data.last_quotes) {
+                lastQuotesEl.textContent = formatLastActionTime(data.last_quotes);
+                // Add 'recent' class if within last hour
+                if (isRecent(data.last_quotes)) {
+                    lastQuotesHint.classList.add('recent');
+                } else {
+                    lastQuotesHint.classList.remove('recent');
+                }
+            }
+            
+            // Update order hint
+            const lastOrderEl = document.getElementById('lastOrderTime');
+            const lastOrderHint = document.getElementById('lastOrderHint');
+            if (lastOrderEl && data.last_order) {
+                lastOrderEl.textContent = formatLastActionTime(data.last_order);
+                // Add 'recent' class if within last hour
+                if (isRecent(data.last_order)) {
+                    lastOrderHint.classList.add('recent');
+                } else {
+                    lastOrderHint.classList.remove('recent');
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading last actions:', error);
+    }
+}
+
+// Update last action timestamp on server
+async function updateLastAction(actionType) {
+    try {
+        const response = await fetch(`/api/last_actions/${actionType}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            // Refresh the display
+            loadLastActions();
+        }
+    } catch (error) {
+        console.error(`Error updating last ${actionType} action:`, error);
+    }
+}
+
+// Format timestamp for display (e.g., "Today 09:15 AM" or "05 Jan 09:15 AM")
+function formatLastActionTime(isoString) {
+    if (!isoString) return '--';
+    
+    try {
+        const date = new Date(isoString);
+        const now = new Date();
+        
+        const timeStr = date.toLocaleTimeString('en-IN', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+        });
+        
+        // Check if today
+        const isToday = date.toDateString() === now.toDateString();
+        
+        // Check if yesterday
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = date.toDateString() === yesterday.toDateString();
+        
+        if (isToday) {
+            return `Today ${timeStr}`;
+        } else if (isYesterday) {
+            return `Yesterday ${timeStr}`;
+        } else {
+            const dateStr = date.toLocaleDateString('en-IN', { 
+                day: '2-digit', 
+                month: 'short' 
+            });
+            return `${dateStr} ${timeStr}`;
+        }
+    } catch (e) {
+        return '--';
+    }
+}
+
+// Check if timestamp is within last hour (for highlighting)
+function isRecent(isoString) {
+    if (!isoString) return false;
+    try {
+        const date = new Date(isoString);
+        const now = new Date();
+        const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        return date > hourAgo;
+    } catch (e) {
+        return false;
+    }
+}
+
+// ============================================
+
 // Place Order functionality
 function setupPlaceOrder() {
     const totpInput = document.getElementById('totpInput');
@@ -922,6 +1035,9 @@ function setupPlaceOrder() {
                                 clearInterval(pollInterval);
                                 showQuotesStatus('success', '✅', job.message || 'Quotes fetched and updated successfully!');
                                 
+                                // Update last quotes timestamp
+                                updateLastAction('quotes');
+                                
                                 // Re-enable button
                                 getQuotesBtn.disabled = false;
                                 getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
@@ -964,13 +1080,38 @@ function setupPlaceOrder() {
     
     // Place Order button functionality with job tracking
     placeOrderBtn.addEventListener('click', async function() {
-        // Show confirmation dialog
-        const confirmMessage = 'Are you sure you want to execute all orders from the sheet?\n\n' +
-                              'This will place BUY and SELL orders for all stocks in the market data table.';
-        
-        if (!confirm(confirmMessage)) {
-            return;
+        // Show custom confirmation modal
+        showPlaceOrderConfirmModal();
+    });
+    
+    // Setup confirmation modal buttons
+    const confirmOrderBtn = document.getElementById('confirmOrderBtn');
+    const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+    const placeOrderModal = document.getElementById('placeOrderModal');
+    
+    // Cancel button - close modal
+    cancelOrderBtn.addEventListener('click', function() {
+        placeOrderModal.style.display = 'none';
+    });
+    
+    // Click outside modal to close
+    placeOrderModal.addEventListener('click', function(e) {
+        if (e.target === placeOrderModal) {
+            placeOrderModal.style.display = 'none';
         }
+    });
+    
+    // Escape key to close modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && placeOrderModal.style.display !== 'none') {
+            placeOrderModal.style.display = 'none';
+        }
+    });
+    
+    // Confirm button - execute orders
+    confirmOrderBtn.addEventListener('click', async function() {
+        // Hide modal
+        placeOrderModal.style.display = 'none';
         
         // Show loading status
         showOrderStatus('loading', '⏳', 'Starting order execution...');
@@ -1008,6 +1149,9 @@ function setupPlaceOrder() {
                             if (job.status === 'completed') {
                                 clearInterval(pollInterval);
                                 showOrderStatus('success', '✅', job.message || 'All orders executed successfully!');
+                                
+                                // Update last order timestamp
+                                updateLastAction('order');
                                 
                                 // Keep button disabled after successful execution
                                 placeOrderBtn.innerHTML = '<span class="btn-icon">✅</span>Orders Executed';
@@ -1167,6 +1311,19 @@ function showTotpStatus(type, icon, message) {
     statusIcon.textContent = icon;
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';
+}
+
+// Show Place Order confirmation modal
+function showPlaceOrderConfirmModal() {
+    const modal = document.getElementById('placeOrderModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Focus on cancel button for safety (pressing Enter won't accidentally confirm)
+        const cancelBtn = document.getElementById('cancelOrderBtn');
+        if (cancelBtn) {
+            setTimeout(() => cancelBtn.focus(), 100);
+        }
+    }
 }
 
 function showOrderStatus(type, icon, message) {
@@ -1582,8 +1739,38 @@ document.head.appendChild(notificationStyles);
 // SCHEDULED FETCH CONFIG MANAGEMENT
 // ============================================================================
 
+// Check if auto fetch is enabled (from server environment variable)
+async function checkAutoFetchEnabled() {
+    try {
+        const response = await fetch('/api/auto_fetch_status');
+        const result = await response.json();
+        return result.success && result.auto_fetch_enabled;
+    } catch (error) {
+        console.error('Error checking auto fetch status:', error);
+        return false;
+    }
+}
+
 async function loadScheduledFetchConfig() {
     try {
+        // First check if auto fetch is enabled
+        const autoFetchEnabled = await checkAutoFetchEnabled();
+        const indicator = document.getElementById('scheduledTaskIndicator');
+        
+        if (!autoFetchEnabled) {
+            // Hide auto fetch UI when disabled
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+            console.log('Auto fetch is DISABLED (set AUTO_FETCH_ENABLED=true in .env to enable)');
+            return null;
+        }
+        
+        // Show indicator if auto fetch is enabled
+        if (indicator) {
+            indicator.style.display = 'flex';
+        }
+        
         const response = await fetch('/api/scheduled_fetch_config');
         const result = await response.json();
         

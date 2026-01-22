@@ -5,6 +5,58 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-01-22: Place Order Confirmation Modal + Last Action Timestamps
+
+**Feature 1**: Added custom confirmation modal dialog for Place Order button to prevent accidental clicks.
+
+**Files Modified**:
+- `static/index.html` - Added modal HTML structure
+- `static/css/styles.css` - Added modal styling (`.confirm-modal-overlay`, `.confirm-modal`, etc.)
+- `static/js/dashboard.js` - Replaced native `confirm()` with custom modal, added `showPlaceOrderConfirmModal()`
+
+**Modal Features**:
+- Modern dark theme matching dashboard
+- Warning icon with pulse animation
+- Cancel and Confirm buttons
+- Click outside to close
+- Escape key to close
+- Focus on Cancel button by default (safety)
+
+**Feature 2**: Added persistent "Last Fetch" and "Last Order" timestamps near buttons.
+
+**Files Modified**:
+- `nse_url_test.py` - Added `/api/last_actions` GET/POST endpoints, stores in `last_actions.json`
+- `static/index.html` - Added hint divs below GET QUOTES and PLACE ORDERS buttons
+- `static/css/styles.css` - Added `.last-action-hint` styling
+- `static/js/dashboard.js` - Added `loadLastActions()`, `updateLastAction()`, `formatLastActionTime()`
+
+**Timestamp Features**:
+- Persists in `last_actions.json` (survives restart)
+- Shows "Today 09:15 AM", "Yesterday 09:15 AM", or "05 Jan 09:15 AM"
+- Green highlight if action was within last hour
+- Updates automatically after successful GET QUOTES or PLACE ORDERS
+
+**Feature 3**: Added AUTO_FETCH_ENABLED environment variable flag.
+
+**Environment Variable**:
+```bash
+# In .env file (default: false)
+AUTO_FETCH_ENABLED=false   # Disable auto fetch (manual only)
+AUTO_FETCH_ENABLED=true    # Enable auto fetch at scheduled time
+```
+
+**Behavior**:
+| Flag | Backend | Frontend |
+|------|---------|----------|
+| `false` (default) | Scheduled task NOT started | Auto fetch indicator HIDDEN |
+| `true` | Scheduled task runs at configured time | Auto fetch indicator VISIBLE |
+
+**Files Modified**:
+- `nse_url_test.py` - Added `AUTO_FETCH_ENABLED` flag, `/api/auto_fetch_status` endpoint
+- `static/js/dashboard.js` - Added `checkAutoFetchEnabled()`, hides indicator when disabled
+
+---
+
 ### 2025-12-24: Robust Scheduled Task with Short Sleep Intervals
 
 **Problem**: Long `asyncio.sleep()` (hours) was unreliable - task would crash silently after server restarts.
@@ -29,12 +81,68 @@ grep "SCHEDULED FETCH QUOTES STARTING" app.log
 grep "Scheduled fetch quotes completed" app.log
 ```
 
+### 2026-01-22: Automatic Order Placement Investigation
+
+**Problem**: Orders were being placed automatically at 9:10 AM without manual trigger.
+
+**Root Cause**: `scheduled_fetch` task in `config.json` is enabled and runs at 9:07:10 AM IST daily.
+- This task calls `place_order.py` main function automatically
+- Confirmed by `scheduled_fetch.log` showing daily runs processing ~1628 stocks
+
+**Solution Commands**:
+```bash
+# Check order placement timing
+docker exec stock-trading-app grep -E "(PLACE ORDER|Starting PLACE ORDER)" app.log | tail -20
+
+# Disable automatic orders
+docker exec stock-trading-app sed -i 's/"enabled": true/"enabled": false/' config.json
+docker restart stock-trading-app
+
+# Re-enable if needed
+docker exec stock-trading-app sed -i 's/"enabled": false/"enabled": true/' config.json
+```
+
 **Frontend Status Persistence** (`static/js/dashboard.js`):
 - Status saved with DATE to localStorage
 - On page refresh: checks if saved date = today
 - If previous day → resets to "waiting" state (midnight reset)
 - If today → restores saved status (completed/failed/skipped stays visible)
 - Shows: "✓ Completed: 24 Dec at 09:07 AM"
+
+---
+
+### 2026-01-22: Docker Automatic Order Placement Analysis
+
+**Issue**: Orders being placed automatically around 9:10 AM in Docker container.
+
+**Root Cause**: Scheduled background task `run_scheduled_fetch_quotes()` runs at 9:07:10 AM IST daily.
+
+**Configuration**: `config.json` has `scheduled_fetch.enabled: true` with time set to 09:07:10.
+
+**Flow**:
+1. 9:07 AM - Scheduled fetch quotes runs automatically
+2. Manual order placement triggered via `/api/execute_orders`
+3. System can automatically place orders after quote fetching
+
+**Docker Commands for Monitoring**:
+```bash
+# Check container status
+docker ps -a | grep stock-trading
+
+# Monitor logs for orders
+docker logs stock-trading-app -f | grep -i "order\|scheduled"
+
+# Check scheduled task logs
+docker exec stock-trading-app cat scheduled_fetch.log
+
+# Disable scheduling
+docker exec stock-trading-app sed -i 's/"enabled": true/"enabled": false/' config.json
+```
+
+**Files Involved**:
+- `nse_url_test.py` - Background task `run_scheduled_fetch_quotes()`
+- `place_order.py` - Order placement logic
+- `config.json` - Scheduling configuration
 
 ---
 

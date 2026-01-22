@@ -50,6 +50,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Auto fetch flag - controls both backend scheduled task and frontend UI
+# Set AUTO_FETCH_ENABLED=true in .env to enable auto fetch
+AUTO_FETCH_ENABLED = os.getenv("AUTO_FETCH_ENABLED", "false").lower() == "true"
 
 from get_quote import main as get_quote_main
 import uuid
@@ -467,10 +470,16 @@ async def lifespan(app: FastAPI):
     # sme_task = asyncio.create_task(run_periodic_task_sme())
     equities_task = asyncio.create_task(run_periodic_task_equities())
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
-    scheduled_quotes_task = asyncio.create_task(run_scheduled_fetch_quotes())
     
-    logger.info("✅ All background tasks started: Equities, Periodic Cleanup, and Scheduled Fetch Quotes")
-    logger.info(f"📅 Scheduled fetch quotes: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
+    # Only start scheduled fetch task if AUTO_FETCH_ENABLED is true
+    if AUTO_FETCH_ENABLED:
+        scheduled_quotes_task = asyncio.create_task(run_scheduled_fetch_quotes())
+        logger.info("✅ All background tasks started: Equities, Periodic Cleanup, and Scheduled Fetch Quotes")
+        logger.info(f"📅 Scheduled fetch quotes: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
+    else:
+        logger.info("✅ Background tasks started: Equities, Periodic Cleanup")
+        logger.info("⚠️ Auto fetch DISABLED (set AUTO_FETCH_ENABLED=true in .env to enable)")
+    
     logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
     yield  # FastAPI will run the application here
@@ -3599,6 +3608,14 @@ async def get_active_jobs():
             "message": str(e)
         }
 
+@app.get("/api/auto_fetch_status")
+async def get_auto_fetch_status():
+    """Get auto fetch enabled status (from environment variable)"""
+    return {
+        "success": True,
+        "auto_fetch_enabled": AUTO_FETCH_ENABLED
+    }
+
 @app.get("/api/scheduled_fetch_config")
 async def get_scheduled_fetch_config():
     """Get current scheduled fetch configuration from config.json"""
@@ -3914,6 +3931,78 @@ async def update_scheduled_fetch_config_endpoint(request: Request):
 #             "message": f"Error: {str(e)}"
 #         }
         
+
+# ============================================================================
+# LAST ACTIONS TRACKING (persistent timestamps for UI hints)
+# ============================================================================
+
+LAST_ACTIONS_FILE = "last_actions.json"
+
+def load_last_actions() -> Dict:
+    """Load last action timestamps from JSON file"""
+    try:
+        if os.path.exists(LAST_ACTIONS_FILE):
+            with open(LAST_ACTIONS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading last_actions.json: {e}")
+    return {"last_quotes": None, "last_order": None}
+
+def save_last_actions(actions: Dict) -> bool:
+    """Save last action timestamps to JSON file"""
+    try:
+        with open(LAST_ACTIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(actions, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving last_actions.json: {e}")
+        return False
+
+@app.get("/api/last_actions")
+async def get_last_actions():
+    """Get last action timestamps for quotes and orders"""
+    try:
+        actions = load_last_actions()
+        return {
+            "success": True,
+            "last_quotes": actions.get("last_quotes"),
+            "last_order": actions.get("last_order")
+        }
+    except Exception as e:
+        logger.error(f"Error getting last actions: {e}")
+        return {"success": False, "message": str(e)}
+
+@app.post("/api/last_actions/{action_type}")
+async def update_last_action(action_type: str):
+    """Update last action timestamp (action_type: 'quotes' or 'order')"""
+    try:
+        if action_type not in ["quotes", "order"]:
+            raise HTTPException(status_code=400, detail="Invalid action type. Use 'quotes' or 'order'")
+        
+        actions = load_last_actions()
+        timestamp = get_ist_now().isoformat()
+        
+        if action_type == "quotes":
+            actions["last_quotes"] = timestamp
+        else:
+            actions["last_order"] = timestamp
+        
+        save_last_actions(actions)
+        
+        logger.info(f"✅ Updated last_{action_type} timestamp: {timestamp}")
+        
+        return {
+            "success": True,
+            "action_type": action_type,
+            "timestamp": timestamp
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating last action: {e}")
+        return {"success": False, "message": str(e)}
+
+# ============================================================================
 
 @app.get("/status")
 async def status():
