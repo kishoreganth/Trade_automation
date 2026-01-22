@@ -1471,7 +1471,20 @@ function updateScheduledTaskIndicator(status, message, progress) {
 }
 
 // Restore scheduled task status on page load
-function restoreScheduledTaskStatus() {
+async function restoreScheduledTaskStatus() {
+    // First check if auto fetch is enabled - if not, don't restore/show anything
+    const autoFetchEnabled = await checkAutoFetchEnabled();
+    if (!autoFetchEnabled) {
+        // Hide all auto fetch elements and return
+        const indicator = document.getElementById('scheduledTaskIndicator');
+        const autoScheduledInfo = document.getElementById('autoScheduledInfo');
+        const scheduleEditor = document.getElementById('scheduleEditor');
+        if (indicator) indicator.style.display = 'none';
+        if (autoScheduledInfo) autoScheduledInfo.style.display = 'none';
+        if (scheduleEditor) scheduleEditor.style.display = 'none';
+        return;
+    }
+    
     const saved = localStorage.getItem('scheduledTaskStatus');
     if (saved) {
         try {
@@ -1755,20 +1768,33 @@ async function loadScheduledFetchConfig() {
     try {
         // First check if auto fetch is enabled
         const autoFetchEnabled = await checkAutoFetchEnabled();
+        
+        // Get all auto-fetch related elements
         const indicator = document.getElementById('scheduledTaskIndicator');
+        const autoScheduledInfo = document.getElementById('autoScheduledInfo');
+        const scheduleEditor = document.getElementById('scheduleEditor');
         
         if (!autoFetchEnabled) {
-            // Hide auto fetch UI when disabled
+            // Hide ALL auto fetch UI elements when disabled
             if (indicator) {
                 indicator.style.display = 'none';
+            }
+            if (autoScheduledInfo) {
+                autoScheduledInfo.style.display = 'none';
+            }
+            if (scheduleEditor) {
+                scheduleEditor.style.display = 'none';
             }
             console.log('Auto fetch is DISABLED (set AUTO_FETCH_ENABLED=true in .env to enable)');
             return null;
         }
         
-        // Show indicator if auto fetch is enabled
+        // Show elements if auto fetch is enabled
         if (indicator) {
             indicator.style.display = 'flex';
+        }
+        if (autoScheduledInfo) {
+            autoScheduledInfo.style.display = 'block';
         }
         
         const response = await fetch('/api/scheduled_fetch_config');
