@@ -76,6 +76,12 @@
                         <input type="text" id="symbolFilter" placeholder="Enter symbol...">
                     </div>
                     <div class="control-group">
+                        <label>Filter by Sector:</label>
+                        <select id="sectorFilter">
+                            <option value="">All Sectors</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
                         <label>Show last:</label>
                         <select id="limitSelect">
                             <option value="50">50 messages</option>
@@ -102,15 +108,14 @@
                                 <th>Time</th>
                                 <th>Symbol</th>
                                 <th>Company</th>
+                                <th>Sector</th>
                                 <th>Description</th>
-                                <th id="optionHeader" class="conditional-column">Option</th>
                                 <th>File</th>
-                                <th id="chatIdHeader" class="conditional-column">Chat ID</th>
                             </tr>
                         </thead>
                         <tbody id="messagesTable">
                             <tr>
-                                <td colspan="7" class="no-messages">
+                                <td colspan="6" class="no-messages">
                                     No messages yet. Waiting for corporate announcements...
                                 </td>
                             </tr>

@@ -174,6 +174,7 @@ function addNewMessage(message) {
     }
     updateStats();
     updateUnreadBadges();
+    if ((message.sector || '').trim()) updateSectorFilterOptions();
     renderMessages();
 }
 
@@ -185,7 +186,27 @@ function loadMessages(messagesList) {
     });
     updateStats();
     updateUnreadBadges();
+    updateSectorFilterOptions();
     renderMessages();
+}
+
+function updateSectorFilterOptions() {
+    const sectorFilter = document.getElementById('sectorFilter');
+    if (!sectorFilter) return;
+    const sectors = new Set();
+    messages.forEach(msg => {
+        const s = (msg.sector || '').trim();
+        if (s) sectors.add(s);
+    });
+    const currentValue = sectorFilter.value;
+    sectorFilter.innerHTML = '<option value="">All Sectors</option>';
+    [...sectors].sort().forEach(sector => {
+        const opt = document.createElement('option');
+        opt.value = sector;
+        opt.textContent = sector;
+        sectorFilter.appendChild(opt);
+    });
+    if (sectors.has(currentValue)) sectorFilter.value = currentValue;
 }
 
 function addFinancialMetrics(data) {
@@ -227,18 +248,6 @@ function renderMessages() {
     const symbolFilter = document.getElementById('symbolFilter').value.toLowerCase();
     const limit = parseInt(document.getElementById('limitSelect').value);
     
-    // Show/hide OPTION and CHAT ID columns based on selected filter
-    const showOptionColumn = selectedOption === 'all';
-    const optionHeader = document.getElementById('optionHeader');
-    const chatIdHeader = document.getElementById('chatIdHeader');
-    
-    if (optionHeader) {
-        optionHeader.style.display = showOptionColumn ? '' : 'none';
-    }
-    if (chatIdHeader) {
-        chatIdHeader.style.display = showOptionColumn ? '' : 'none';
-    }
-    
     let filteredMessages = messages;
     
     // Filter by symbol
@@ -259,8 +268,16 @@ function renderMessages() {
         filteredMessages = filteredMessages.slice(0, limit);
     }
     
-    // Calculate colspan based on whether columns are visible
-    const colspan = showOptionColumn ? 7 : 5;
+    // Filter by sector
+    const sectorFilter = document.getElementById('sectorFilter');
+    const selectedSector = sectorFilter ? sectorFilter.value : '';
+    if (selectedSector) {
+        filteredMessages = filteredMessages.filter(msg => 
+            (msg.sector || '').trim() === selectedSector
+        );
+    }
+    
+    const colspan = 6;
     
     if (filteredMessages.length === 0) {
         tbody.innerHTML = `
@@ -279,22 +296,16 @@ function renderMessages() {
             `<a href="${msg.file_url}" target="_blank" class="file-link">📄 View File</a>` : 
             '-';
         
-        const optionBadge = msg.option ? 
-            `<span class="option-badge" style="background: #27ae60; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">${msg.option.replace('_', ' ').toUpperCase()}</span>` : 
-            '-';
-        
-        const optionCell = showOptionColumn ? `<td>${optionBadge}</td>` : '';
-        const chatIdCell = showOptionColumn ? `<td>${msg.chat_id}</td>` : '';
+        const sectorCell = `<td>${(msg.sector || '-').trim()}</td>`;
         
         return `
             <tr class="new-message">
                 <td class="timestamp">${time.toLocaleString()}</td>
                 <td>${msg.symbol ? `<span class="symbol-badge">${msg.symbol}</span>` : '-'}</td>
                 <td>${msg.company_name || '-'}</td>
+                ${sectorCell}
                 <td class="message-cell" title="${msg.description}">${msg.description || '-'}</td>
-                ${optionCell}
                 <td>${fileLink}</td>
-                ${chatIdCell}
             </tr>
         `;
     }).join('');
@@ -733,6 +744,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize input event listeners
     document.getElementById('symbolFilter').addEventListener('input', renderMessages);
+    const sectorFilterEl = document.getElementById('sectorFilter');
+    if (sectorFilterEl) sectorFilterEl.addEventListener('change', renderMessages);
     document.getElementById('limitSelect').addEventListener('change', function() {
         if (selectedOption === 'result_concall') {
             renderFinancialMetrics();

@@ -459,6 +459,9 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Google Sheets data loaded successfully")
     
+    # Load sector map from Stock_sectors.xlsx for CA sector tagging
+    await asyncio.to_thread(load_sector_map)
+    
     # Pre-load OCR model at startup for 80% speed improvement
     logger.info("🔥 Pre-loading OCR model for global caching...")
     start_model_time = time.time()
@@ -558,6 +561,7 @@ class MessageData(BaseModel):
     description: Optional[str] = None
     file_url: Optional[str] = None
     option: Optional[str] = None
+    sector: Optional[str] = None
 
 class TOTPRequest(BaseModel):
     totp_code: str
@@ -696,6 +700,10 @@ async def init_db():
         if 'option' not in column_names:
             logger.info("Adding option column to existing database")
             await db.execute("ALTER TABLE messages ADD COLUMN option TEXT")
+        
+        if 'sector' not in column_names:
+            logger.info("Adding sector column to existing database")
+            await db.execute("ALTER TABLE messages ADD COLUMN sector TEXT")
         
         # Create default admin user if no users exist
         cursor = await db.execute("SELECT COUNT(*) FROM users")
@@ -1172,6 +1180,46 @@ keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/e
 concall_gid = "341478113"
 result_concall_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={concall_gid}"
 
+# Sector map from Stock_sectors.xlsx: symbol (Security Name) -> Sector
+SECTOR_EXCEL_PATH = "Stock_sectors.xlsx"
+sector_map = {}
+
+def load_sector_map():
+    """Load symbol -> sector from Stock_sectors.xlsx (Security Name -> Sector)."""
+    global sector_map
+    try:
+        if not os.path.exists(SECTOR_EXCEL_PATH):
+            logger.warning(f"Stock sectors file not found: {SECTOR_EXCEL_PATH}")
+            return
+        df = pd.read_excel(SECTOR_EXCEL_PATH)
+        # Expect columns: Security Code, Security Name, Sector
+        name_col = None
+        sector_col = None
+        for c in df.columns:
+            if str(c).strip().lower() == "security name":
+                name_col = c
+            elif str(c).strip().lower() == "sector":
+                sector_col = c
+        if name_col is None or sector_col is None:
+            logger.warning(f"Stock_sectors.xlsx must have 'Security Name' and 'Sector' columns. Found: {list(df.columns)}")
+            return
+        sector_map = {}
+        for _, row in df.iterrows():
+            sym = str(row[name_col]).strip().upper() if pd.notna(row[name_col]) else ""
+            sec = str(row[sector_col]).strip() if pd.notna(row[sector_col]) else ""
+            if sym and sec:
+                sector_map[sym] = sec
+        logger.info(f"Loaded sector map for {len(sector_map)} symbols from {SECTOR_EXCEL_PATH}")
+    except Exception as e:
+        logger.error(f"Error loading sector map from {SECTOR_EXCEL_PATH}: {e}")
+        sector_map = {}
+
+def get_sector_for_symbol(symbol: str) -> str:
+    """Return sector for given NSE symbol, or empty string if not found."""
+    if not symbol or not sector_map:
+        return ""
+    return sector_map.get(str(symbol).strip().upper(), "")
+
 # Initialize empty dict - will be populated async during startup
 result_concall_keywords = {}
 
@@ -1366,6 +1414,7 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
     
     # Also save to local database for UI dashboard
     try:
+        sector = get_sector_for_symbol(symbol) if symbol else ""
         # Create message data with all provided fields
         message_data = MessageData(
             chat_id=chat_idd,
@@ -1375,7 +1424,8 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
             company_name=company_name,
             description=description,
             file_url=file_url,
-            option=type
+            option=type,
+            sector=sector
         )
         
         # Parse message content only if fields not provided
@@ -1399,8 +1449,8 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
         async with aiosqlite.connect(DB_PATH) as db:
             cursor = await db.execute("""
                 INSERT INTO messages 
-                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 message_data.chat_id,
                 message_data.message,
@@ -1410,7 +1460,8 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
                 message_data.description,
                 message_data.file_url,
                 message_data.message,
-                message_data.option
+                message_data.option,
+                message_data.sector or ""
             ))
             message_id = cursor.lastrowid
             await db.commit()
@@ -2426,6 +2477,10 @@ async def receive_trigger_message(message_data: MessageData):
             message_data.description = parsed.get("description", "")
             message_data.file_url = parsed.get("file_url", "")
         
+        # Set sector from symbol if not provided
+        if message_data.symbol and not message_data.sector:
+            message_data.sector = get_sector_for_symbol(message_data.symbol)
+        
         # Skip "test" option completely - no DB, no WebSocket, Telegram only
         if message_data.option == "test":
             logger.info(f"Test message - Telegram only (not saved to DB or dashboard): {message_data.symbol} - {message_data.company_name}")
@@ -2435,8 +2490,8 @@ async def receive_trigger_message(message_data: MessageData):
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
                 INSERT INTO messages 
-                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 message_data.chat_id,
                 message_data.message,
@@ -2446,7 +2501,8 @@ async def receive_trigger_message(message_data: MessageData):
                 message_data.description,
                 message_data.file_url,
                 message_data.message,
-                message_data.option
+                message_data.option,
+                message_data.sector or ""
             ))
             await db.commit()
         
