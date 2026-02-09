@@ -551,6 +551,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Database setup for dashboard - use environment variable for Docker persistence
 DB_PATH = os.getenv('DB_PATH', 'messages.db')
+# Default admin: change DEFAULT_ADMIN_PASSWORD and deploy – existing server admin will be updated on startup
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "Arixjhifi@007"  # Change this; server admin password will sync on next deploy
+OLD_DEFAULT_ADMIN_PASSWORD = "admin123"  # Used only to detect and migrate old default
 
 class MessageData(BaseModel):
     chat_id: str
@@ -710,17 +714,27 @@ async def init_db():
         user_count = (await cursor.fetchone())[0]
         
         if user_count == 0:
-            # Default credentials: admin / admin123
-            default_username = "admin"
-            default_password = "admin123"
-            password_hash = hashlib.sha256(default_password.encode()).hexdigest()
-            
+            password_hash = hashlib.sha256(DEFAULT_ADMIN_PASSWORD.encode()).hexdigest()
             await db.execute("""
                 INSERT INTO users (username, password_hash, created_at)
                 VALUES (?, ?, ?)
-            """, (default_username, password_hash, get_ist_now().isoformat()))
-            
-            logger.info(f"Created default admin user - Username: {default_username}, Password: {default_password}")
+            """, (DEFAULT_ADMIN_USERNAME, password_hash, get_ist_now().isoformat()))
+            logger.info(f"Created default admin user - Username: {DEFAULT_ADMIN_USERNAME}, Password: (set)")
+        else:
+            # Sync server admin password when code default changed (e.g. after deploy)
+            old_hash = hashlib.sha256(OLD_DEFAULT_ADMIN_PASSWORD.encode()).hexdigest()
+            new_hash = hashlib.sha256(DEFAULT_ADMIN_PASSWORD.encode()).hexdigest()
+            if new_hash != old_hash:
+                cursor = await db.execute(
+                    "SELECT id FROM users WHERE username = ? AND password_hash = ?",
+                    (DEFAULT_ADMIN_USERNAME, old_hash)
+                )
+                if await cursor.fetchone():
+                    await db.execute(
+                        "UPDATE users SET password_hash = ? WHERE username = ?",
+                        (new_hash, DEFAULT_ADMIN_USERNAME)
+                    )
+                    logger.info(f"Updated default admin password to new default (deploy sync)")
         
         await db.commit()
     logger.info("Database initialized with authentication tables")

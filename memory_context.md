@@ -5,6 +5,12 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-02-09: Dashboard 2FA Development Guide
+
+**Added**: `resource/2FA_LOGIN_HOWTO.md` – how to add 2FA for dashboard login and configuration (login with 2FA, enable/disable 2FA, DB, API, frontend flow). Uses existing `pyotp`.
+
+---
+
 ### 2026-01-22: Place Order Confirmation Modal + Last Action Timestamps
 
 **Feature 1**: Added custom confirmation modal dialog for Place Order button to prevent accidental clicks.
