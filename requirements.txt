@@ -86,3 +86,5 @@ yarl==1.22.0
 gspread 
 oauth2client
 openpyxl
+bse
+bsedata

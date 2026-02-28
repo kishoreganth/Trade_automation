@@ -268,6 +268,15 @@ function renderMessages() {
         filteredMessages = filteredMessages.slice(0, limit);
     }
     
+    // Filter by exchange
+    const exchangeFilter = document.getElementById('exchangeFilter');
+    const selectedExchange = exchangeFilter ? exchangeFilter.value : '';
+    if (selectedExchange) {
+        filteredMessages = filteredMessages.filter(msg => 
+            (msg.exchange || 'NSE').trim() === selectedExchange
+        );
+    }
+    
     // Filter by sector
     const sectorFilter = document.getElementById('sectorFilter');
     const selectedSector = sectorFilter ? sectorFilter.value : '';
@@ -277,13 +286,13 @@ function renderMessages() {
         );
     }
     
-    const colspan = 6;
+    const colspan = 7;
     
     if (filteredMessages.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="${colspan}" class="no-messages">
-                    ${symbolFilter || selectedOption !== 'all' ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
+                    ${symbolFilter || selectedOption !== 'all' || selectedExchange ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
                 </td>
             </tr>
         `;
@@ -295,12 +304,16 @@ function renderMessages() {
         const fileLink = msg.file_url ? 
             `<a href="${msg.file_url}" target="_blank" class="file-link">📄 View File</a>` : 
             '-';
-        
+        const exchange = (msg.exchange || 'NSE').trim();
+        const exchangeBadge = exchange === 'BSE' ? 
+            '<span class="exchange-badge bse">BSE</span>' : 
+            '<span class="exchange-badge nse">NSE</span>';
         const sectorCell = `<td>${(msg.sector || '-').trim()}</td>`;
         
         return `
             <tr class="new-message">
                 <td class="timestamp">${time.toLocaleString()}</td>
+                <td>${exchangeBadge}</td>
                 <td>${msg.symbol ? `<span class="symbol-badge">${msg.symbol}</span>` : '-'}</td>
                 <td>${msg.company_name || '-'}</td>
                 ${sectorCell}
@@ -744,6 +757,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize input event listeners
     document.getElementById('symbolFilter').addEventListener('input', renderMessages);
+    const exchangeFilterEl = document.getElementById('exchangeFilter');
+    if (exchangeFilterEl) exchangeFilterEl.addEventListener('change', renderMessages);
     const sectorFilterEl = document.getElementById('sectorFilter');
     if (sectorFilterEl) sectorFilterEl.addEventListener('change', renderMessages);
     document.getElementById('limitSelect').addEventListener('change', function() {

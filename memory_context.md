@@ -5,6 +5,69 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-02-28: Dashboard – All Announcements Visible
+
+**Issue**: Dashboard showed "TODAY'S MESSAGES: 0" and old data; backend sent to Telegram but only keyword-matched announcements were saved to DB.
+
+**Fix** (`nse_url_test.py`):
+- Added `save_announcement_to_dashboard()` – saves every new NSE/BSE announcement to DB and broadcasts via WebSocket
+- NSE/BSE flows: call `save_announcement_to_dashboard()` for every new row before Telegram sends
+- `trigger_test_message()`: added `save_to_dashboard=False` for corporate-flow calls to avoid duplicates
+- Keyword/result_concall matches: use `save_to_dashboard=False`; dashboard gets single save from `save_announcement_to_dashboard()`
+
+**Result**: All NSE and BSE announcements now appear in the dashboard in real time (WebSocket) and on Refresh (API).
+
+---
+
+### 2026-02-25: Sector Map from all-bse-companies-sectors.csv
+
+**Changed**: Sector mapping now uses `all-bse-companies-sectors.csv` instead of Stock_sectors.xlsx.
+
+**Columns used**: BSE Code, NSE Code, Sector
+- BSE: SCRIP_CD (security number) → BSE Code
+- NSE: stock symbol → NSE Code
+
+**Paths tried**: `all-bse-companies-sectors.csv` (project root), then parent folder.
+**Fallback**: `Stock_sectors.xlsx` (Security Name, Sector) if CSV missing.
+**Retry**: If sector map empty at startup, retry once after 2s.
+**Reload API**: `POST /api/reload_sector_map` to reload without restart.
+
+---
+
+### 2026-02-25: BSE Integration - Parallel Fetch with NSE, Dashboard
+
+**Implemented**: Full BSE corporate announcements alongside NSE in the main automation flow.
+
+**DB**: Added `exchange` column to messages table (migration sets existing to "NSE").
+
+**Backend** (`nse_url_test.py`):
+- `fetch_bse_announcements()` – async wrapper, runs sync `BSE.announcements()` in executor
+- `process_bse_ca_data()` – normalizes BSE to NSE-like format, uses `files/bse_all_corporate_announcements.csv` for tracking
+- BSE PDF URL: `https://www.bseindia.com/xml-data/corpfiling/AttachLive/{ATTACHMENTNAME}`
+- `CA_bse()` – fetch + process
+- `run_periodic_task_equities()` – runs `CA_equities()` and `CA_bse()` in parallel via `asyncio.gather()`
+- `trigger_test_message()` – added `exchange` param (default "NSE"); persists to DB
+
+**Dashboard**:
+- Exchange filter dropdown (All / NSE / BSE)
+- Exchange column with badges (NSE=blue, BSE=green)
+
+---
+
+### 2026-02-25: NSE + BSE Corporate Announcements Fetch Scripts
+
+**Added**: `nse_corporate_fetch.py` – simple NSE fetch using `nsepython.nsefetch(EQUITY_URL)`. Returns list of dicts (symbol, desc, sm_name, attchmntFile, etc.).
+
+**Added**: `bse_corporate_fetch.py` – standalone script to fetch BSE corporate announcements using [bse](https://bennythadikaran.github.io/BseIndiaApi/usage.html#corporate-filings) library.
+
+**NSE**: Uses `nsefetch(EQUITY_URL)` from nsepython (already in project). Run: `python nse_corporate_fetch.py`
+
+**BSE**: Uses `BSE.announcements(page_no=1, segment="equity")`. Download folder: `files/bse_downloads`. Run: `python bse_corporate_fetch.py`
+
+**Compare**: Run both scripts to see NSE vs BSE response format side-by-side.
+
+---
+
 ### 2026-02-09: Dashboard 2FA Development Guide
 
 **Added**: `resource/2FA_LOGIN_HOWTO.md` – how to add 2FA for dashboard login and configuration (login with 2FA, enable/disable 2FA, DB, API, frontend flow). Uses existing `pyotp`.

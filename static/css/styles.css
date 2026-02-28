@@ -336,6 +336,16 @@ tr:hover {
     letter-spacing: 0.5px;
 }
 
+.exchange-badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.exchange-badge.nse { background: #0ea5e9; color: white; }
+.exchange-badge.bse { background: #059669; color: white; }
+
 .timestamp {
     color: #64748b;
     font-size: 13px;

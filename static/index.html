@@ -76,6 +76,14 @@
                         <input type="text" id="symbolFilter" placeholder="Enter symbol...">
                     </div>
                     <div class="control-group">
+                        <label>Filter by Exchange:</label>
+                        <select id="exchangeFilter">
+                            <option value="">All</option>
+                            <option value="NSE">NSE</option>
+                            <option value="BSE">BSE</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
                         <label>Filter by Sector:</label>
                         <select id="sectorFilter">
                             <option value="">All Sectors</option>
@@ -106,6 +114,7 @@
                         <thead>
                             <tr>
                                 <th>Time</th>
+                                <th>Exchange</th>
                                 <th>Symbol</th>
                                 <th>Company</th>
                                 <th>Sector</th>
@@ -115,7 +124,7 @@
                         </thead>
                         <tbody id="messagesTable">
                             <tr>
-                                <td colspan="6" class="no-messages">
+                                <td colspan="7" class="no-messages">
                                     No messages yet. Waiting for corporate announcements...
                                 </td>
                             </tr>

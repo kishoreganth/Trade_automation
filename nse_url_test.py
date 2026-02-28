@@ -42,6 +42,7 @@ from reportlab.lib import colors
 import sys
 import codecs
 from stock_info import SME_companies, BSE_NSE_companies
+from bse import BSE
 from async_ocr_from_image import main_ocr_async, pdf_to_png_async, process_ocr_from_images_async, encode_images_async, analyze_financial_metrics_async, get_global_ocr_model
 from neo_main_login import main as neo_main_login
 from place_order import main as place_order_main
@@ -459,8 +460,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Google Sheets data loaded successfully")
     
-    # Load sector map from Stock_sectors.xlsx for CA sector tagging
+    # Load sector map from all-bse-companies-sectors.csv (BSE Code, NSE Code -> Sector)
     await asyncio.to_thread(load_sector_map)
+    if not bse_sector_map and not nse_sector_map and not sector_map:
+        logger.warning("Sector map empty on first load. Retrying in 2s (file may still be mounting)...")
+        await asyncio.sleep(2)
+        await asyncio.to_thread(load_sector_map)
+    if not bse_sector_map and not nse_sector_map and not sector_map:
+        logger.warning("Sector map still empty after retry. Sectors will be blank until file is available.")
     
     # Pre-load OCR model at startup for 80% speed improvement
     logger.info("🔥 Pre-loading OCR model for global caching...")
@@ -566,6 +573,7 @@ class MessageData(BaseModel):
     file_url: Optional[str] = None
     option: Optional[str] = None
     sector: Optional[str] = None
+    exchange: Optional[str] = None  # NSE or BSE
 
 class TOTPRequest(BaseModel):
     totp_code: str
@@ -708,6 +716,11 @@ async def init_db():
         if 'sector' not in column_names:
             logger.info("Adding sector column to existing database")
             await db.execute("ALTER TABLE messages ADD COLUMN sector TEXT")
+        
+        if 'exchange' not in column_names:
+            logger.info("Adding exchange column to existing database")
+            await db.execute("ALTER TABLE messages ADD COLUMN exchange TEXT")
+            await db.execute("UPDATE messages SET exchange = ? WHERE exchange IS NULL", ("NSE",))
         
         # Create default admin user if no users exist
         cursor = await db.execute("SELECT COUNT(*) FROM users")
@@ -1178,6 +1191,9 @@ async def run_scheduled_fetch_quotes():
             await asyncio.sleep(10)
 
 csv_file_path = "files/all_corporate_announcements.csv"
+bse_csv_file_path = "files/bse_all_corporate_announcements.csv"
+bse_download_folder = Path(__file__).parent / "files" / "bse_downloads"
+BSE_PDF_BASE_URL = "https://www.bseindia.com/xml-data/corpfiling/AttachLive"
 watchlist_CA_files = "files/watchlist_corporate_announcements.csv"
 # chat_id = "@test_kishore_ai_chat"
 TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
@@ -1194,45 +1210,98 @@ keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/e
 concall_gid = "341478113"
 result_concall_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={concall_gid}"
 
-# Sector map from Stock_sectors.xlsx: symbol (Security Name) -> Sector
-SECTOR_EXCEL_PATH = "Stock_sectors.xlsx"
-sector_map = {}
+# Sector map: all-bse-companies-sectors.csv (BSE Code, NSE Code -> Sector)
+# Fallback: Stock_sectors.xlsx (Security Name -> Sector)
+SECTOR_CSV_PATH = Path(__file__).parent / "all-bse-companies-sectors.csv"
+SECTOR_CSV_PATH_ALT = Path(__file__).parent.parent / "all-bse-companies-sectors.csv"
+SECTOR_EXCEL_FALLBACK = Path(__file__).parent / "Stock_sectors.xlsx"
+bse_sector_map = {}  # BSE Code (str) -> Sector
+nse_sector_map = {}  # NSE Code (str, upper) -> Sector
+sector_map = {}  # Legacy: NSE symbol -> Sector (for Excel fallback)
+
 
 def load_sector_map():
-    """Load symbol -> sector from Stock_sectors.xlsx (Security Name -> Sector)."""
-    global sector_map
+    """Load sector maps from all-bse-companies-sectors.csv. BSE Code and NSE Code -> Sector.
+    Fallback: Stock_sectors.xlsx if CSV not found. Retries parent folder for CSV."""
+    global bse_sector_map, nse_sector_map, sector_map
+    csv_path = SECTOR_CSV_PATH if SECTOR_CSV_PATH.exists() else SECTOR_CSV_PATH_ALT
     try:
-        if not os.path.exists(SECTOR_EXCEL_PATH):
-            logger.warning(f"Stock sectors file not found: {SECTOR_EXCEL_PATH}")
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+            cols = {str(c).strip().lower(): c for c in df.columns}
+            bse_col = cols.get("bse code")
+            nse_col = cols.get("nse code")
+            sector_col = cols.get("sector")
+            if bse_col is None or sector_col is None:
+                logger.warning(f"all-bse-companies-sectors.csv must have 'BSE Code' and 'Sector'. Found: {list(df.columns)}")
+                _load_sector_fallback()
+                return
+            bse_sector_map = {}
+            nse_sector_map = {}
+            for _, row in df.iterrows():
+                sec = str(row[sector_col]).strip() if pd.notna(row[sector_col]) else ""
+                if not sec:
+                    continue
+                bse_code = row.get(bse_col)
+                if pd.notna(bse_code) and str(bse_code).strip():
+                    bse_sector_map[str(int(float(bse_code)))] = sec
+                if nse_col and pd.notna(row.get(nse_col)) and str(row[nse_col]).strip():
+                    nse_sector_map[str(row[nse_col]).strip().upper()] = sec
+            sector_map = nse_sector_map  # for get_sector_for_symbol compatibility
+            logger.info(f"Loaded sector map from {csv_path.name}: {len(bse_sector_map)} BSE, {len(nse_sector_map)} NSE")
+        else:
+            logger.warning(f"Sector CSV not found at {SECTOR_CSV_PATH} or {SECTOR_CSV_PATH_ALT}. Falling back to Excel.")
+            _load_sector_fallback()
+    except Exception as e:
+        logger.error(f"Error loading sector map from CSV: {e}. Falling back to Excel.")
+        _load_sector_fallback()
+
+
+def _load_sector_fallback():
+    """Fallback: load from Stock_sectors.xlsx (Security Name -> Sector)."""
+    global sector_map, bse_sector_map, nse_sector_map
+    sector_map = {}
+    bse_sector_map = {}
+    nse_sector_map = {}
+    try:
+        if not SECTOR_EXCEL_FALLBACK.exists():
+            logger.warning(f"Fallback Stock_sectors.xlsx not found: {SECTOR_EXCEL_FALLBACK}")
             return
-        df = pd.read_excel(SECTOR_EXCEL_PATH)
-        # Expect columns: Security Code, Security Name, Sector
-        name_col = None
-        sector_col = None
+        df = pd.read_excel(SECTOR_EXCEL_FALLBACK)
+        name_col = sector_col = None
         for c in df.columns:
             if str(c).strip().lower() == "security name":
                 name_col = c
             elif str(c).strip().lower() == "sector":
                 sector_col = c
         if name_col is None or sector_col is None:
-            logger.warning(f"Stock_sectors.xlsx must have 'Security Name' and 'Sector' columns. Found: {list(df.columns)}")
+            logger.warning(f"Stock_sectors.xlsx needs 'Security Name' and 'Sector'. Found: {list(df.columns)}")
             return
-        sector_map = {}
         for _, row in df.iterrows():
             sym = str(row[name_col]).strip().upper() if pd.notna(row[name_col]) else ""
             sec = str(row[sector_col]).strip() if pd.notna(row[sector_col]) else ""
             if sym and sec:
                 sector_map[sym] = sec
-        logger.info(f"Loaded sector map for {len(sector_map)} symbols from {SECTOR_EXCEL_PATH}")
+        nse_sector_map = sector_map
+        logger.info(f"Fallback: Loaded {len(sector_map)} symbols from Stock_sectors.xlsx")
     except Exception as e:
-        logger.error(f"Error loading sector map from {SECTOR_EXCEL_PATH}: {e}")
-        sector_map = {}
+        logger.error(f"Fallback sector load failed: {e}")
 
-def get_sector_for_symbol(symbol: str) -> str:
-    """Return sector for given NSE symbol, or empty string if not found."""
-    if not symbol or not sector_map:
+
+def get_sector_for_symbol(symbol: str, exchange: str = "NSE") -> str:
+    """Return sector for symbol. BSE: use SCRIP_CD (security number). NSE: use stock symbol."""
+    if not symbol:
         return ""
-    return sector_map.get(str(symbol).strip().upper(), "")
+    key = str(symbol).strip()
+    if exchange == "BSE":
+        key = key.split(".")[0]  # handle 500339.0
+        try:
+            key = str(int(float(key)))
+        except (ValueError, TypeError):
+            pass
+        return bse_sector_map.get(key, "") if bse_sector_map else ""
+    key_upper = key.upper()
+    return nse_sector_map.get(key_upper, "") or sector_map.get(key_upper, "") if (nse_sector_map or sector_map) else ""
 
 # Initialize empty dict - will be populated async during startup
 result_concall_keywords = {}
@@ -1402,9 +1471,56 @@ async def trigger_watchlist_message(message):
     # print(r.json())
 
 
+async def save_announcement_to_dashboard(symbol, company_name, description, file_url, exchange="NSE", option="all", message=""):
+    """Save every new announcement to dashboard DB and broadcast via WebSocket."""
+    try:
+        sector = get_sector_for_symbol(symbol, exchange or "NSE") if symbol else ""
+        message_data = MessageData(
+            chat_id="@dashboard",
+            message=message or f"<b>{symbol} - {company_name}</b>\n\n{description}\n\nFile:\n{file_url}",
+            timestamp=get_ist_now().isoformat(),
+            symbol=symbol,
+            company_name=company_name,
+            description=description,
+            file_url=file_url,
+            option=option,
+            sector=sector,
+            exchange=exchange or "NSE"
+        )
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                INSERT INTO messages 
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector, exchange)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                message_data.chat_id,
+                message_data.message,
+                message_data.timestamp,
+                message_data.symbol,
+                message_data.company_name,
+                message_data.description,
+                message_data.file_url,
+                message_data.message,
+                message_data.option,
+                message_data.sector or "",
+                message_data.exchange or "NSE"
+            ))
+            message_id = cursor.lastrowid
+            await db.commit()
+        await ws_manager.broadcast_message({
+            "type": "new_message",
+            "message": message_data.dict()
+        })
+        logger.info(f"Saved to dashboard: {symbol} - {company_name}")
+        return message_id
+    except Exception as e:
+        logger.warning(f"Error saving to dashboard: {e}")
+        return None
+
+
 # this is the test message to see if the script is working or not
 # This will send all the CA docs to the trade_mvd chat id ( which is our Script CA running telegram )
-async def trigger_test_message(chat_idd, message, type="test", symbol="", company_name="", description="", file_url=""):
+async def trigger_test_message(chat_idd, message, type="test", symbol="", company_name="", description="", file_url="", exchange="NSE", save_to_dashboard=True):
     # Send to Telegram as before
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -1428,7 +1544,7 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
     
     # Also save to local database for UI dashboard
     try:
-        sector = get_sector_for_symbol(symbol) if symbol else ""
+        sector = get_sector_for_symbol(symbol, exchange or "NSE") if symbol else ""
         # Create message data with all provided fields
         message_data = MessageData(
             chat_id=chat_idd,
@@ -1439,7 +1555,8 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
             description=description,
             file_url=file_url,
             option=type,
-            sector=sector
+            sector=sector,
+            exchange=exchange or "NSE"
         )
         
         # Parse message content only if fields not provided
@@ -1454,17 +1571,19 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
             if not message_data.file_url:
                 message_data.file_url = parsed.get("file_url", "")
         
-        # Skip database save and WebSocket for test messages
+        # Skip database save and WebSocket for test messages or when save_to_dashboard=False
         if type == "test":
             print(f"✅ Test message sent to Telegram only (not saved to DB): {message_data.symbol} - {message_data.company_name}")
             return None
-        
-        # Save to database (only non-test messages)
+        if not save_to_dashboard:
+            return None
+
+        # Save to database (only non-test messages with save_to_dashboard=True)
         async with aiosqlite.connect(DB_PATH) as db:
             cursor = await db.execute("""
                 INSERT INTO messages 
-                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector, exchange)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 message_data.chat_id,
                 message_data.message,
@@ -1475,7 +1594,8 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
                 message_data.file_url,
                 message_data.message,
                 message_data.option,
-                message_data.sector or ""
+                message_data.sector or "",
+                message_data.exchange or "NSE"
             ))
             message_id = cursor.lastrowid
             await db.commit()
@@ -1966,8 +2086,32 @@ async def process_ca_data(ca_docs):
 
                 print(f"Message created for {row['symbol']}")
                 
-                # Send the message This will send all the messages to the trade_mvd chat id WHich is used to testing or to check if the script is running or not
-                await trigger_test_message("@trade_mvd", message, "test", row['symbol'], row['sm_name'], row['desc'], attachment_file)
+                # Convert all row values to lowercase strings for keyword matching
+                row_values = [str(val).lower() for val in row]
+                
+                # Determine option for dashboard: first matched or "all"
+                dashboard_option = "all"
+                for group_id, data in group_id_keywords.items():
+                    keywords = data.get('keywords', [])
+                    option = data.get('option', '')
+                    keywords_lower = [str(kw).lower() for kw in keywords]
+                    if any(any(kw in val for val in row_values) for kw in keywords_lower):
+                        dashboard_option = option
+                        break
+                for group_id, keywords in result_concall_keywords.items():
+                    result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
+                    if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
+                        dashboard_option = "result_concall"
+                        break
+                
+                # Save every announcement to dashboard (DB + WebSocket)
+                message_id = await save_announcement_to_dashboard(
+                    row['symbol'], row['sm_name'], row['desc'], attachment_file,
+                    exchange="NSE", option=dashboard_option, message=message
+                )
+                
+                # Send to trade_mvd (Telegram only, not saved to DB)
+                await trigger_test_message("@trade_mvd", message, "test", row['symbol'], row['sm_name'], row['desc'], attachment_file, exchange="NSE")
                 
                 
                 ##### X------------ THIS IS WATCHING LIST SENDING -------X ########
@@ -1981,24 +2125,14 @@ async def process_ca_data(ca_docs):
                 #     await update_watchlist_file(new_rows)
                 ##### X -------------------------------------------------X ########   
                     
-                # Convert all row values to lowercase strings and check for keyword matches
-                row_values = [str(val).lower() for val in row]  
-                
                 ###############################################################
                 ###### x --------- sending watchlist message -------x ########
-                #### this is getting the group id and keywords from the google sheet
-                ## now we need to check if the new_rows is in the group_id_keywords
                 for group_id, data in group_id_keywords.items():
-                    # Extract keywords and option from the data structure
                     keywords = data.get('keywords', [])
                     option = data.get('option', '')
-                    
-                    # Convert keywords to lowercase list
                     keywords_lower = [str(kw).lower() for kw in keywords]
-
                     if any(any(kw in val for val in row_values) for kw in keywords_lower):
-                        # message = f"""<b>{row['symbol']} - {row['sm_name']}</b>\n\n{row['desc']}\n\n<i>{row['attchmntText']}</i>\n\n<b>File:</b>\n{row['attchmntFile']}"""
-                        await trigger_test_message(group_id, message, option, row['symbol'], row['sm_name'], row['desc'], attachment_file)
+                        await trigger_test_message(group_id, message, option, row['symbol'], row['sm_name'], row['desc'], attachment_file, exchange="NSE", save_to_dashboard=False)
                 ###### X --------------------------------------------X #########      
                 ################################################################
                 
@@ -2008,18 +2142,12 @@ async def process_ca_data(ca_docs):
                 ###### x --------- sending result concal message -------x ########
                 #### this is getting the group id and keywords from the google sheet
                 for group_id, keywords in result_concall_keywords.items():
-                    # Convert keywords to lowercase list
                     result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
                     if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
-                        # ocr the pdf
                         financial_metrics = await main_ocr_async(attachment_file)
                         print("FINANCIAL METRICS ARE - ", financial_metrics)
-                        
-                        # Send message to Telegram and get message ID
-                        message_id = await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'], row['desc'], attachment_file)
-                        
-                        # Process and store financial metrics
-                        if financial_metrics:
+                        await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'], row['desc'], attachment_file, exchange="NSE", save_to_dashboard=False)
+                        if financial_metrics and message_id:
                             await process_financial_metrics(
                                 financial_metrics, 
                                 row['symbol'], 
@@ -2056,6 +2184,133 @@ async def process_ca_data(ca_docs):
         async with aiofiles.open(csv_file_path, mode='w') as f:
             await f.write(df.to_csv(index=False))
         return 1
+
+def _fetch_bse_announcements_sync():
+    """Sync BSE fetch - run in executor. Returns raw BSE API response."""
+    bse_download_folder.mkdir(parents=True, exist_ok=True)
+    with BSE(bse_download_folder) as bse:
+        return bse.announcements(page_no=1, segment="equity")
+
+
+async def fetch_bse_announcements():
+    """Fetch BSE corporate announcements (runs sync BSE in executor)."""
+    try:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _fetch_bse_announcements_sync)
+    except Exception as e:
+        logger.error(f"BSE fetch failed: {e}")
+        return None
+
+
+def _bse_row_to_normalized(row: dict) -> dict:
+    """Map BSE API row to NSE-like normalized format for dashboard/processing."""
+    att_name = row.get("ATTACHMENTNAME") or ""
+    att_url = f"{BSE_PDF_BASE_URL}/{att_name.strip()}" if att_name and str(att_name).strip() else "-"
+    return {
+        "symbol": str(row.get("SCRIP_CD", "")),
+        "sm_name": str(row.get("SLONGNAME", "")),
+        "desc": str(row.get("HEADLINE") or row.get("NEWSSUB", "")),
+        "attchmntFile": att_url,
+        "an_dt": str(row.get("DT_TM", "")),
+        "NEWSID": str(row.get("NEWSID", "")),
+    }
+
+
+async def process_bse_ca_data(bse_data):
+    """Process BSE corporate announcements - separate CSV, normalized for dashboard."""
+    if not bse_data or "Table" not in bse_data:
+        logger.warning("BSE data empty or invalid structure")
+        return None
+    table = bse_data["Table"]
+    if not table:
+        return 1
+    existing_newsids = set()
+    if await aiofiles.os.path.exists(bse_csv_file_path):
+        async with aiofiles.open(bse_csv_file_path, mode="r") as f:
+            content = await f.read()
+            df_existing = pd.read_csv(io.StringIO(content), dtype="object")
+            if "NEWSID" in df_existing.columns:
+                existing_newsids = set(df_existing["NEWSID"].dropna().astype(str).str.strip())
+    normalized_rows = []
+    raw_rows_to_append = []
+    for row in table:
+        newsid = str(row.get("NEWSID", "")).strip()
+        if newsid in existing_newsids:
+            continue
+        norm = _bse_row_to_normalized(row)
+        normalized_rows.append(norm)
+        raw_rows_to_append.append(row)
+    if not normalized_rows:
+        return 1
+    try:
+        group_id_keywords = await load_group_keywords_async()
+    except Exception as e:
+        logger.error(f"Error loading group keywords: {e}")
+        group_id_keywords = {}
+    for norm_row in normalized_rows:
+        attachment_file = norm_row["attchmntFile"]
+        message = f'''<b>{norm_row['symbol']} - {norm_row['sm_name']}</b>\n\n{norm_row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+        row_values = [str(v).lower() for v in norm_row.values()]
+        
+        # Determine option for dashboard
+        dashboard_option = "all"
+        for group_id, data in group_id_keywords.items():
+            keywords = data.get("keywords", [])
+            option = data.get("option", "")
+            keywords_lower = [str(kw).lower() for kw in keywords]
+            if any(any(kw in val for val in row_values) for kw in keywords_lower):
+                dashboard_option = option
+                break
+        for group_id, keywords in result_concall_keywords.items():
+            result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
+            if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
+                dashboard_option = "result_concall"
+                break
+        
+        # Save every announcement to dashboard
+        message_id = await save_announcement_to_dashboard(
+            norm_row["symbol"], norm_row["sm_name"], norm_row["desc"], attachment_file,
+            exchange="BSE", option=dashboard_option, message=message
+        )
+        
+        await trigger_test_message(
+            "@trade_mvd", message, "test",
+            norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
+            attachment_file, exchange="BSE"
+        )
+        for group_id, data in group_id_keywords.items():
+            keywords = data.get("keywords", [])
+            option = data.get("option", "")
+            keywords_lower = [str(kw).lower() for kw in keywords]
+            if any(any(kw in val for val in row_values) for kw in keywords_lower):
+                await trigger_test_message(
+                    group_id, message, option,
+                    norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
+                    attachment_file, exchange="BSE", save_to_dashboard=False
+                )
+        for group_id, keywords in result_concall_keywords.items():
+            result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
+            if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
+                financial_metrics = await main_ocr_async(attachment_file)
+                await trigger_test_message(
+                    group_id, message, "result_concall",
+                    norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
+                    attachment_file, exchange="BSE", save_to_dashboard=False
+                )
+                if financial_metrics and message_id:
+                    await process_financial_metrics(financial_metrics, norm_row["symbol"], message_id)
+    df_raw = pd.DataFrame(raw_rows_to_append)
+    if await aiofiles.os.path.exists(bse_csv_file_path):
+        df_existing = pd.read_csv(bse_csv_file_path, dtype="object")
+        df_updated = pd.concat([df_raw, df_existing], ignore_index=True)
+    else:
+        df_updated = df_raw
+    Path(bse_csv_file_path).parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(bse_csv_file_path, mode="w") as f:
+        await f.write(df_updated.to_csv(index=False))
+    logger.info(f"BSE CSV updated with {len(raw_rows_to_append)} new rows")
+    return 1
+
 
 async def update_watchlist_file(new_rows):
     """Update the watchlist CSV file with new rows"""
@@ -2365,36 +2620,43 @@ async def CA_equities():
         return None
 
 
+async def CA_bse():
+    """Fetch BSE corporate announcements and process. Runs in parallel with NSE."""
+    try:
+        bse_data = await fetch_bse_announcements()
+        if bse_data:
+            return await process_bse_ca_data(bse_data)
+    except Exception as e:
+        logger.error(f"BSE CA error: {e}")
+    return None
+
+
 # Function to run the periodic task
 async def run_periodic_task_equities():
     global ai_processing_active
-    logger.info("starting thescript equities ")
+    logger.info("Starting NSE + BSE corporate announcements task")
     while True:
         try:
-            # Pause background task if AI processing is active
             if ai_processing_active:
                 logger.info("AI processing active, pausing background task...")
-                await asyncio.sleep(10)  # Check again in 10 seconds
+                await asyncio.sleep(10)
                 continue
-                
-            logger.info("starting")
-            print("starting")
-            result = await CA_equities()  # Run the task
-            
-            if result is None:
-                logger.warning("Failed to fetch data, will retry in next cycle")
+            logger.info("Fetching NSE + BSE in parallel...")
+            nse_task = asyncio.create_task(CA_equities())
+            bse_task = asyncio.create_task(CA_bse())
+            nse_result, bse_result = await asyncio.gather(nse_task, bse_task)
+            if nse_result is None:
+                logger.warning("NSE fetch failed, will retry next cycle")
             else:
-                logger.info("Successfully fetched data")
-                # Process results here if needed
-                
-            logger.info("next loop")
-            print("next loop")
-            # Increased wait time to reduce interference with AI analyzer
-            await asyncio.sleep(60)  # Wait for 60 seconds before running it again
+                logger.info("NSE fetch completed")
+            if bse_result is None:
+                logger.warning("BSE fetch failed, will retry next cycle")
+            else:
+                logger.info("BSE fetch completed")
+            await asyncio.sleep(60)
         except Exception as e:
             logger.error(f"Error in run_periodic_task_equities: {str(e)}")
-            logger.info("Error occurred in Equities task, waiting 30 seconds before retrying...")
-            await asyncio.sleep(30)  # Wait for 30 seconds before retrying
+            await asyncio.sleep(30)
 
 
 
@@ -2493,7 +2755,7 @@ async def receive_trigger_message(message_data: MessageData):
         
         # Set sector from symbol if not provided
         if message_data.symbol and not message_data.sector:
-            message_data.sector = get_sector_for_symbol(message_data.symbol)
+            message_data.sector = get_sector_for_symbol(message_data.symbol, message_data.exchange or "NSE")
         
         # Skip "test" option completely - no DB, no WebSocket, Telegram only
         if message_data.option == "test":
@@ -2504,8 +2766,8 @@ async def receive_trigger_message(message_data: MessageData):
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
                 INSERT INTO messages 
-                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (chat_id, message, timestamp, symbol, company_name, description, file_url, raw_message, option, sector, exchange)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 message_data.chat_id,
                 message_data.message,
@@ -2516,7 +2778,8 @@ async def receive_trigger_message(message_data: MessageData):
                 message_data.file_url,
                 message_data.message,
                 message_data.option,
-                message_data.sector or ""
+                message_data.sector or "",
+                message_data.exchange or "NSE"
             ))
             await db.commit()
         
@@ -2566,6 +2829,20 @@ async def verify_session_endpoint(request: Request):
     return {
         "valid": False,
         "message": "Session expired or invalid"
+    }
+
+@app.post("/api/reload_sector_map")
+async def reload_sector_map_endpoint():
+    """Reload sector map from all-bse-companies-sectors.csv (fallback: Stock_sectors.xlsx)"""
+    await asyncio.to_thread(load_sector_map)
+    bse_count = len(bse_sector_map)
+    nse_count = len(nse_sector_map)
+    return {
+        "success": True,
+        "message": "Sector map reloaded",
+        "bse_count": bse_count,
+        "nse_count": nse_count,
+        "source": "csv" if bse_count or nse_count else "fallback_or_empty"
     }
 
 @app.get("/api/messages")
