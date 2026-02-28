@@ -5,6 +5,15 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-02-28: Order Quantity from Google Sheet (Max 2)
+
+**Changed** (`place_order.py`): Quantity now read from sheet `QUANTITY` column instead of hardcoded 1.
+- Uses `row['QUANTITY']` from Google Sheet
+- Capped at **max 2** (sheet values 3, 5, etc. → 2)
+- Default 1 if column missing or invalid
+
+---
+
 ### 2026-02-28: Dashboard – All Announcements Visible
 
 **Issue**: Dashboard showed "TODAY'S MESSAGES: 0" and old data; backend sent to Telegram but only keyword-matched announcements were saved to DB.

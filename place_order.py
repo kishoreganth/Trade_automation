@@ -290,20 +290,28 @@ async def get_order_data(all_rows):
         # buy_price = round(ltp * 0.95, 2)
         # sell_price = round(ltp * 1.05, 2)
         
+        # Quantity from sheet, capped at 2 max. Default 1 if missing/invalid.
+        qty_raw = row.get('QUANTITY', 1)
+        try:
+            qty = min(max(1, int(float(qty_raw))), 2)
+        except (ValueError, TypeError):
+            qty = 1
+        qty_str = str(qty)
+
         # refere the params description in the link below
         # https://github.com/Kotak-Neo/Kotak-neo-api-v2/blob/main/docs/Place_Order.md
-        # BUY order 
+        # BUY order
         buy_order = {
-            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
-            "pc": "MIS", "pf": "N", "pr": str(row['BUY ORDER']), "pt": "L", 
-            "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "B"
+            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0",
+            "pc": "MIS", "pf": "N", "pr": str(row['BUY ORDER']), "pt": "L",
+            "qt": qty_str, "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "B"
         }
-        
+
         # SELL order
         sell_order = {
-            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0", 
-            "pc": "MIS", "pf": "N", "pr": str(row['SELL ORDER']), "pt": "L", 
-            "qt": "1", "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "S"
+            "am": "NO", "dq": "0", "es": "nse_cm", "mp": "0",
+            "pc": "MIS", "pf": "N", "pr": str(row['SELL ORDER']), "pt": "L",
+            "qt": qty_str, "rt": "DAY", "tp": "0", "ts": row['STOCK_NAME'], "tt": "S"
         }
         
         all_orders.extend([buy_order, sell_order])
