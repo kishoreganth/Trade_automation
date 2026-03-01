@@ -25,39 +25,29 @@ from itertools import chain
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def _get_order_headers() -> Optional[Dict[str, str]]:
-    """Get headers for order placement API calls (similar to get_quote.py)"""
+async def _get_order_headers() -> Optional[Dict[str, Any]]:
+    """Get headers and base_url for order placement (v2: Sid, Auth only - no Authorization)"""
     try:
-        # Initialize session manager
         session_manager = KotakSessionManager()
-        
-        # Load session data
         session_data = await session_manager.load_session()
-        
         if not session_data:
             logger.error("No session data found")
             return None
-        
-        # Extract required tokens
-        access_token = session_data.get("access_token")
         sid = session_data.get("sid")
         auth_token = session_data.get("token")
-        
-        if not all([access_token, sid, auth_token]):
-            logger.error("Missing required tokens in session data")
+        base_url = session_data.get("base_url")
+        if not all([sid, auth_token, base_url]):
+            logger.error("Missing sid, token, or base_url in session")
             return None
-        
-        headers = {
-            'accept': 'application/json',
-            'Sid': sid,
-            'Auth': auth_token,
-            'neo-fin-key': 'neotradeapi',
-            'Authorization': f'Bearer {access_token}',
-            'Content-Type': 'application/x-www-form-urlencoded'
+        return {
+            "base_url": base_url,
+            "headers": {
+                'accept': 'application/json',
+                'Sid': sid,
+                'Auth': auth_token,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
         }
-        
-        return headers
-        
     except Exception as e:
         logger.error(f"Error getting order headers: {str(e)}")
         return None
@@ -107,20 +97,17 @@ async def place_order(order_data):
         dict: Order response or None if failed
     """
     try:
-        # Get authentication headers using session manager (like get_quote.py)
-        headers = await _get_order_headers()
-        if not headers:
-            logger.error("Failed to get authentication headers from session manager")
+        auth = await _get_order_headers()
+        if not auth:
+            logger.error("Failed to get authentication from session manager")
             return None
+        base_url = auth["base_url"]
+        headers = auth["headers"]
         
-        # Convert to proper payload format: jData=<URL_encoded_JSON>
         payload = f"jData={urllib.parse.quote(json.dumps(order_data))}"
-        
-        # Create SSL context for HTTPS
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         
         async with aiohttp.ClientSession(
@@ -128,7 +115,7 @@ async def place_order(order_data):
             timeout=aiohttp.ClientTimeout(total=30)
         ) as session:
             async with session.post(
-                "https://gw-napi.kotaksecurities.com/Orders/2.0/quick/order/rule/ms/place",
+                f"{base_url}/quick/order/rule/ms/place",
                 data=payload,
                 headers=headers
             ) as response:
@@ -320,27 +307,19 @@ async def get_order_data(all_rows):
 
 
 async def get_login_session_tokens():
-        
-    # Get credentials from environment variables
-    client_credentials = os.getenv("CLIENT_CREDENTIALS")
     mobile_number = os.getenv("MOBILE_NUMBER")
     ucc = os.getenv("UCC")
     mpin = os.getenv("MPIN")
     totp = os.getenv("TOTP")
-    if not all([client_credentials, mobile_number, ucc, mpin]):
-        logger.error("Missing required environment variables")
+    access_token = os.getenv("NEO_ACCESS_TOKEN")
+    if not all([access_token, mobile_number, ucc, mpin]):
+        logger.error("Missing NEO_ACCESS_TOKEN, MOBILE_NUMBER, UCC, or MPIN")
         return {
             "success": False,
             "message": "Server configuration error: Missing credentials"
         }
-    
     logger.info(f"Starting Neo authentication with TOTP from UI: {totp}")
-    
-    # Format client credentials for Basic auth
-    formatted_credentials = f'Basic {client_credentials}'
-    
-    # Call neo_main_login function with TOTP from UI, rest from .env
-    session_data = await neo_main_login(formatted_credentials, mobile_number, ucc, totp, mpin)
+    session_data = await neo_main_login(mobile_number, ucc, totp, mpin, access_token)
     return session_data
 
 

@@ -3230,14 +3230,13 @@ async def fetch_nse_cm_data_background():
             content = await f.read()
             session_data = json.loads(content)
         
+        base_url = session_data.get('base_url')
         access_token = session_data.get('access_token')
-        if not access_token:
-            logger.error("Background: Access token not found")
+        if not base_url or not access_token:
+            logger.error("Background: base_url or access_token not found")
             return
-        
-        # Get file paths
-        url = "https://gw-napi.kotaksecurities.com/Files/1.0/masterscrip/v2/file-paths"
-        headers = {'accept': '*/*', 'Authorization': f'Bearer {access_token}'}
+        url = f"{base_url}/script-details/1.0/masterscrip/file-paths"
+        headers = {'accept': '*/*', 'Authorization': access_token}
         
         async with httpx.AsyncClient(verify=False, timeout=30, follow_redirects=True) as client:
             response = await client.get(url, headers=headers)
@@ -3332,26 +3331,18 @@ async def fetch_nse_cm_data_background():
 async def verify_totp(request: TOTPRequest, background_tasks: BackgroundTasks):
     """Verify TOTP code and authenticate with Neo trading system"""
     try:
-        # Get credentials from environment variables
-        client_credentials = os.getenv("CLIENT_CREDENTIALS")
+        access_token = os.getenv("NEO_ACCESS_TOKEN")
         mobile_number = os.getenv("MOBILE_NUMBER")
         ucc = os.getenv("UCC")
         mpin = os.getenv("MPIN")
-        
-        if not all([client_credentials, mobile_number, ucc, mpin]):
-            logger.error("Missing required environment variables")
+        if not all([access_token, mobile_number, ucc, mpin]):
+            logger.error("Missing NEO_ACCESS_TOKEN, MOBILE_NUMBER, UCC, or MPIN")
             return {
                 "success": False,
                 "message": "Server configuration error: Missing credentials"
             }
-        
         logger.info(f"Starting Neo authentication with TOTP from UI: {request.totp_code}")
-        
-        # Format client credentials for Basic auth
-        formatted_credentials = f'Basic {client_credentials}'
-        
-        # Call neo_main_login function with TOTP from UI, rest from .env
-        session_data = await neo_main_login(formatted_credentials, mobile_number, ucc, request.totp_code, mpin)
+        session_data = await neo_main_login(mobile_number, ucc, request.totp_code, mpin, access_token)
         
         if session_data:
             logger.info("Neo authentication successful")

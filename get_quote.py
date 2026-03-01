@@ -28,32 +28,26 @@ class KotakQuoteClient:
     """Async client for Kotak Securities quote API"""
     
     def __init__(self):
-        self.base_url = "https://gw-napi.kotaksecurities.com"
         self.session_manager = KotakSessionManager()
     
-    async def _get_quote_headers(self) -> Optional[Dict[str, str]]:
-        """Get headers for quote API calls"""
+    async def _get_quote_auth(self) -> Optional[Dict[str, Any]]:
+        """Get base_url and headers for quote API (v2: baseUrl + plain token)"""
         try:
-            # Load session data
             session_data = await self.session_manager.load_session()
             if not session_data:
                 logger.error("No session data found")
                 return None
-            
+            base_url = session_data.get("base_url")
             access_token = session_data.get("access_token")
-            if not access_token:
-                logger.error("Access token not found in session data")
+            if not base_url or not access_token:
+                logger.error("Missing base_url or access_token in session")
                 return None
-            
-            headers = {
-                'accept': 'application/json',
-                'Authorization': f'Bearer {access_token}'
+            return {
+                "base_url": base_url,
+                "headers": {'accept': 'application/json', 'Authorization': access_token}
             }
-            
-            return headers
-            
         except Exception as e:
-            logger.error(f"Error getting quote headers: {str(e)}")
+            logger.error(f"Error getting quote auth: {str(e)}")
             return None
         
     async def get_quote(self, symbols: Union[str, List[str]]) -> Optional[Dict[str, Any]]:
@@ -78,14 +72,13 @@ class KotakQuoteClient:
         # logger.info(f"Original symbols: {symbol_string}")
         # logger.info(f"URL encoded symbols: {encoded_symbols}")
         
-        # Get headers from session manager
-        headers = await self._get_quote_headers()
-        if not headers:
-            logger.error("Failed to get authentication headers")
+        auth = await self._get_quote_auth()
+        if not auth:
+            logger.error("Failed to get quote auth")
             return None
-        
-        # Build URL matching reference: /apim/quotes/1.0/quotes/neosymbol/{symbols}/all
-        url = f"{self.base_url}/apim/quotes/1.0/quotes/neosymbol/{encoded_symbols}/all"
+        base_url = auth["base_url"]
+        headers = auth["headers"]
+        url = f"{base_url}/script-details/1.0/quotes/neosymbol/{encoded_symbols}/all"
         # logger.info(f"Calling API URL: {url}")
         
         try:

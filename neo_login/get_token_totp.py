@@ -14,7 +14,7 @@ class KotakTOTPClient:
     """Async client for TOTP-based login to Kotak Securities"""
     
     def __init__(self):
-        self.base_url = "https://gw-napi.kotaksecurities.com"
+        self.base_url = "https://mis.kotaksecurities.com"
         
     async def login_with_totp(
         self, 
@@ -49,7 +49,7 @@ class KotakTOTPClient:
         }
         
         headers = {
-            'Authorization': f"Bearer {access_token}",
+            'Authorization': access_token,
             'neo-fin-key': 'neotradeapi',
             'Content-Type': 'application/json'
         }
@@ -57,7 +57,7 @@ class KotakTOTPClient:
         try:
             async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=120, connect=60)) as session:
                 async with session.post(
-                    f"{self.base_url}/login/1.0/login/v6/totp/login",
+                    f"{self.base_url}/login/1.0/tradeApiLogin",
                     json=payload,
                     headers=headers
                 ) as response:

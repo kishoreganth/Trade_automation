@@ -5,6 +5,24 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-01: NEO API v2 Migration – Implemented
+
+**Migrated** to Kotak NEO API v2. Flow: TOTP → MPIN → session (sid, token, baseUrl from MPIN).
+
+**Files changed**:
+- `neo_login/get_access_token.py` – reads NEO_ACCESS_TOKEN from env (no OAuth2)
+- `neo_login/get_token_totp.py` – mis.kotaksecurities.com, tradeApiLogin, plain token
+- `neo_login/get_final_session.py` – mis.kotaksecurities.com, tradeApiValidate, plain token
+- `neo_login/session_manager.py` – saves baseUrl from MPIN; validation uses base_url; no hardcoded base_url
+- `neo_main_login.py` – main(mobile_number, ucc, totp, mpin, access_token=None)
+- `place_order.py` – baseUrl + Sid/Auth only; no Authorization
+- `get_quote.py` – baseUrl + script-details path; plain token
+- `nse_url_test.py` – verify_totp/get_login use NEO_ACCESS_TOKEN; scripmaster uses baseUrl + plain token
+
+**Env**: Add `NEO_ACCESS_TOKEN` (from Neo app dashboard). Remove `CLIENT_CREDENTIALS`. Delete `kotak_session.json` before first v2 login.
+
+---
+
 ### 2026-02-28: Order Quantity from Google Sheet (Max 2)
 
 **Changed** (`place_order.py`): Quantity now read from sheet `QUANTITY` column instead of hardcoded 1.

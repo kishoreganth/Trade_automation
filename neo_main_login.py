@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-async def main(client_credentials, mobile_number, ucc, totp, mpin):
+async def main(mobile_number, ucc, totp, mpin, access_token=None):
     """
     Main authentication flow with session management
     Checks for existing valid session first, then authenticates if needed
@@ -38,9 +38,9 @@ async def main(client_credentials, mobile_number, ucc, totp, mpin):
     
     print("🚀 No valid session found. Starting fresh authentication...")
     
-    ## STEP 1: Get access token
+    ## STEP 1: Get access token (from Neo dashboard / NEO_ACCESS_TOKEN env)
     print("📡 Step 1: Getting access token...")
-    client = KotakAccessTokenClient(client_credentials)
+    client = KotakAccessTokenClient(access_token)
     token_data = await client.get_access_token()
 
     if not token_data:

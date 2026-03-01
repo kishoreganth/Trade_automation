@@ -17,7 +17,7 @@ class KotakFinalSessionClient:
     """Async client for final session validation with MPIN in Kotak Securities"""
     
     def __init__(self):
-        self.base_url = "https://gw-napi.kotaksecurities.com"
+        self.base_url = "https://mis.kotaksecurities.com"
         
     async def validate_final_session(
         self, 
@@ -55,13 +55,13 @@ class KotakFinalSessionClient:
             'Auth': jwt_auth_token,
             'neo-fin-key': 'neotradeapi',
             'Content-Type': 'application/json',
-            'Authorization': f"Bearer {access_token}"
+            'Authorization': access_token
         }
         
         try:
             async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=120, connect=60)) as session:
                 async with session.post(
-                    f"{self.base_url}/login/1.0/login/v6/totp/validate",
+                    f"{self.base_url}/login/1.0/tradeApiValidate",
                     json=payload,
                     headers=headers
                 ) as response:

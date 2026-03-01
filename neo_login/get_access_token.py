@@ -1,11 +1,7 @@
-import asyncio
-import aiohttp
-import json
-import ssl
+import os
 from typing import Optional, Dict, Any
 import logging
 from dotenv import load_dotenv
-import os 
 
 load_dotenv()
 
@@ -14,62 +10,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class KotakAccessTokenClient:
-    """Async client for getting Kotak Securities access token"""
-    
-    def __init__(self,client_credentials: str = None):
-        self.base_url = "https://napi.kotaksecurities.com"
-        # self.client_credentials = f'Basic {os.getenv("CLIENT_CREDENTIALS")}'
-        self.client_credentials = client_credentials
-        
+    """Get Kotak NEO access token from Neo app dashboard (v2 - no OAuth2)"""
+
+    def __init__(self, client_credentials: str = None):
+        self._token = client_credentials
+
     async def get_access_token(self) -> Optional[Dict[str, Any]]:
         """
-        Get access token from Kotak Securities API
-        
+        Get access token from env (NEO_ACCESS_TOKEN). No OAuth2 - token from Neo app dashboard.
         Returns:
-            Dict containing access token and related info, or None if failed
+            Dict with access_token key, or None if missing
         """
-        # Create SSL context that allows unverified certificates
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        
-        payload = 'grant_type=client_credentials'
-        headers = {
-            'Authorization': self.client_credentials,
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        
-        try:
-            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=120, connect=60)) as session:
-                async with session.post(
-                    f"{self.base_url}/oauth2/token",
-                    data=payload,
-                    headers=headers
-                ) as response:
-                    
-                    if response.status == 200:
-                        response_data = await response.text()
-                        logger.info(f"Successfully received access token response")
-                        
-                        try:
-                            token_data = json.loads(response_data)
-                            return token_data
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse JSON response: {response_data}")
-                            return None
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"Failed to get access token. Status: {response.status}, Response: {error_text}")
-                        return None
-                        
-        except asyncio.TimeoutError:
-            logger.error("Request timed out while getting access token")
+        token = self._token or os.getenv("NEO_ACCESS_TOKEN")
+        if not token:
+            logger.error("NEO_ACCESS_TOKEN not found in environment")
             return None
-        except Exception as e:
-            logger.error(f"Unexpected error while getting access token: {str(e)}")
-            return None
+        logger.info("Access token loaded from Neo dashboard (env)")
+        return {"access_token": token.strip()}
 
 # Main async function for standalone usage
 # async def main():

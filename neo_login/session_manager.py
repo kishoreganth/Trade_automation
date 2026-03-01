@@ -20,7 +20,6 @@ class KotakSessionManager:
     
     def __init__(self, session_file: str = "kotak_session.json"):
         self.session_file = Path(session_file)
-        self.base_url = "https://gw-napi.kotaksecurities.com"
         self._session_data = None
     
     def _get_next_midnight(self) -> datetime:
@@ -56,19 +55,21 @@ class KotakSessionManager:
         try:
             # Extract essential session information
             if "data" in session_data:
+                data = session_data["data"]
                 session_info = {
-                    "sid": session_data["data"]["sid"],
-                    "token": session_data["data"]["token"],
+                    "sid": data["sid"],
+                    "token": data["token"],
+                    "base_url": data.get("baseUrl") or data.get("base_url"),
                     "access_token": getattr(self, '_access_token', None),
                     "created_at": datetime.now().isoformat(),
-                    "expires_at": self._get_next_midnight().isoformat(),  # Session expires at midnight
+                    "expires_at": self._get_next_midnight().isoformat(),
                     "full_response": session_data
                 }
             else:
-                # Handle direct session data format
                 session_info = {
                     "sid": session_data.get("sid"),
                     "token": session_data.get("token"),
+                    "base_url": session_data.get("base_url"),
                     "access_token": getattr(self, '_access_token', None),
                     "created_at": datetime.now().isoformat(),
                     "expires_at": self._get_next_midnight().isoformat(),
@@ -164,17 +165,20 @@ class KotakSessionManager:
             
             connector = aiohttp.TCPConnector(ssl=ssl_context)
             
+            base_url = session_data.get("base_url")
+            if not base_url:
+                logger.warning("Session missing base_url - cannot validate")
+                return False
+
             headers = {
                 'accept': '*/*',
                 'sid': session_data.get("sid"),
                 'Auth': session_data.get("token"),
-                'Authorization': f"Bearer {session_data.get('access_token', '')}"
             }
             
-            # Use the proven portfolio holdings endpoint for validation
             async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60, connect=30)) as session:
                 async with session.get(
-                    f"{self.base_url}/Portfolio/1.0/portfolio/v1/holdings?alt=false",
+                    f"{base_url}/portfolio/v1/holdings",
                     headers=headers
                 ) as response:
                     
@@ -228,8 +232,8 @@ class KotakSessionManager:
             'accept': 'application/json',
             'sid': session_data.get("sid"),
             'Auth': session_data.get("token"),
-            'neo-fin-key': 'neotradeapi',
-            'Authorization': f"Bearer {session_data.get('access_token', '')}",
+            'base_url': session_data.get("base_url"),
+            'access_token': session_data.get('access_token'),
             'Content-Type': 'application/json'
         }
     
