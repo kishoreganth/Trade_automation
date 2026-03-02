@@ -137,14 +137,14 @@ async def place_order(order_data):
         return None
 
 
-async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_concurrent=5):
+async def place_orders_with_rate_limit(orders_list, orders_per_minute=190, max_concurrent=5):
     """
     Place orders with time-windowed rate limiting to respect API limits.
     Executes orders in batches and waits between batches.
     
     Args:
         orders_list: List of order dictionaries
-        orders_per_minute: Max orders per minute (default: 200, matching API limit)
+        orders_per_minute: Max orders per minute (default: 190, 5% under API limit)
         max_concurrent: Concurrent orders within a batch (default: 5)
         
     Returns:
@@ -157,8 +157,8 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_c
     total_orders = len(orders_list)
     all_results = []
     
-    # Split orders into batches of orders_per_minute
-    batch_size = orders_per_minute
+    # Split orders into batches (180 for 2% safety buffer vs 200/min API limit)
+    batch_size = min(orders_per_minute, 180)
     total_batches = (total_orders + batch_size - 1) // batch_size  # Ceiling division
     
     logger.info(f"🚀 Starting rate-limited order execution")
@@ -208,7 +208,7 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_c
             await asyncio.sleep(wait_time)
     
     # Final summary
-    total_success = sum(1 for r in all_results if r and r.get('status') != 'error')
+    total_success = sum(1 for r in all_results if not isinstance(r, Exception) and r and r.get('status') != 'error')
     total_failed = total_orders - total_success
     
     logger.info(f"\n{'='*60}")
@@ -344,7 +344,7 @@ async def main():
     print(f"\n📋 Prepared {len(all_orders)} orders for {len(all_rows)} stocks")
     
     # Place all orders with rate limiting (200 orders per minute = 100 stocks per minute)
-    results = await place_orders_with_rate_limit(all_orders, orders_per_minute=200, max_concurrent=5)
+    results = await place_orders_with_rate_limit(all_orders, orders_per_minute=190, max_concurrent=5)
     
     # Print summary
     successful = sum(1 for r in results if r and r.get('status') != 'error')

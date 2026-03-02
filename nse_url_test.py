@@ -1107,13 +1107,13 @@ async def run_scheduled_fetch_quotes():
                         symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
                         total_symbols = len(symbols_list)
                         
-                        # Fetch quotes with rate limiting (200 req/min)
-                        batch_size = 180
+                        # Fetch quotes with rate limiting (190 req/min)
+                        batch_size = 190
                         symbol_batches = [
                             symbols_list[i:i + batch_size]
                             for i in range(0, total_symbols, batch_size)
                         ]
-                        all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=200)
+                        all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=190)
                         
                         # Process results
                         await ws_manager.broadcast_message({
@@ -3419,7 +3419,7 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Session validated successfully")
                 
-                # Import order placement modules (use place_orders_with_rate_limit for API 200/min limit)
+                # Import order placement modules (use place_orders_with_rate_limit - 190/min)
                 from place_order import get_gsheet_stocks_df as get_order_stocks, get_order_data, place_orders_with_rate_limit
                 from gsheet_stock_get import GSheetStockClient
                 
@@ -3470,12 +3470,12 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Created {total_orders} orders ({len(filtered_rows)} stocks × 2 orders)")
                 
-                # Step 3: Place orders with rate limiting (200 orders/min - respects API limit)
-                active_jobs[job_id].message = f"Placing {total_orders} orders (rate limited: 200/min)..."
+                # Step 3: Place orders with rate limiting (190 orders/min - 5% under API limit)
+                active_jobs[job_id].message = f"Placing {total_orders} orders (rate limited: 190/min)..."
                 active_jobs[job_id].progress = 25
                 
-                # Use place_orders_with_rate_limit - waits 60s between batches of 200
-                all_results = await place_orders_with_rate_limit(all_orders, orders_per_minute=200, max_concurrent=5)
+                # Use place_orders_with_rate_limit - waits 60s between batches of 190
+                all_results = await place_orders_with_rate_limit(all_orders, orders_per_minute=190, max_concurrent=5)
                 
                 # Step 4: Count successes (90% progress)
                 active_jobs[job_id].message = "Processing results..."
@@ -3702,7 +3702,7 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Session validated successfully")
                 
-                # Import quote fetching modules (use get_quotes_with_rate_limit - 200 req/min)
+                # Import quote fetching modules (use get_quotes_with_rate_limit - 190 req/min)
                 from get_quote import (
                     get_gsheet_stocks_df, get_symbol_from_gsheet_stocks_df,
                     flatten_quote_result_list, fetch_ohlc_from_quote_result,
@@ -3733,19 +3733,19 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 logger.info(f"📊 Valid indices: {len(valid_indices)}")
                 logger.info(f"[Job {job_id}] Created {total_symbols} valid symbols")
                 
-                # Step 3: Fetch quotes with rate limiting (200 req/min)
-                active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks (rate limited: 200/min)..."
+                # Step 3: Fetch quotes with rate limiting (190 req/min)
+                active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks (rate limited: 190/min)..."
                 active_jobs[job_id].progress = 15
                 
-                # Build symbol batches: each batch = 1 API call (180 symbols per call for efficiency)
-                batch_size = 180
+                # Build symbol batches: each batch = 1 API call (190 symbols per call for efficiency)
+                batch_size = 190
                 symbol_batches = [
                     symbols_list[i:i + batch_size]
                     for i in range(0, total_symbols, batch_size)
                 ]
-                logger.info(f"[Job {job_id}] Will process {len(symbol_batches)} API requests (rate limited)")
+                logger.info(f"[Job {job_id}] Will process {len(symbol_batches)} API requests (rate limited: 190/min)")
                 
-                all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=200)
+                all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=190)
                 
                 # Step 4: Process results (80% progress)
                 active_jobs[job_id].message = "Processing quote results..."

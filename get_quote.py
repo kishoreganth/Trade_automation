@@ -123,14 +123,14 @@ class KotakQuoteClient:
     async def get_quotes_with_rate_limit(
         self, 
         symbol_batches: List[str], 
-        requests_per_minute: int = 200
-    ) -> List[Optional[Dict[str, Any]]]:
+        requests_per_minute: int = 190
+        ) -> List[Optional[Dict[str, Any]]]:
         """
-        Get quotes with rate limiting (200 API requests per minute)
+        Get quotes with rate limiting (190 req/min, 5% under API limit)
         
         Args:
             symbol_batches: List of symbol lists (each inner list = 1 API request)
-            requests_per_minute: Max API requests per minute (default: 200)
+            requests_per_minute: Max API requests per minute (default: 190)
             
         Returns:
             List of quote data results (preserves order)
@@ -144,8 +144,8 @@ class KotakQuoteClient:
         total_requests = len(symbol_batches)
         all_results = []
         
-        # Calculate batches based on rate limit
-        batch_size = requests_per_minute  # How many API calls per minute
+        # Calculate batches based on rate limit (190 = 5% buffer vs 200/min)
+        batch_size = min(requests_per_minute, 190)
         total_batches = (total_requests + batch_size - 1) // batch_size
         
         logger.info(f"🚀 Starting rate-limited quote fetching")
@@ -213,14 +213,14 @@ async def get_multiple_quotes(symbols: List[str]) -> Optional[Dict[str, Any]]:
 
 async def get_quotes_with_rate_limit(
     symbol_batches: List[str], 
-    requests_per_minute: int = 200
+    requests_per_minute: int = 190
 ) -> List[Optional[Dict[str, Any]]]:
     """
-    Get quotes with rate limiting (200 API requests per minute)
+    Get quotes with rate limiting (190 req/min, 5% under API limit)
     
     Args:
         symbol_batches: List of symbol lists (each inner list = 1 API request)
-        requests_per_minute: Max API requests per minute (default: 200)
+        requests_per_minute: Max API requests per minute (default: 190)
     
     Returns:
         List of quote data results
@@ -571,10 +571,12 @@ async def main():
     ##### ------ GET QUOTES WITH RATE LIMITING ------ #####
     symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
     
-    # If > 200 API requests: applies time-windowed rate limiting
+    # Batch symbols (190 per API call) + rate limit 190 req/min
+    batch_size = 190
+    symbol_batches = [symbols_list[i:i + batch_size] for i in range(0, len(symbols_list), batch_size)]
     quote_result = await get_quotes_with_rate_limit(
-        symbols_list,
-        requests_per_minute=200
+        symbol_batches,
+        requests_per_minute=190
     )
     print("QUOTE RESULT IS HERE")
     # print(quote_result)

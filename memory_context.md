@@ -10,8 +10,12 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 **All NEO API calls now use rate limiting only.**
 
 **Dashboard flows:**
-- **GET QUOTES** (`/api/get_quotes_updated`): Uses `get_quotes_with_rate_limit(symbol_batches, 200/min)`
-- **PLACE ORDER** (`/api/execute_orders`): Uses `place_orders_with_rate_limit(all_orders, 200/min)`
+- **GET QUOTES** (`/api/get_quotes_updated`): Uses `get_quotes_with_rate_limit(symbol_batches, 190/min)`
+- **PLACE ORDER** (`/api/execute_orders`): Uses `place_orders_with_rate_limit(all_orders, 190/min)`
+
+**Rate limit:** 190/min (5% under API 200/min) – faster than 180, safe from 429.
+
+**get_quote main:** Batches symbols 190/call before rate-limited fetch.
 
 **Removed:** `get_quotes_batch`, `place_orders_batch` (no rate limiting).
 
