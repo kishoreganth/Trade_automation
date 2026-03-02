@@ -5,6 +5,20 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-02: NEO API – Rate Limiting Only, No Batch Without Limit
+
+**All NEO API calls now use rate limiting only.**
+
+**Dashboard flows:**
+- **GET QUOTES** (`/api/get_quotes_updated`): Uses `get_quotes_with_rate_limit(symbol_batches, 200/min)`
+- **PLACE ORDER** (`/api/execute_orders`): Uses `place_orders_with_rate_limit(all_orders, 200/min)`
+
+**Removed:** `get_quotes_batch`, `place_orders_batch` (no rate limiting).
+
+**Updated:** GET QUOTES (dashboard + scheduled fetch), PLACE ORDER – both use rate-limited functions. `get_quotes_concurrent` kept as internal helper for `get_quotes_with_rate_limit`.
+
+---
+
 ### 2026-03-01: NEO API v2 Migration – Implemented
 
 **Migrated** to Kotak NEO API v2. Flow: TOTP → MPIN → session (sid, token, baseUrl from MPIN).

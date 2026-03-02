@@ -1076,7 +1076,7 @@ async def run_scheduled_fetch_quotes():
                             get_gsheet_stocks_df, get_symbol_from_gsheet_stocks_df,
                             flatten_quote_result_list, fetch_ohlc_from_quote_result,
                             update_df_with_quote_ohlc, write_quote_ohlc_to_gsheet,
-                            KotakQuoteClient
+                            get_quotes_with_rate_limit
                         )
                         from gsheet_stock_get import GSheetStockClient
                         
@@ -1107,32 +1107,13 @@ async def run_scheduled_fetch_quotes():
                         symbols_list, valid_indices = await get_symbol_from_gsheet_stocks_df(all_rows)
                         total_symbols = len(symbols_list)
                         
-                        # Fetch quotes in batches
-                        quote_client = KotakQuoteClient()
-                        all_quote_results = []
+                        # Fetch quotes with rate limiting (200 req/min)
                         batch_size = 180
-                        total_batches = (total_symbols + batch_size - 1) // batch_size
-                        
-                        for batch_num in range(total_batches):
-                            start_idx = batch_num * batch_size
-                            end_idx = min(start_idx + batch_size, total_symbols)
-                            batch_symbols = symbols_list[start_idx:end_idx]
-                            
-                            progress = 20 + int((batch_num / total_batches) * 50)
-                            await ws_manager.broadcast_message({
-                                "type": "scheduled_task",
-                                "status": "progress",
-                                "task": "fetch_quotes",
-                                "progress": progress,
-                                "message": f"📊 Fetching batch {batch_num + 1}/{total_batches} ({end_idx}/{total_symbols} stocks)...",
-                                "timestamp": get_ist_now().isoformat()
-                            })
-                            
-                            batch_result = await quote_client.get_quotes_concurrent(batch_symbols)
-                            all_quote_results.extend(batch_result)
-                            
-                            if batch_num < total_batches - 1:
-                                await asyncio.sleep(53)
+                        symbol_batches = [
+                            symbols_list[i:i + batch_size]
+                            for i in range(0, total_symbols, batch_size)
+                        ]
+                        all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=200)
                         
                         # Process results
                         await ws_manager.broadcast_message({
@@ -3438,8 +3419,8 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Session validated successfully")
                 
-                # Import order placement modules
-                from place_order import get_gsheet_stocks_df as get_order_stocks, get_order_data, place_orders_batch
+                # Import order placement modules (use place_orders_with_rate_limit for API 200/min limit)
+                from place_order import get_gsheet_stocks_df as get_order_stocks, get_order_data, place_orders_with_rate_limit
                 from gsheet_stock_get import GSheetStockClient
                 
                 # Step 1: Load stock data from Google Sheet (10% progress)
@@ -3489,41 +3470,12 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Created {total_orders} orders ({len(filtered_rows)} stocks × 2 orders)")
                 
-                # Step 3: Place orders with rate limiting and progress tracking (20% → 90%)
-                active_jobs[job_id].message = f"Placing {total_orders} orders..."
+                # Step 3: Place orders with rate limiting (200 orders/min - respects API limit)
+                active_jobs[job_id].message = f"Placing {total_orders} orders (rate limited: 200/min)..."
                 active_jobs[job_id].progress = 25
                 
-                # Calculate batches (180 per batch with 53s delay = ~196 req/min, 2% under limit)
-                batch_size = 180
-                total_batches = (total_orders + batch_size - 1) // batch_size
-                
-                logger.info(f"[Job {job_id}] Will process {total_batches} batches")
-                
-                progress_start = 25
-                progress_end = 85
-                progress_range = progress_end - progress_start
-                
-                all_results = []
-                
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_orders)
-                    batch_orders = all_orders[start_idx:end_idx]
-                    
-                    # Update progress for this batch
-                    batch_progress = progress_start + int((batch_num / total_batches) * progress_range)
-                    active_jobs[job_id].progress = batch_progress
-                    active_jobs[job_id].message = f"Placing orders batch {batch_num + 1}/{total_batches} ({end_idx}/{total_orders} orders)"
-                    
-                    logger.info(f"[Job {job_id}] Processing batch {batch_num + 1}/{total_batches}")
-                    
-                    # Place orders for this batch
-                    batch_results = await place_orders_batch(batch_orders, max_concurrent=5)
-                    all_results.extend(batch_results)
-                    
-                    # Wait if not last batch (rate limiting: 180 orders per 53s = ~196 req/min, 2% buffer)
-                    if batch_num < total_batches - 1:
-                        await asyncio.sleep(53)  # 53 seconds for optimal speed with safety margin
+                # Use place_orders_with_rate_limit - waits 60s between batches of 200
+                all_results = await place_orders_with_rate_limit(all_orders, orders_per_minute=200, max_concurrent=5)
                 
                 # Step 4: Count successes (90% progress)
                 active_jobs[job_id].message = "Processing results..."
@@ -3750,12 +3702,12 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Session validated successfully")
                 
-                # Import quote fetching modules
+                # Import quote fetching modules (use get_quotes_with_rate_limit - 200 req/min)
                 from get_quote import (
                     get_gsheet_stocks_df, get_symbol_from_gsheet_stocks_df,
                     flatten_quote_result_list, fetch_ohlc_from_quote_result,
                     update_df_with_quote_ohlc, write_quote_ohlc_to_gsheet,
-                    KotakQuoteClient
+                    get_quotes_with_rate_limit
                 )
                 from gsheet_stock_get import GSheetStockClient
                 
@@ -3781,50 +3733,19 @@ async def get_quotes_updated(background_tasks: BackgroundTasks):
                 logger.info(f"📊 Valid indices: {len(valid_indices)}")
                 logger.info(f"[Job {job_id}] Created {total_symbols} valid symbols")
                 
-                # Step 3: Fetch quotes with rate limiting and progress tracking (10% → 80%)
-                active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks..."
+                # Step 3: Fetch quotes with rate limiting (200 req/min)
+                active_jobs[job_id].message = f"Fetching quotes for {total_symbols} stocks (rate limited: 200/min)..."
                 active_jobs[job_id].progress = 15
                 
-                # Calculate batches (180 per batch with 53s delay = ~196 req/min, 2% under limit)
+                # Build symbol batches: each batch = 1 API call (180 symbols per call for efficiency)
                 batch_size = 180
-                total_batches = (total_symbols + batch_size - 1) // batch_size
+                symbol_batches = [
+                    symbols_list[i:i + batch_size]
+                    for i in range(0, total_symbols, batch_size)
+                ]
+                logger.info(f"[Job {job_id}] Will process {len(symbol_batches)} API requests (rate limited)")
                 
-                logger.info(f"[Job {job_id}] Will process {total_batches} batches")
-                
-                # Manually call KotakQuoteClient with progress tracking
-                quote_client = KotakQuoteClient()
-                all_quote_results = []
-                
-                progress_start = 15
-                progress_end = 75
-                progress_range = progress_end - progress_start
-                
-                batch_lengths = []  # Track response lengths per batch
-                
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_symbols)
-                    batch_symbols = symbols_list[start_idx:end_idx]
-                    
-                    # Update progress for this batch
-                    batch_progress = progress_start + int((batch_num / total_batches) * progress_range)
-                    active_jobs[job_id].progress = batch_progress
-                    active_jobs[job_id].message = f"Fetching batch {batch_num + 1}/{total_batches} ({end_idx}/{total_symbols} stocks)"
-                    
-                    logger.info(f"[Job {job_id}] Processing batch {batch_num + 1}/{total_batches}")
-                    
-                    # Fetch quotes for this batch
-                    batch_result = await quote_client.get_quotes_concurrent(batch_symbols)
-                    batch_lengths.append(len(batch_result) if batch_result else 0)
-                    logger.info(f"📊 Batch {batch_num + 1} returned: {batch_lengths[-1]} results (sent {len(batch_symbols)} symbols)")
-                    
-                    all_quote_results.extend(batch_result)
-                    
-                    # Wait if not last batch (rate limiting: 180 requests per 53s = ~196 req/min, 2% buffer)
-                    if batch_num < total_batches - 1:
-                        await asyncio.sleep(53)  # 53 seconds for optimal speed with safety margin
-                
-                logger.info(f"📊 Quote API responses (per batch): {batch_lengths}")
+                all_quote_results = await get_quotes_with_rate_limit(symbol_batches, requests_per_minute=200)
                 
                 # Step 4: Process results (80% progress)
                 active_jobs[job_id].message = "Processing quote results..."

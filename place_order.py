@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 from gsheet_stock_get import GSheetStockClient
 import asyncio
 import pandas as pd
-from get_quote import get_multiple_quotes, get_single_quote, get_quotes_batch, get_quotes_with_rate_limit
+from get_quote import get_multiple_quotes, get_single_quote, get_quotes_with_rate_limit
 
 import os 
 from dotenv import load_dotenv
@@ -137,56 +137,6 @@ async def place_order(order_data):
         return None
 
 
-async def place_orders_batch(orders_list, max_concurrent=5):
-    """
-    Place multiple orders concurrently with rate limiting
-    
-    Args:
-        orders_list: List of order dictionaries
-        max_concurrent: Maximum number of concurrent orders (default: 5)
-        
-    Returns:
-        list: List of order responses
-    """
-    if not orders_list:
-        logger.warning("No orders to place")
-        return []
-    
-    # Create semaphore for rate limiting
-    semaphore = asyncio.Semaphore(max_concurrent)
-    
-    async def place_single_order(order_data):
-        async with semaphore:
-            logger.info(f"Placing order: {order_data.get('ts', 'Unknown')} - {order_data.get('tt', 'Unknown')}")
-            result = await place_order(order_data)
-            # Small delay between orders to be respectful to API
-            await asyncio.sleep(0.1)
-            return result
-    
-    # Execute all orders concurrently
-    logger.info(f"Placing {len(orders_list)} orders with max {max_concurrent} concurrent requests")
-    results = await asyncio.gather(
-        *[place_single_order(order) for order in orders_list],
-        return_exceptions=True
-    )
-    
-    # Process results
-    successful_orders = 0
-    failed_orders = 0
-    
-    for i, result in enumerate(results):
-        if isinstance(result, Exception):
-            logger.error(f"Order {i+1} failed with exception: {str(result)}")
-            failed_orders += 1
-        elif result and result.get("status") != "error":
-            successful_orders += 1
-        else:
-            failed_orders += 1
-    
-    logger.info(f"Order batch completed: {successful_orders} successful, {failed_orders} failed")
-    return results
-
-
 async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_concurrent=5):
     """
     Place orders with time-windowed rate limiting to respect API limits.
@@ -229,8 +179,15 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_c
         # Record batch start time
         batch_start_time = time.time()
         
-        # Execute batch
-        batch_results = await place_orders_batch(batch, max_concurrent=max_concurrent)
+        # Execute batch (inline - no standalone batch without rate limit)
+        semaphore = asyncio.Semaphore(max_concurrent)
+        async def _place_one(o):
+            async with semaphore:
+                logger.info(f"Placing order: {o.get('ts', 'Unknown')} - {o.get('tt', 'Unknown')}")
+                r = await place_order(o)
+                await asyncio.sleep(0.1)
+                return r
+        batch_results = await asyncio.gather(*[_place_one(o) for o in batch], return_exceptions=True)
         all_results.extend(batch_results)
         
         # Calculate batch execution time
@@ -238,7 +195,7 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=200, max_c
         logger.info(f"⏱️ Batch {batch_num + 1} completed in {batch_elapsed:.2f} seconds")
         
         # Count successes in this batch
-        batch_success = sum(1 for r in batch_results if r and r.get('status') != 'error')
+        batch_success = sum(1 for r in batch_results if not isinstance(r, Exception) and r and r.get('status') != 'error')
         logger.info(f"✅ Batch {batch_num + 1} success: {batch_success}/{len(batch)} orders")
         
         # Wait remaining time to complete 60-second window (except for last batch)

@@ -211,11 +211,6 @@ async def get_multiple_quotes(symbols: List[str]) -> Optional[Dict[str, Any]]:
     client = KotakQuoteClient()
     return await client.get_quote(symbols)
 
-async def get_quotes_batch(symbol_batches: [List[str]]) -> List[Optional[Dict[str, Any]]]:
-    """Get quotes for multiple batches concurrently (no rate limiting)"""
-    client = KotakQuoteClient()
-    return await client.get_quotes_concurrent(symbol_batches)
-
 async def get_quotes_with_rate_limit(
     symbol_batches: List[str], 
     requests_per_minute: int = 200
