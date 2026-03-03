@@ -5,6 +5,10 @@ let aiAnalysisResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
 let readMessages = new Set(); // Track read message IDs
+let wsConnectTimeout = null;
+let pollingInterval = null;
+const WS_CONNECT_TIMEOUT_MS = 5000;
+const POLL_INTERVAL_MS = 30000;
 
 // Check authentication on page load with server-side validation
 async function checkAuth() {
@@ -109,23 +113,66 @@ function getAuthHeaders() {
     };
 }
 
-// WebSocket connection
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
+function startPolling() {
+    stopPolling();
+    updateConnectionStatus('Disconnected – refreshing every 30s', false);
+    refreshMessages();
+    pollingInterval = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) refreshMessages();
+    }, POLL_INTERVAL_MS);
+}
+
+// WebSocket connection with timeout and polling fallback
 function connectWebSocket() {
+    if (wsConnectTimeout) {
+        clearTimeout(wsConnectTimeout);
+        wsConnectTimeout = null;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Connect to the same host and port as the current page
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    ws = new WebSocket(wsUrl);
-    
+    const host = window.location.host || '127.0.0.1:5000';
+    const wsUrl = `${protocol}//${host}/ws`;
+
+    try {
+        ws = new WebSocket(wsUrl);
+    } catch (e) {
+        console.error('WebSocket create error:', e);
+        startPolling();
+        setTimeout(connectWebSocket, 10000);
+        return;
+    }
+
+    wsConnectTimeout = setTimeout(() => {
+        if (ws && ws.readyState !== WebSocket.OPEN) {
+            console.warn('WebSocket connection timeout – using polling');
+            ws.close();
+            ws = null;
+            startPolling();
+            setTimeout(connectWebSocket, 10000);
+        }
+        wsConnectTimeout = null;
+    }, WS_CONNECT_TIMEOUT_MS);
+
     ws.onopen = function(event) {
+        if (wsConnectTimeout) {
+            clearTimeout(wsConnectTimeout);
+            wsConnectTimeout = null;
+        }
+        stopPolling();
         console.log('WebSocket connected');
         updateConnectionStatus('Connected', true);
     };
-    
+
     ws.onmessage = function(event) {
         const data = JSON.parse(event.data);
-        console.log('Received message:', data);
-        
         if (data.type === 'new_message') {
             addNewMessage(data.message);
         } else if (data.type === 'messages_list') {
@@ -144,18 +191,22 @@ function connectWebSocket() {
             handleJobFailed(data.job);
         }
     };
-    
+
     ws.onclose = function(event) {
-        console.log('WebSocket disconnected');
-        updateConnectionStatus('Disconnected', false);
-        
-        // Reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000);
+        ws = null;
+        if (wsConnectTimeout) {
+            clearTimeout(wsConnectTimeout);
+            wsConnectTimeout = null;
+        }
+        if (!pollingInterval) {
+            updateConnectionStatus('Disconnected', false);
+            startPolling();
+        }
+        setTimeout(connectWebSocket, 5000);
     };
-    
+
     ws.onerror = function(error) {
         console.error('WebSocket error:', error);
-        updateConnectionStatus('Error', false);
     };
 }
 
@@ -245,23 +296,27 @@ function updateStats() {
 
 function renderMessages() {
     const tbody = document.getElementById('messagesTable');
-    const symbolFilter = document.getElementById('symbolFilter').value.toLowerCase();
+    const globalSearch = (document.getElementById('globalSearch') || document.getElementById('symbolFilter')).value.toLowerCase().trim();
     const limit = parseInt(document.getElementById('limitSelect').value);
     
     let filteredMessages = messages;
     
-    // Filter by symbol
-    if (symbolFilter) {
-        filteredMessages = filteredMessages.filter(msg => 
-            msg.symbol && msg.symbol.toLowerCase().includes(symbolFilter)
-        );
+    // Global search: symbol, company_name, description, sector, exchange
+    if (globalSearch) {
+        const q = globalSearch;
+        filteredMessages = filteredMessages.filter(msg => {
+            const symbol = (msg.symbol || '').toLowerCase();
+            const company = (msg.company_name || '').toLowerCase();
+            const desc = (msg.description || '').toLowerCase();
+            const sector = (msg.sector || '').toLowerCase();
+            const exchange = (msg.exchange || '').toLowerCase();
+            return symbol.includes(q) || company.includes(q) || desc.includes(q) || sector.includes(q) || exchange.includes(q);
+        });
     }
     
-    // Filter by selected option
+    // Filter by selected option (alias: quaterly_result → quarterly_result for sheet typo)
     if (selectedOption !== 'all') {
-        filteredMessages = filteredMessages.filter(msg => 
-            msg.option && msg.option === selectedOption
-        );
+        filteredMessages = filteredMessages.filter(msg => optionMatches(msg.option, selectedOption));
     }
     
     if (limit > 0) {
@@ -292,7 +347,7 @@ function renderMessages() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="${colspan}" class="no-messages">
-                    ${symbolFilter || selectedOption !== 'all' || selectedExchange ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
+                    ${globalSearch || selectedOption !== 'all' || selectedExchange || selectedSector ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
                 </td>
             </tr>
         `;
@@ -403,6 +458,12 @@ function refreshData() {
 
 // Clear messages functionality removed by user request
 
+function optionMatches(msgOption, filterOption) {
+    if (msgOption === filterOption) return true;
+    if (filterOption === 'quarterly_result' && msgOption === 'quaterly_result') return true;
+    return false;
+}
+
 // Calculate unread count for a specific option
 function getUnreadCount(option) {
     if (option === 'all') {
@@ -413,7 +474,7 @@ function getUnreadCount(option) {
     }
     return messages.filter(msg => {
         const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
-        return msg.option === option && !readMessages.has(msgId);
+        return optionMatches(msg.option, option) && !readMessages.has(msgId);
     }).length;
 }
 
@@ -455,7 +516,7 @@ function markMessagesAsRead(option) {
         });
     } else {
         messages.forEach(msg => {
-            if (msg.option === option) {
+            if (optionMatches(msg.option, option)) {
                 const msgId = msg.id || `${msg.timestamp}_${msg.symbol}_${msg.chat_id}`;
                 readMessages.add(msgId);
             }
@@ -756,7 +817,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     
     // Initialize input event listeners
-    document.getElementById('symbolFilter').addEventListener('input', renderMessages);
+    (document.getElementById('globalSearch') || document.getElementById('symbolFilter')).addEventListener('input', renderMessages);
     const exchangeFilterEl = document.getElementById('exchangeFilter');
     if (exchangeFilterEl) exchangeFilterEl.addEventListener('change', renderMessages);
     const sectorFilterEl = document.getElementById('sectorFilter');

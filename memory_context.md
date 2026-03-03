@@ -5,6 +5,39 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-03: Quarterly Result Empty – Option Typo Fix
+
+**Cause**: Google Sheet OPTION column has `quaterly_result` (typo); dashboard filter used `quarterly_result`. No match.
+
+**Fix**: Added `optionMatches()` – treats `quaterly_result` as `quarterly_result` in filter, badges, mark-as-read.
+
+**Alternative**: Fix sheet OPTION from "quaterly_result" to "quarterly_result".
+
+---
+
+### 2026-03-03: Dashboard – WebSocket Fallback + Polling
+
+**Issue**: WebSocket stuck on "Connecting" – never connected.
+
+**Fix**:
+- **Polling fallback**: If WebSocket doesn't connect within 5s, switch to polling `/api/messages` every 30s. Status shows "Disconnected – refreshing every 30s".
+- **Retry**: Keeps retrying WebSocket every 5–10s; when it connects, stops polling.
+- **Uvicorn**: Added `ws_ping_interval=20`, `ws_ping_timeout=60` for connection stability.
+
+**Files**: `static/js/dashboard.js` (connectWebSocket, startPolling, stopPolling), `nse_url_test.py` (uvicorn config).
+
+---
+
+### 2026-03-03: Dashboard – Global Search (Not Just Symbol)
+
+**Replaced** "Filter by Symbol" with "Global Search" in dashboard controls.
+
+**Search scope**: symbol, company_name, description, sector, exchange (single input searches all fields).
+
+**Files**: `static/index.html` (label + input id), `static/js/dashboard.js` (renderMessages filter logic).
+
+---
+
 ### 2026-03-02: NEO API – Rate Limiting Only, No Batch Without Limit
 
 **All NEO API calls now use rate limiting only.**
