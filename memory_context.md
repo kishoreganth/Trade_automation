@@ -109,16 +109,13 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ---
 
-### 2026-02-25: Sector Map from all-bse-companies-sectors.csv
+### 2026-03-04: Sector Map – all-bse-companies-sectors.xlsx Only
 
-**Changed**: Sector mapping now uses `all-bse-companies-sectors.csv` instead of Stock_sectors.xlsx.
+**Changed**: Sector mapping uses only `all-bse-companies-sectors.xlsx`. No CSV or Stock_sectors fallback.
 
-**Columns used**: BSE Code, NSE Code, Sector
-- BSE: SCRIP_CD (security number) → BSE Code
-- NSE: stock symbol → NSE Code
+**Columns**: BSE Code, NSE Code, Sector. Paths: project root, parent folder.
 
-**Paths tried**: `all-bse-companies-sectors.csv` (project root), then parent folder.
-**Fallback**: `Stock_sectors.xlsx` (Security Name, Sector) if CSV missing.
+**Backfill**: `POST /api/backfill_sectors` – one-time background task to update sector for existing messages.
 **Retry**: If sector map empty at startup, retry once after 2s.
 **Reload API**: `POST /api/reload_sector_map` to reload without restart.
 

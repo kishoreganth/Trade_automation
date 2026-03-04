@@ -1191,82 +1191,49 @@ keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/e
 concall_gid = "341478113"
 result_concall_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={concall_gid}"
 
-# Sector map: all-bse-companies-sectors.csv (BSE Code, NSE Code -> Sector)
-# Fallback: Stock_sectors.xlsx (Security Name -> Sector)
-SECTOR_CSV_PATH = Path(__file__).parent / "all-bse-companies-sectors.csv"
-SECTOR_CSV_PATH_ALT = Path(__file__).parent.parent / "all-bse-companies-sectors.csv"
-SECTOR_EXCEL_FALLBACK = Path(__file__).parent / "Stock_sectors.xlsx"
+# Sector map: all-bse-companies-sectors.xlsx only (BSE Code, NSE Code, Sector)
+SECTOR_XLSX_PATH = Path(__file__).parent / "all-bse-companies-sectors.xlsx"
+SECTOR_XLSX_PATH_ALT = Path(__file__).parent.parent / "all-bse-companies-sectors.xlsx"
 bse_sector_map = {}  # BSE Code (str) -> Sector
 nse_sector_map = {}  # NSE Code (str, upper) -> Sector
-sector_map = {}  # Legacy: NSE symbol -> Sector (for Excel fallback)
+sector_map = {}  # NSE symbol -> Sector
 
 
 def load_sector_map():
-    """Load sector maps from all-bse-companies-sectors.csv. BSE Code and NSE Code -> Sector.
-    Fallback: Stock_sectors.xlsx if CSV not found. Retries parent folder for CSV."""
+    """Load sector maps from all-bse-companies-sectors.xlsx. BSE Code, NSE Code -> Sector."""
     global bse_sector_map, nse_sector_map, sector_map
-    csv_path = SECTOR_CSV_PATH if SECTOR_CSV_PATH.exists() else SECTOR_CSV_PATH_ALT
-    try:
-        if csv_path.exists():
-            df = pd.read_csv(csv_path)
-            cols = {str(c).strip().lower(): c for c in df.columns}
-            bse_col = cols.get("bse code")
-            nse_col = cols.get("nse code")
-            sector_col = cols.get("sector")
-            if bse_col is None or sector_col is None:
-                logger.warning(f"all-bse-companies-sectors.csv must have 'BSE Code' and 'Sector'. Found: {list(df.columns)}")
-                _load_sector_fallback()
-                return
-            bse_sector_map = {}
-            nse_sector_map = {}
-            for _, row in df.iterrows():
-                sec = str(row[sector_col]).strip() if pd.notna(row[sector_col]) else ""
-                if not sec:
-                    continue
-                bse_code = row.get(bse_col)
-                if pd.notna(bse_code) and str(bse_code).strip():
-                    bse_sector_map[str(int(float(bse_code)))] = sec
-                if nse_col and pd.notna(row.get(nse_col)) and str(row[nse_col]).strip():
-                    nse_sector_map[str(row[nse_col]).strip().upper()] = sec
-            sector_map = nse_sector_map  # for get_sector_for_symbol compatibility
-            logger.info(f"Loaded sector map from {csv_path.name}: {len(bse_sector_map)} BSE, {len(nse_sector_map)} NSE")
-        else:
-            logger.warning(f"Sector CSV not found at {SECTOR_CSV_PATH} or {SECTOR_CSV_PATH_ALT}. Falling back to Excel.")
-            _load_sector_fallback()
-    except Exception as e:
-        logger.error(f"Error loading sector map from CSV: {e}. Falling back to Excel.")
-        _load_sector_fallback()
-
-
-def _load_sector_fallback():
-    """Fallback: load from Stock_sectors.xlsx (Security Name -> Sector)."""
-    global sector_map, bse_sector_map, nse_sector_map
-    sector_map = {}
+    xlsx_path = SECTOR_XLSX_PATH if SECTOR_XLSX_PATH.exists() else SECTOR_XLSX_PATH_ALT
     bse_sector_map = {}
     nse_sector_map = {}
+    sector_map = {}
     try:
-        if not SECTOR_EXCEL_FALLBACK.exists():
-            logger.warning(f"Fallback Stock_sectors.xlsx not found: {SECTOR_EXCEL_FALLBACK}")
+        if not xlsx_path.exists():
+            logger.warning(f"all-bse-companies-sectors.xlsx not found at {SECTOR_XLSX_PATH} or {SECTOR_XLSX_PATH_ALT}")
             return
-        df = pd.read_excel(SECTOR_EXCEL_FALLBACK)
-        name_col = sector_col = None
-        for c in df.columns:
-            if str(c).strip().lower() == "security name":
-                name_col = c
-            elif str(c).strip().lower() == "sector":
-                sector_col = c
-        if name_col is None or sector_col is None:
-            logger.warning(f"Stock_sectors.xlsx needs 'Security Name' and 'Sector'. Found: {list(df.columns)}")
+        df = pd.read_excel(xlsx_path)
+        cols = {str(c).strip().lower(): c for c in df.columns}
+        bse_col = cols.get("bse code")
+        nse_col = cols.get("nse code")
+        sector_col = cols.get("sector")
+        if bse_col is None or sector_col is None:
+            logger.warning(f"all-bse-companies-sectors.xlsx must have 'BSE Code' and 'Sector'. Found: {list(df.columns)}")
             return
         for _, row in df.iterrows():
-            sym = str(row[name_col]).strip().upper() if pd.notna(row[name_col]) else ""
             sec = str(row[sector_col]).strip() if pd.notna(row[sector_col]) else ""
-            if sym and sec:
-                sector_map[sym] = sec
-        nse_sector_map = sector_map
-        logger.info(f"Fallback: Loaded {len(sector_map)} symbols from Stock_sectors.xlsx")
+            if not sec:
+                continue
+            bse_code = row.get(bse_col)
+            if pd.notna(bse_code) and str(bse_code).strip():
+                try:
+                    bse_sector_map[str(int(float(bse_code)))] = sec
+                except (ValueError, TypeError):
+                    pass
+            if nse_col and pd.notna(row.get(nse_col)) and str(row[nse_col]).strip():
+                nse_sector_map[str(row[nse_col]).strip().upper()] = sec
+        sector_map = nse_sector_map
+        logger.info(f"Loaded sector map from {xlsx_path.name}: {len(bse_sector_map)} BSE, {len(nse_sector_map)} NSE")
     except Exception as e:
-        logger.error(f"Fallback sector load failed: {e}")
+        logger.error(f"Error loading sector map from all-bse-companies-sectors.xlsx: {e}")
 
 
 def get_sector_for_symbol(symbol: str, exchange: str = "NSE") -> str:
@@ -2814,7 +2781,7 @@ async def verify_session_endpoint(request: Request):
 
 @app.post("/api/reload_sector_map")
 async def reload_sector_map_endpoint():
-    """Reload sector map from all-bse-companies-sectors.csv (fallback: Stock_sectors.xlsx)"""
+    """Reload sector map from all-bse-companies-sectors.xlsx"""
     await asyncio.to_thread(load_sector_map)
     bse_count = len(bse_sector_map)
     nse_count = len(nse_sector_map)
@@ -2823,8 +2790,45 @@ async def reload_sector_map_endpoint():
         "message": "Sector map reloaded",
         "bse_count": bse_count,
         "nse_count": nse_count,
-        "source": "csv" if bse_count or nse_count else "fallback_or_empty"
+        "source": "xlsx" if bse_count or nse_count else "empty"
     }
+
+
+async def _backfill_sectors_task():
+    """One-time background task: update sector for all existing messages from xlsx map."""
+    await asyncio.to_thread(load_sector_map)
+    if not bse_sector_map and not nse_sector_map:
+        logger.warning("Sector backfill skipped: sector map empty")
+        return
+    updated = 0
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT id, symbol, exchange FROM messages")
+            rows = await cursor.fetchall()
+        updates = []
+        for row in rows:
+            msg_id, symbol, exchange = row[0], row[1] or "", row[2] or "NSE"
+            if not symbol:
+                continue
+            sec = get_sector_for_symbol(str(symbol), exchange)
+            if sec:
+                updates.append((sec, msg_id))
+        if updates:
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.executemany("UPDATE messages SET sector = ? WHERE id = ?", updates)
+                await db.commit()
+                updated = len(updates)
+        logger.info(f"Sector backfill done: {updated} messages updated")
+    except Exception as e:
+        logger.error(f"Sector backfill failed: {e}")
+
+
+@app.post("/api/backfill_sectors")
+async def backfill_sectors_endpoint(background_tasks: BackgroundTasks):
+    """Trigger one-time sector backfill for existing messages. Runs in background."""
+    background_tasks.add_task(_backfill_sectors_task)
+    return {"success": True, "message": "Sector backfill started in background"}
+
 
 @app.get("/api/messages")
 async def get_messages(limit: int = 0):
