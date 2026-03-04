@@ -137,18 +137,15 @@ async def place_order(order_data):
         return None
 
 
-async def place_orders_with_rate_limit(orders_list, orders_per_minute=190, max_concurrent=5):
+async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_concurrent=2):
     """
-    Place orders with time-windowed rate limiting to respect API limits.
-    Executes orders in batches and waits between batches.
+    Place orders respecting Kotak 200/min limit. Pace: 185/min (7.5% buffer).
+    2 concurrent + 0.324s delay = ~185 orders/min.
     
     Args:
         orders_list: List of order dictionaries
-        orders_per_minute: Max orders per minute (default: 190, 5% under API limit)
-        max_concurrent: Concurrent orders within a batch (default: 5)
-        
-    Returns:
-        list: Combined list of all order responses
+        orders_per_minute: Target (default 185, under 200 limit)
+        max_concurrent: Max parallel (default 2, low burst)
     """
     if not orders_list:
         logger.warning("No orders to place")
@@ -156,16 +153,14 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=190, max_c
     
     total_orders = len(orders_list)
     all_results = []
+    # 60/185 = 0.324s per order. 2 concurrent = ~185/min
+    delay_per_order = 60.0 / min(orders_per_minute, 185)
+    batch_size = min(orders_per_minute, 185)
+    total_batches = (total_orders + batch_size - 1) // batch_size
     
-    # Split orders into batches (180 for 2% safety buffer vs 200/min API limit)
-    batch_size = min(orders_per_minute, 180)
-    total_batches = (total_orders + batch_size - 1) // batch_size  # Ceiling division
-    
-    logger.info(f"🚀 Starting rate-limited order execution")
-    logger.info(f"📊 Total orders: {total_orders}")
-    logger.info(f"📦 Batch size: {batch_size} orders/minute")
-    logger.info(f"🔢 Total batches: {total_batches}")
-    logger.info(f"⏱️ Estimated time: ~{total_batches} minutes")
+    logger.info(f"🚀 Starting rate-limited order execution (max 200/min)")
+    logger.info(f"📊 Total orders: {total_orders}, Batch size: {batch_size}, Delay: {delay_per_order:.2f}s/order")
+    logger.info(f"🔢 Total batches: {total_batches}, Est. time: ~{total_batches} min")
     
     for batch_num in range(total_batches):
         start_idx = batch_num * batch_size
@@ -173,38 +168,35 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=190, max_c
         batch = orders_list[start_idx:end_idx]
         
         logger.info(f"\n{'='*60}")
-        logger.info(f"📋 Batch {batch_num + 1}/{total_batches}: Processing orders {start_idx + 1} to {end_idx}")
+        logger.info(f"📋 Batch {batch_num + 1}/{total_batches}: orders {start_idx + 1} to {end_idx}")
         logger.info(f"{'='*60}")
         
-        # Record batch start time
         batch_start_time = time.time()
-        
-        # Execute batch (inline - no standalone batch without rate limit)
         semaphore = asyncio.Semaphore(max_concurrent)
+        
         async def _place_one(o):
             async with semaphore:
-                logger.info(f"Placing order: {o.get('ts', 'Unknown')} - {o.get('tt', 'Unknown')}")
-                r = await place_order(o)
-                await asyncio.sleep(0.1)
-                return r
+                r = None
+                for attempt in range(3):  # 1 initial + 2 retries on 429
+                    logger.info(f"Placing order: {o.get('ts', 'Unknown')} - {o.get('tt', 'Unknown')}")
+                    r = await place_order(o)
+                    if r and r.get('code') == 429:
+                        logger.warning(f"429 rate limit - waiting 60s, retry {attempt + 1}/2")
+                        await asyncio.sleep(60)
+                        continue
+                    break
+                await asyncio.sleep(delay_per_order)
+                return r if r else {"status": "error", "message": "Failed after retries"}
         batch_results = await asyncio.gather(*[_place_one(o) for o in batch], return_exceptions=True)
         all_results.extend(batch_results)
         
-        # Calculate batch execution time
         batch_elapsed = time.time() - batch_start_time
-        logger.info(f"⏱️ Batch {batch_num + 1} completed in {batch_elapsed:.2f} seconds")
-        
-        # Count successes in this batch
         batch_success = sum(1 for r in batch_results if not isinstance(r, Exception) and r and r.get('status') != 'error')
-        logger.info(f"✅ Batch {batch_num + 1} success: {batch_success}/{len(batch)} orders")
+        logger.info(f"⏱️ Batch {batch_num + 1} done in {batch_elapsed:.2f}s: {batch_success}/{len(batch)} success")
         
-        # Wait remaining time to complete 60-second window (except for last batch)
         if batch_num < total_batches - 1:
-            wait_time = max(5, 60 - batch_elapsed)  # Minimum 5s buffer between batches
-            if batch_elapsed < 60:
-                logger.info(f"⏸️ Waiting {wait_time:.1f} seconds to complete 60-second window...")
-            else:
-                logger.info(f"⚠️ Batch took {batch_elapsed:.1f}s (>60s) - waiting minimum 5s buffer...")
+            wait_time = max(5, 60 - batch_elapsed)
+            logger.info(f"⏸️ Waiting {wait_time:.1f}s to complete 60s window...")
             await asyncio.sleep(wait_time)
     
     # Final summary

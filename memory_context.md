@@ -5,6 +5,18 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-04: Place Order 429 – Respect Kotak 200/min
+
+**Issue**: Kotak 429 "rate limit exceeded". Limit: 200 orders/min. Old: 5 concurrent + 0.1s = burst ~600/min.
+
+**Fix**: Pace under 200/min: **185/min** (7.5% buffer), max_concurrent=2, delay=0.324s/order. Best speed/safety balance.
+
+**429 retry**: On 429, wait 60s and retry (max 2 retries). No skip due to rate limit.
+
+**Files**: `place_order.py`, `nse_url_test.py`.
+
+---
+
 ### 2026-03-03: Quarterly Result Empty – Option Typo Fix
 
 **Cause**: Google Sheet OPTION column has `quaterly_result` (typo); dashboard filter used `quarterly_result`. No match.
@@ -44,9 +56,9 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 **Dashboard flows:**
 - **GET QUOTES** (`/api/get_quotes_updated`): Uses `get_quotes_with_rate_limit(symbol_batches, 190/min)`
-- **PLACE ORDER** (`/api/execute_orders`): Uses `place_orders_with_rate_limit(all_orders, 190/min)`
+- **PLACE ORDER** (`/api/execute_orders`): Uses `place_orders_with_rate_limit(all_orders, 185/min, 2 concurrent)` – under Kotak 200/min.
 
-**Rate limit:** 190/min (5% under API 200/min) – faster than 180, safe from 429.
+**Rate limit:** 185/min for place order (7.5% buffer). GET QUOTES: 190/min.
 
 **get_quote main:** Batches symbols 190/call before rate-limited fetch.
 

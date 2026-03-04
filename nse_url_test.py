@@ -3470,12 +3470,11 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 
                 logger.info(f"[Job {job_id}] Created {total_orders} orders ({len(filtered_rows)} stocks × 2 orders)")
                 
-                # Step 3: Place orders with rate limiting (190 orders/min - 5% under API limit)
-                active_jobs[job_id].message = f"Placing {total_orders} orders (rate limited: 190/min)..."
+                # Step 3: Place orders (185/min, 7.5% under Kotak 200/min)
+                active_jobs[job_id].message = f"Placing {total_orders} orders (rate limited: 185/min)..."
                 active_jobs[job_id].progress = 25
                 
-                # Use place_orders_with_rate_limit - waits 60s between batches of 190
-                all_results = await place_orders_with_rate_limit(all_orders, orders_per_minute=190, max_concurrent=5)
+                all_results = await place_orders_with_rate_limit(all_orders, orders_per_minute=185, max_concurrent=2)
                 
                 # Step 4: Count successes (90% progress)
                 active_jobs[job_id].message = "Processing results..."
