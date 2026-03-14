@@ -5,6 +5,51 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-11: Google 403 Debug – Enhanced Error Logging
+
+**Added**: Detailed 403 logging in `get_quote.py` and `nse_url_test.py` – logs HTTP status, response body, and full traceback when Google Sheets write fails. Helps trace root cause (Shared Drive, API disabled, scope, etc.).
+
+---
+
+### 2026-03-11: Google Credentials Verification Script
+
+**Added**: `verify_google_credentials.py` – checks service account JSON, email match, and tests API access.
+
+**Usage**: `python verify_google_credentials.py` (run from project root, ensure `google_sheets_credentials.json` exists)
+
+**Checks**: File exists, valid JSON, required fields, client_email vs expected, API access test (open sheet, read row).
+
+**Note**: Service account keys do NOT expire in JSON; valid until revoked/rotated in GCP Console.
+
+---
+
+### 2026-03-11: Flyout Close Delay – Immediate
+
+**Change**: Flyout closes immediately (0ms) on mouse leave. No delay when moving out of navigation.
+
+**File**: `static/js/dashboard.js` (scheduleCloseFlyout).
+
+---
+
+### 2026-03-10: Dashboard Navigation – QuickBooks-Style Rail + Flyout
+
+**Redesign**: Compact icon rail (72px dark sidebar) + flyout panel on click/hover.
+
+**Structure**:
+- **Rail** (always visible, left): 4 icons – Feed, Analytics, AI Analyzer, Place Order.
+- **Flyout** (260px panel): Opens on rail click or hover for Feed/Analytics. Closes immediately on mouse leave (rail+flyout) or backdrop click.
+- **Feed flyout**: All Options, Quarterly Result, Investor Presentation, Concall, Monthly Business Update, Fund Raising, Outcome of Board Meeting.
+- **Analytics flyout**: PE Analysis, Stock Value (placeholders).
+- **AI Analyzer / Place Order**: Direct nav, no flyout.
+
+**Full width**: Removed body padding, container border, content-area padding-right, table-container margin. Content extends to screen edge.
+
+**Hover**: Flyout opens on hover for Feed/Analytics rail items; closes when mouse leaves rail+flyout zone.
+
+**Files**: `static/index.html`, `static/js/dashboard.js`, `static/css/styles.css`.
+
+---
+
 ### 2026-03-04: Place Order 429 – Respect Kotak 200/min
 
 **Issue**: Kotak 429 "rate limit exceeded". Limit: 200 orders/min. Old: 5 concurrent + 0.1s = burst ~600/min.

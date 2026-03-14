@@ -8,116 +8,241 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
     min-height: 100vh;
-    padding: 0 24px;
+    padding: 0;
+    margin: 0;
     color: #1e293b;
 }
 
 .container {
     width: 100%;
-    max-width: none;
+    max-width: 100%;
     margin: 0;
     background: #ffffff;
     border-radius: 0;
     box-shadow: none;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    border: 1px solid #e2e8f0;
+    border: none;
 }
 
 .main-content {
     display: flex;
     flex: 1;
+    position: relative;
 }
 
-.sidebar {
-    width: 280px;
-    background: #f8fafc;
-    border-right: 1px solid #e2e8f0;
-    padding: 24px;
-    min-height: calc(100vh - 140px);
-}
-
-.sidebar h3 {
-    margin-bottom: 20px;
-    color: #374151;
-    font-size: 1.2rem;
-    font-weight: 600;
-}
-
-.option-filters {
+/* Sidebar Rail - QuickBooks style narrow dark bar */
+.sidebar-rail {
+    width: 72px;
+    min-width: 72px;
+    background: #1e293b;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    padding: 20px 0;
+    gap: 6px;
+    min-height: calc(100vh - 120px);
+    flex-shrink: 0;
+    z-index: 20;
 }
 
-.option-filter {
-    padding: 14px 18px;
+.rail-item {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    font-weight: 500;
-    text-align: center;
+    transition: background 0.15s ease, color 0.15s ease;
+    color: #94a3b8;
     position: relative;
-    overflow: hidden;
-    color: #64748b;
-    font-size: 14px;
+    user-select: none;
 }
 
-.option-filter:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border-color: #3b82f6;
-    background: #f8fafc;
+.rail-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+}
+
+.rail-item.active {
+    background: #3b82f6;
+    color: #ffffff;
+}
+
+.rail-icon {
+    font-size: 20px;
+    line-height: 1;
+    display: block;
+    text-align: center;
+}
+
+.rail-label {
+    font-size: 9px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    line-height: 1;
+}
+
+.rail-badge {
+    position: absolute;
+    top: 2px;
+    right: 0;
+    background: #ef4444;
+    color: white;
+    border-radius: 10px;
+    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 16px;
+    text-align: center;
+    line-height: 1.4;
+    border: 2px solid #1e293b;
+}
+
+/* Flyout Panel - overlays content like QuickBooks */
+.flyout-panel {
+    position: absolute;
+    left: 72px;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    display: none;
+    flex-direction: column;
+    box-shadow: 6px 0 24px rgba(0, 0, 0, 0.1);
+    z-index: 15;
+}
+
+.flyout-panel.open {
+    display: flex;
+}
+
+.flyout-header {
+    padding: 24px 20px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    border-bottom: 1px solid #f1f5f9;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.flyout-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+}
+
+.flyout-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.flyout-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 500;
+    position: relative;
+    user-select: none;
+}
+
+.flyout-option:hover {
+    background: #f1f5f9;
     color: #1e293b;
 }
 
-.option-filter.active {
+.flyout-option.active {
+    background: #eff6ff;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.flyout-option.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
     background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    border-radius: 0 3px 3px 0;
 }
 
-.option-filter.all {
-    background: #10b981;
-    color: white;
-    border-color: #10b981;
+.flyout-opt-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    background: #f1f5f9;
+    flex-shrink: 0;
 }
 
-.option-filter.all.active {
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+.flyout-option.active .flyout-opt-icon {
+    background: #dbeafe;
 }
 
 .unread-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 10px;
     background: #ef4444;
     color: white;
-    border-radius: 12px;
-    padding: 2px 6px;
-    font-size: 11px;
-    font-weight: 600;
-    min-width: 20px;
+    border-radius: 10px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
     text-align: center;
     line-height: 1.4;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-.option-filter.active .unread-badge {
-    background: rgba(255, 255, 255, 0.3);
+.flyout-option.active .unread-badge {
+    background: #3b82f6;
     color: white;
+}
+
+/* Overlay backdrop when flyout is open */
+.flyout-backdrop {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 72px;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.08);
+    z-index: 14;
+}
+
+.flyout-backdrop.visible {
+    display: block;
 }
 
 .content-area {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding-right: 24px;
+    padding: 0 24px;
+    min-width: 0;
 }
 
 .header {
@@ -265,9 +390,10 @@ button:hover {
 .table-container {
     flex: 1;
     overflow-y: auto;
-    margin: 0 24px 24px 0;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    border: none;
     background: white;
 }
 
@@ -378,6 +504,34 @@ tr:hover {
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+/* Analytics Container */
+.analytics-container {
+    margin: 24px 0;
+    padding: 0 24px 24px 0;
+}
+
+.analytics-container h3 {
+    color: #374151;
+    margin-bottom: 12px;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.analytics-desc {
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.analytics-placeholder {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    color: #64748b;
 }
 
 /* AI Analyzer Styles */
@@ -498,21 +652,6 @@ tr:hover {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
-    .main-content {
-        flex-direction: column;
-    }
-    
-    .sidebar {
-        width: 100%;
-        min-height: auto;
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    
-    .content-area {
-        padding-right: 0;
-    }
-    
     .stats {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -554,25 +693,11 @@ tr:hover {
     .ai-analyzer-container {
         padding: 0 16px 24px 0;
     }
-    
-    .option-filters {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-    }
 }
 
 @media (max-width: 480px) {
     body {
         padding: 0 12px;
-    }
-    
-    .sidebar {
-        padding: 16px;
-    }
-    
-    .option-filters {
-        grid-template-columns: 1fr;
     }
     
     .upload-area {

@@ -17,35 +17,67 @@
         </div>
         
         <div class="main-content">
-            <div class="sidebar">
-                <h3>📊 Filter by Option</h3>
-                <div class="option-filters">
-                    <div class="option-filter all active" data-option="all">
-                        All Options
+            <div class="sidebar-rail">
+                <div class="rail-item active" data-nav="feed">
+                    <span class="rail-icon">📋</span>
+                    <span class="rail-label">Feed</span>
+                </div>
+                <div class="rail-item" data-nav="analytics">
+                    <span class="rail-icon">📊</span>
+                    <span class="rail-label">Analytics</span>
+                </div>
+                <div class="rail-item" data-nav="ai_analyzer">
+                    <span class="rail-icon">🤖</span>
+                    <span class="rail-label">AI Analyzer</span>
+                </div>
+                <div class="rail-item" data-nav="place_order">
+                    <span class="rail-icon">📈</span>
+                    <span class="rail-label">Place Order</span>
+                </div>
+            </div>
+            <div class="flyout-backdrop" id="flyoutBackdrop"></div>
+            <div class="flyout-panel" id="flyoutPanel">
+                <div class="flyout-header" id="flyoutHeader">Feed</div>
+                <div class="flyout-body" id="flyoutBody">
+                    <div class="flyout-section" id="flyoutFeed">
+                        <div class="flyout-option active" data-option="all">
+                            <span class="flyout-opt-icon" style="background:#10b981;">📋</span>
+                            <span>All Options</span>
+                        </div>
+                        <div class="flyout-option" data-option="quarterly_result">
+                            <span class="flyout-opt-icon">📈</span>
+                            <span>Quarterly Result</span>
+                        </div>
+                        <div class="flyout-option" data-option="investor_presentation">
+                            <span class="flyout-opt-icon">📊</span>
+                            <span>Investor Presentation</span>
+                        </div>
+                        <div class="flyout-option" data-option="concall">
+                            <span class="flyout-opt-icon">📞</span>
+                            <span>Concall</span>
+                        </div>
+                        <div class="flyout-option" data-option="monthly_business_update">
+                            <span class="flyout-opt-icon">📅</span>
+                            <span>Monthly Business Update</span>
+                        </div>
+                        <div class="flyout-option" data-option="fund_raising">
+                            <span class="flyout-opt-icon">💰</span>
+                            <span>Fund Raising</span>
+                        </div>
+                        <div class="flyout-option" data-option="result_concall">
+                            <span class="flyout-opt-icon">📋</span>
+                            <span>Outcome of Board Meeting</span>
+                        </div>
                     </div>
-                    <div class="option-filter" data-option="quarterly_result">
-                        📈 Quarterly Result
-                    </div>
-                    <div class="option-filter" data-option="investor_presentation">
-                        📊 Investor Presentation
-                    </div>
-                    <div class="option-filter" data-option="concall">
-                        📞 Concall
-                    </div>
-                    <div class="option-filter" data-option="monthly_business_update">
-                        📅 Monthly Business Update
-                    </div>
-                    <div class="option-filter" data-option="fund_raising">
-                        💰 Fund Raising
-                    </div>
-                    <div class="option-filter" data-option="result_concall">
-                        📋 Outcome of Board Meeting
-                    </div>
-                    <div class="option-filter" data-option="ai_analyzer">
-                        🤖 AI Analyzer
-                    </div>
-                    <div class="option-filter" data-option="place_order">
-                        📈 Place Order
+                    <div class="flyout-section" id="flyoutAnalytics" style="display:none;">
+                        <div class="flyout-option" data-option="pe_analysis">
+                            <span class="flyout-opt-icon">📈</span>
+                            <span>PE Analysis</span>
+                        </div>
+                        <div class="flyout-option" data-option="stock_value">
+                            <span class="flyout-opt-icon">💰</span>
+                            <span>Stock Value</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -157,6 +189,23 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                
+                <div class="analytics-container" id="analyticsContainer" style="display: none;">
+                    <div class="analytics-view" id="peAnalysisView" style="display: none;">
+                        <h3>📈 PE Analysis</h3>
+                        <p class="analytics-desc">EPS and PE ratio from Quarterly Result data. Data source: financial_metrics.</p>
+                        <div class="analytics-placeholder" id="peAnalysisPlaceholder">
+                            <p>PE Analysis view – coming soon. Will display EPS and PE ratio for stocks from Quarterly Result.</p>
+                        </div>
+                    </div>
+                    <div class="analytics-view" id="stockValueView" style="display: none;">
+                        <h3>💰 Stock Value</h3>
+                        <p class="analytics-desc">Stock value analytics from Quarterly Result data.</p>
+                        <div class="analytics-placeholder" id="stockValuePlaceholder">
+                            <p>Stock Value view – coming soon.</p>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="ai-analyzer-container" id="aiAnalyzerContainer" style="display: none;">

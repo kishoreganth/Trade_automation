@@ -4,6 +4,7 @@ let financialMetrics = [];
 let aiAnalysisResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
+let selectedNavSection = 'feed'; // feed | analytics | ai_analyzer | place_order
 let readMessages = new Set(); // Track read message IDs
 let wsConnectTimeout = null;
 let pollingInterval = null;
@@ -451,6 +452,8 @@ function loadFinancialMetricsFromAPI() {
 function refreshData() {
     if (selectedOption === 'result_concall') {
         loadFinancialMetricsFromAPI();
+    } else if (selectedOption === 'pe_analysis' || selectedOption === 'stock_value' || selectedOption === 'ai_analyzer' || selectedOption === 'place_order') {
+        // analytics/standalone views don't need message refresh
     } else {
         refreshMessages();
     }
@@ -478,26 +481,21 @@ function getUnreadCount(option) {
     }).length;
 }
 
-// Update unread badges on all filter buttons
 function updateUnreadBadges() {
-    // Only show badges for message-related filters (not AI Analyzer or Place Order)
     const messageOptions = ['all', 'quarterly_result', 'investor_presentation', 'concall', 
                            'monthly_business_update', 'fund_raising', 'result_concall'];
     
+    let totalUnread = 0;
     messageOptions.forEach(option => {
-        const filterButton = document.querySelector(`[data-option="${option}"]`);
+        const filterButton = document.querySelector(`.flyout-option[data-option="${option}"]`);
         if (!filterButton) return;
         
-        // Remove existing badge
         const existingBadge = filterButton.querySelector('.unread-badge');
-        if (existingBadge) {
-            existingBadge.remove();
-        }
+        if (existingBadge) existingBadge.remove();
         
-        // Calculate unread count
         const unreadCount = getUnreadCount(option);
+        if (option !== 'all') totalUnread += unreadCount;
         
-        // Add badge if there are unread messages
         if (unreadCount > 0) {
             const badge = document.createElement('span');
             badge.className = 'unread-badge';
@@ -505,6 +503,19 @@ function updateUnreadBadges() {
             filterButton.appendChild(badge);
         }
     });
+
+    // Update rail badge for Feed
+    const feedRail = document.querySelector('.rail-item[data-nav="feed"]');
+    if (feedRail) {
+        const existing = feedRail.querySelector('.rail-badge');
+        if (existing) existing.remove();
+        if (totalUnread > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'rail-badge';
+            badge.textContent = totalUnread > 99 ? '99+' : totalUnread.toString();
+            feedRail.appendChild(badge);
+        }
+    }
 }
 
 // Mark messages as read when viewing a filter
@@ -525,72 +536,150 @@ function markMessagesAsRead(option) {
     updateUnreadBadges();
 }
 
-// Option filter functionality
-function handleOptionFilter(optionValue) {
-    // Remove active class from all filters
-    document.querySelectorAll('.option-filter').forEach(filter => {
-        filter.classList.remove('active');
-    });
-    
-    // Add active class to selected filter
-    document.querySelector(`[data-option="${optionValue}"]`).classList.add('active');
-    
-    // Mark messages as read when viewing
-    markMessagesAsRead(optionValue);
-    
-    // Update selected option
-    selectedOption = optionValue;
-    
-    // Show/hide appropriate table based on selection
+// ============================================
+// Navigation: Rail + Flyout
+// ============================================
+function showContentForOption(optionValue) {
     const messagesContainer = document.getElementById('messagesTableContainer');
     const financialContainer = document.getElementById('financialMetricsContainer');
-    
+    const analyticsContainer = document.getElementById('analyticsContainer');
     const aiAnalyzerContainer = document.getElementById('aiAnalyzerContainer');
-    
-    if (optionValue === 'result_concall') {
-        // Show financial metrics table for board meeting outcomes
-        document.querySelector('.content-area').style.display = 'flex';
-        document.getElementById('placeOrderPage').style.display = 'none';
-        messagesContainer.style.display = 'none';
+    const placeOrderPage = document.getElementById('placeOrderPage');
+    const contentArea = document.querySelector('.content-area');
+
+    contentArea.style.display = 'flex';
+    placeOrderPage.style.display = 'none';
+    messagesContainer.style.display = 'none';
+    financialContainer.style.display = 'none';
+    analyticsContainer.style.display = 'none';
+    aiAnalyzerContainer.style.display = 'none';
+
+    if (optionValue === 'pe_analysis' || optionValue === 'stock_value') {
+        analyticsContainer.style.display = 'block';
+        document.getElementById('peAnalysisView').style.display = optionValue === 'pe_analysis' ? 'block' : 'none';
+        document.getElementById('stockValueView').style.display = optionValue === 'stock_value' ? 'block' : 'none';
+    } else if (optionValue === 'result_concall') {
         financialContainer.style.display = 'block';
-        aiAnalyzerContainer.style.display = 'none';
         renderFinancialMetrics();
-        // Load financial metrics if not already loaded
-        if (financialMetrics.length === 0) {
-            loadFinancialMetricsFromAPI();
-        }
+        if (financialMetrics.length === 0) loadFinancialMetricsFromAPI();
     } else if (optionValue === 'ai_analyzer') {
-        // Show AI analyzer interface
-        document.querySelector('.content-area').style.display = 'flex';
-        document.getElementById('placeOrderPage').style.display = 'none';
-        messagesContainer.style.display = 'none';
-        financialContainer.style.display = 'none';
         aiAnalyzerContainer.style.display = 'block';
         renderAIAnalysisResults();
     } else if (optionValue === 'place_order') {
-        // Show Place Order page - hide entire content area
-        document.querySelector('.content-area').style.display = 'none';
-        document.getElementById('placeOrderPage').style.display = 'block';
-        
-        // Setup open Google sheet button
+        contentArea.style.display = 'none';
+        placeOrderPage.style.display = 'block';
         setupOpenSheetButton();
-        
-        // Check session status and load sheet data when page loads
         checkSessionStatus();
         loadPlaceOrderSheet();
-        loadLastActions();  // Load last action timestamps
+        loadLastActions();
     } else {
-        // Show messages table for all other options
-        document.querySelector('.content-area').style.display = 'flex';
-        document.getElementById('placeOrderPage').style.display = 'none';
         messagesContainer.style.display = 'block';
-        financialContainer.style.display = 'none';
-        aiAnalyzerContainer.style.display = 'none';
         renderMessages();
     }
-    
-    // Update badges after filter change
+}
+
+function handleOptionFilter(optionValue) {
+    document.querySelectorAll('.flyout-option').forEach(el => el.classList.remove('active'));
+    const target = document.querySelector(`.flyout-option[data-option="${optionValue}"]`);
+    if (target) target.classList.add('active');
+
+    markMessagesAsRead(optionValue);
+    selectedOption = optionValue;
+    showContentForOption(optionValue);
     updateUnreadBadges();
+}
+
+function openFlyoutOnHover(navValue) {
+    document.querySelectorAll('.rail-item').forEach(el => el.classList.remove('active'));
+    const target = document.querySelector(`.rail-item[data-nav="${navValue}"]`);
+    if (target) target.classList.add('active');
+    selectedNavSection = navValue;
+
+    const panel = document.getElementById('flyoutPanel');
+    const header = document.getElementById('flyoutHeader');
+    const feedSection = document.getElementById('flyoutFeed');
+    const analyticsSection = document.getElementById('flyoutAnalytics');
+
+    if (navValue === 'feed') {
+        header.textContent = 'FEED';
+        feedSection.style.display = 'flex';
+        analyticsSection.style.display = 'none';
+        document.querySelectorAll('.flyout-option').forEach(el => el.classList.remove('active'));
+        const opt = document.querySelector(`#flyoutFeed .flyout-option[data-option="${selectedOption}"]`);
+        if (opt) opt.classList.add('active');
+    } else if (navValue === 'analytics') {
+        header.textContent = 'ANALYTICS';
+        feedSection.style.display = 'none';
+        analyticsSection.style.display = 'flex';
+        document.querySelectorAll('.flyout-option').forEach(el => el.classList.remove('active'));
+        const opt = document.querySelector(`#flyoutAnalytics .flyout-option[data-option="${selectedOption === 'pe_analysis' || selectedOption === 'stock_value' ? selectedOption : 'pe_analysis'}"]`);
+        if (opt) opt.classList.add('active');
+    }
+    panel.classList.add('open');
+    const backdrop = document.getElementById('flyoutBackdrop');
+    if (backdrop) backdrop.classList.add('visible');
+}
+
+function openFlyout(section) {
+    const panel = document.getElementById('flyoutPanel');
+    const backdrop = document.getElementById('flyoutBackdrop');
+    const header = document.getElementById('flyoutHeader');
+    const feedSection = document.getElementById('flyoutFeed');
+    const analyticsSection = document.getElementById('flyoutAnalytics');
+
+    if (section === 'feed') {
+        header.textContent = 'FEED';
+        feedSection.style.display = 'flex';
+        analyticsSection.style.display = 'none';
+    } else if (section === 'analytics') {
+        header.textContent = 'ANALYTICS';
+        feedSection.style.display = 'none';
+        analyticsSection.style.display = 'flex';
+    }
+    panel.classList.add('open');
+    if (backdrop) backdrop.classList.add('visible');
+}
+
+function closeFlyout() {
+    document.getElementById('flyoutPanel').classList.remove('open');
+    const backdrop = document.getElementById('flyoutBackdrop');
+    if (backdrop) backdrop.classList.remove('visible');
+}
+
+function handleRailClick(navValue) {
+    document.querySelectorAll('.rail-item').forEach(el => el.classList.remove('active'));
+    const target = document.querySelector(`.rail-item[data-nav="${navValue}"]`);
+    if (target) target.classList.add('active');
+
+    selectedNavSection = navValue;
+
+    if (navValue === 'feed') {
+        openFlyout('feed');
+        if (selectedOption === 'pe_analysis' || selectedOption === 'stock_value') {
+            selectedOption = 'all';
+        }
+        document.querySelectorAll('.flyout-option').forEach(el => el.classList.remove('active'));
+        const opt = document.querySelector(`#flyoutFeed .flyout-option[data-option="${selectedOption}"]`);
+        if (opt) opt.classList.add('active');
+        showContentForOption(selectedOption);
+    } else if (navValue === 'analytics') {
+        openFlyout('analytics');
+        if (selectedOption !== 'pe_analysis' && selectedOption !== 'stock_value') {
+            selectedOption = 'pe_analysis';
+        }
+        document.querySelectorAll('.flyout-option').forEach(el => el.classList.remove('active'));
+        const opt = document.querySelector(`#flyoutAnalytics .flyout-option[data-option="${selectedOption}"]`);
+        if (opt) opt.classList.add('active');
+        showContentForOption(selectedOption);
+    } else if (navValue === 'ai_analyzer') {
+        closeFlyout();
+        selectedOption = 'ai_analyzer';
+        showContentForOption('ai_analyzer');
+    } else if (navValue === 'place_order') {
+        closeFlyout();
+        selectedOption = 'place_order';
+        showContentForOption('place_order');
+    }
 }
 
 // AI Analyzer Functions
@@ -827,17 +916,61 @@ document.addEventListener('DOMContentLoaded', async function() {
             renderFinancialMetrics();
         } else if (selectedOption === 'ai_analyzer') {
             renderAIAnalysisResults();
-        } else {
+        } else if (selectedOption !== 'pe_analysis' && selectedOption !== 'stock_value') {
             renderMessages();
         }
     });
     
-    // Add event listeners for option filters
-    document.querySelectorAll('.option-filter').forEach(filter => {
-        filter.addEventListener('click', () => {
-            handleOptionFilter(filter.dataset.option);
+    // Rail click handlers
+    document.querySelectorAll('.rail-item[data-nav]').forEach(el => {
+        el.addEventListener('click', () => handleRailClick(el.dataset.nav));
+    });
+
+    // Hover to open flyout for Feed and Analytics
+    let flyoutHoverTimeout = null;
+    const rail = document.querySelector('.sidebar-rail');
+    const flyout = document.getElementById('flyoutPanel');
+
+    function scheduleCloseFlyout() {
+        if (flyoutHoverTimeout) clearTimeout(flyoutHoverTimeout);
+        flyoutHoverTimeout = setTimeout(() => {
+            if (selectedNavSection === 'feed' || selectedNavSection === 'analytics') {
+                closeFlyout();
+            }
+            flyoutHoverTimeout = null;
+        }, 0);
+    }
+
+    function cancelCloseFlyout() {
+        if (flyoutHoverTimeout) {
+            clearTimeout(flyoutHoverTimeout);
+            flyoutHoverTimeout = null;
+        }
+    }
+
+    rail.querySelectorAll('.rail-item[data-nav="feed"], .rail-item[data-nav="analytics"]').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+            cancelCloseFlyout();
+            openFlyoutOnHover(el.dataset.nav);
         });
     });
+    rail.addEventListener('mouseleave', () => scheduleCloseFlyout());
+    flyout.addEventListener('mouseenter', () => cancelCloseFlyout());
+    flyout.addEventListener('mouseleave', () => scheduleCloseFlyout());
+
+    // Flyout option click handlers
+    document.getElementById('flyoutPanel').addEventListener('click', (e) => {
+        const opt = e.target.closest('.flyout-option');
+        if (opt && opt.dataset.option) {
+            handleOptionFilter(opt.dataset.option);
+        }
+    });
+
+    // Close flyout when clicking the backdrop
+    document.getElementById('flyoutBackdrop').addEventListener('click', () => closeFlyout());
+
+    // Open Feed flyout by default
+    openFlyout('feed');
     
     // Setup file upload functionality
     setupFileUpload();

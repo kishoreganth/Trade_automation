@@ -3311,6 +3311,14 @@ async def fetch_nse_cm_data_background():
             
     except Exception as e:
         logger.error(f"❌ Background: NSE CM data fetch failed: {e}")
+        try:
+            if hasattr(e, 'resp') and getattr(e, 'resp', None):
+                logger.error(f"   HTTP status: {getattr(e.resp, 'status', 'N/A')}")
+            if hasattr(e, 'content') and getattr(e, 'content', None):
+                logger.error(f"   Response: {str(e.content)[:500]}")
+        except Exception:
+            pass
+        logger.exception("   Traceback:")
 
 @app.post("/api/verify_totp")
 async def verify_totp(request: TOTPRequest, background_tasks: BackgroundTasks):

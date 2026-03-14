@@ -547,6 +547,14 @@ async def write_quote_ohlc_to_gsheet(df, sheet_id, gid="0"):
             
         except Exception as write_error:
             logger.error(f"❌ Failed to write data: {str(write_error)}")
+            try:
+                if hasattr(write_error, 'resp') and getattr(write_error, 'resp', None):
+                    logger.error(f"   HTTP status: {getattr(write_error.resp, 'status', 'N/A')}")
+                if hasattr(write_error, 'content') and getattr(write_error, 'content', None):
+                    logger.error(f"   Response: {str(write_error.content)[:500]}")
+            except Exception:
+                pass
+            logger.exception("   Traceback:")
             return False
         
     except Exception as e:
