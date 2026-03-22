@@ -389,7 +389,7 @@ async def process_ocr_from_images_async(image_paths: List[str]) -> Dict:
                 "financial_pages": financial_pages,
                 "detection_type": "single_page",
                 "detected_page": page_num,
-                "detected_image_path": image_paths[page_num - 1],
+                "detected_image_paths": [image_paths[page_num - 1]],
                 "total_pages": len(image_paths)
             }
             
@@ -564,7 +564,7 @@ async def analyze_financial_metrics_async(financial_text: str, encoded_images: L
         print(f"🤖 Sending request to OpenAI with {len(content)} content items...")
         
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[{
                 "role": "user",
                 "content": content
@@ -617,6 +617,198 @@ async def analyze_financial_metrics_async(financial_text: str, encoded_images: L
                 "total_content_items": len(content)
             }
         }
+
+
+async def analyze_quarterly_results_async(financial_text: str, encoded_images: List[str] = None) -> Dict:
+    """
+    Extract comprehensive quarterly results with standalone/consolidated separation,
+    EPS basic/diluted, and historical quarter columns from the PDF.
+    """
+    client = get_openai_client()
+
+    base_prompt = """You are extracting data from an Indian company's quarterly financial results PDF.
+
+The document may have TWO tables: Standalone and Consolidated (check the title of each table).
+
+**TABLE STRUCTURE:**
+Each table has exactly 4 data columns:
+- Column 1, 2, 3: Under "Quarter ended" header (3 quarterly periods)
+- Column 4: Under "Year Ended" header (full year annual data)
+You MUST extract ALL 4 columns. Do not skip the Year Ended column.
+
+**ROW STRUCTURE (top to bottom in each table):**
+Row 1: "Revenue from Operations" — this is the FIRST income row
+Row 2: "Other Income" — this is the SECOND income row (separate from Revenue)
+Row 3: "Total Income" — sum row
+Then expense rows, then profit rows, then tax, then EPS at bottom.
+
+**CRITICAL — DO NOT CONFUSE ROWS:**
+- "Revenue from Operations" and "Other Income" are TWO DIFFERENT rows.
+- A column may have a dash (-) for Revenue but a number for Other Income, or vice versa.
+- Read each cell by its exact row AND column position in the image.
+
+**CRITICAL — DASH HANDLING:**
+- A dash (-) means null. Return null, not 0, not 0.0.
+- Do NOT fill a null cell with a value from another column or row.
+
+**face_value:** Read from the row label text "Face Value Rs. X/- Each". The X is the face value (usually 1, 2, 5, or 10). Do NOT confuse with the EPS row label "Face Value Rs. 10" which describes EPS denomination.
+
+**Quarter & Financial Year mapping (Indian FY):**
+- June ending → Q1, FY = next March's year (Jun 2025 → Q1 FY 2026)
+- September ending → Q2, FY = next March's year (Sep 2025 → Q2 FY 2026)
+- December ending → Q3, FY = next March's year (Dec 2025 → Q3 FY 2026)
+- March ending → Q4, FY = same year (Mar 2025 → Q4 FY 2025)
+- Year Ended column → period_type = "annual", quarter = "FY"
+
+IMPORTANT: Return ONLY raw JSON. No markdown, no code blocks.
+
+**You MUST return exactly 4 entries per table (3 quarters + 1 annual):**
+{
+    "company_name": "string",
+    "units": "lakhs or crores",
+    "standalone_periods": [
+        {
+            "column_header": "30.06.2025",
+            "period_type": "quarter",
+            "quarter": "Q1",
+            "financial_year": "2026",
+            "revenue_from_operations": number_or_null,
+            "other_income": number_or_null,
+            "total_income": number_or_null,
+            "total_expenses": number_or_null,
+            "profit_before_exceptional": number_or_null,
+            "exceptional_items": number_or_null,
+            "profit_before_tax": number_or_null,
+            "tax_expense": number_or_null,
+            "profit_after_tax": number_or_null,
+            "profit_attributable_to_minority": number_or_null,
+            "other_comprehensive_income": number_or_null,
+            "total_comprehensive_income": number_or_null,
+            "paid_up_equity_share_capital": number_or_null,
+            "face_value": number_or_null,
+            "eps_basic": number_or_null,
+            "eps_diluted": number_or_null
+        },
+        {"...column 2 (quarter)..."},
+        {"...column 3 (quarter)..."},
+        {"...column 4 (annual, period_type=annual, quarter=FY)..."}
+    ],
+    "consolidated_periods": [
+        {"...same 4 entries, or empty array if no consolidated table..."}
+    ]
+}
+
+Rules:
+- MUST be 4 entries per table: 3 quarterly + 1 annual.
+- null for dash (-) or blank cells. Never use 0 or 0.0 for dashes.
+- Return numbers exactly as printed in the document."""
+
+    content = [{"type": "text", "text": base_prompt}]
+
+    if encoded_images:
+        print(f"🖼️  Adding {len(encoded_images)} images to quarterly analysis (images only, no OCR text)...")
+        for i, img_b64 in enumerate(encoded_images, 1):
+            if img_b64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img_b64}"}
+                })
+        content.append({
+            "type": "text",
+            "text": "\nSTEP-BY-STEP EXTRACTION:\n"
+                    "1. Each image = one table (Standalone or Consolidated). Identify which from the title.\n"
+                    "2. Locate the 4 data columns: 3 quarterly + 1 annual (Year Ended).\n"
+                    "3. For EACH column, go row by row reading the cell at that column position:\n"
+                    "   - Row 'Revenue from Operations': first number row under Income section\n"
+                    "   - Row 'Other Income': second number row under Income section (DIFFERENT from Revenue)\n"
+                    "   - A dash (-) in any cell = null\n"
+                    "4. Return 4 entries per table. Do NOT skip the Year Ended column.\n"
+                    "5. VERIFY per column: Total Income ≈ Revenue + Other Income (using only values from THAT column)."
+        })
+    elif financial_text and financial_text.strip():
+        print("⚠️ No images available, falling back to OCR text...")
+        content.append({
+            "type": "text",
+            "text": f"\nFINANCIAL TEXT (no images available):\n{financial_text}"
+        })
+
+    try:
+        print(f"🤖 Quarterly Results AI analysis: {len(content)} content items...")
+        response = await client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "user", "content": content}],
+            temperature=0,
+            max_tokens=16000,
+            response_format={"type": "json_object"}
+        )
+
+        response_content = response.choices[0].message.content
+        finish_reason = response.choices[0].finish_reason
+        print(f"📊 Response: {len(response_content)} chars, finish_reason={finish_reason}")
+
+        if finish_reason == "length":
+            print(f"⚠️ Response truncated! Increasing max_tokens needed. Raw tail:\n...{response_content[-500:]}")
+            raise ValueError(f"Response truncated (finish_reason=length, {len(response_content)} chars)")
+
+        if not response_content or response_content.strip() == "":
+            raise ValueError("Empty response from OpenAI")
+
+        result = json.loads(response_content)
+
+        print("✅ Quarterly Results AI analysis completed")
+        return result
+
+    except Exception as e:
+        print(f"❌ Error in quarterly results AI analysis: {e}")
+        return {
+            "company_name": None,
+            "units": None,
+            "standalone_periods": [],
+            "consolidated_periods": [],
+            "error": str(e)
+        }
+
+
+async def process_ocr_all_financial_pages_async(image_paths: List[str]) -> Dict:
+    """Collect ALL financial pages from PDF (does NOT return early on first match).
+    Used for quarterly results where both Standalone + Consolidated tables exist."""
+    page_results = await process_ocr_from_images_async_batched(image_paths, batch_size=5)
+    page_results.sort(key=lambda x: x[0])
+
+    financial_keywords = ['revenue', 'expense', 'tax', 'profit', 'earning']
+    financial_pages = []
+    all_financial_texts = []
+    all_financial_image_paths = []
+    all_pages_text = ""
+
+    for page_num, page_text, page_text_lines in page_results:
+        all_pages_text += page_text
+        if not page_text_lines:
+            continue
+
+        _, matched_keywords = await check_financial_keywords_async(page_text, financial_keywords)
+
+        if matched_keywords >= 3:
+            financial_pages.append({
+                "page_number": page_num,
+                "image_path": image_paths[page_num - 1],
+                "matched_keywords": matched_keywords,
+                "page_text": page_text
+            })
+            all_financial_texts.append(page_text)
+            all_financial_image_paths.append(image_paths[page_num - 1])
+            print(f"💰 Financial page {page_num}: {matched_keywords}/5 keywords")
+
+    combined_financial_text = "\n".join(all_financial_texts) if all_financial_texts else None
+    print(f"📊 Total financial pages collected: {len(financial_pages)}")
+
+    return {
+        "financial_text": combined_financial_text,
+        "all_pages_text": all_pages_text,
+        "financial_pages": financial_pages,
+        "detected_image_paths": all_financial_image_paths,
+        "total_pages": len(image_paths)
+    }
 
 
 async def process_pdf_from_url_async(

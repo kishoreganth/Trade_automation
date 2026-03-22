@@ -4,111 +4,149 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Trading Messages Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 Stock Trading Messages Dashboard</h1>
-            <p>Real-time monitoring of corporate announcements and trading alerts - Integrated NSE System</p>
-            <button onclick="logout()" style="position: absolute; top: 20px; right: 20px; padding: 8px 16px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
-                Logout
-            </button>
-        </div>
-        
+    <div class="app-shell">
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <div class="logo-mark"><i data-lucide="trending-up"></i></div>
+                <span class="logo-text">StockHIFI</span>
+                <span class="logo-divider"></span>
+                <span class="logo-sub">Trading Dashboard</span>
+            </div>
+            <div class="top-bar-center">
+                <div class="connection-chip" id="connectionChip">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="connectionStatus">Connecting...</span>
+                </div>
+            </div>
+            <div class="top-bar-right">
+                <span id="lastUpdate" class="last-update-text">Last update: Never</span>
+                <button class="btn-icon-only" onclick="logout()" title="Logout">
+                    <i data-lucide="log-out"></i>
+                </button>
+            </div>
+        </header>
+
         <div class="main-content">
-            <div class="sidebar-rail">
+            <!-- Sidebar Rail -->
+            <nav class="sidebar-rail">
                 <div class="rail-item active" data-nav="feed">
-                    <span class="rail-icon">📋</span>
+                    <i data-lucide="layout-list"></i>
                     <span class="rail-label">Feed</span>
                 </div>
                 <div class="rail-item" data-nav="analytics">
-                    <span class="rail-icon">📊</span>
+                    <i data-lucide="bar-chart-3"></i>
                     <span class="rail-label">Analytics</span>
                 </div>
                 <div class="rail-item" data-nav="ai_analyzer">
-                    <span class="rail-icon">🤖</span>
+                    <i data-lucide="brain-circuit"></i>
                     <span class="rail-label">AI Analyzer</span>
                 </div>
                 <div class="rail-item" data-nav="place_order">
-                    <span class="rail-icon">📈</span>
+                    <i data-lucide="arrow-up-circle"></i>
                     <span class="rail-label">Place Order</span>
                 </div>
-            </div>
+            </nav>
+
+            <!-- Flyout Panel -->
             <div class="flyout-backdrop" id="flyoutBackdrop"></div>
             <div class="flyout-panel" id="flyoutPanel">
                 <div class="flyout-header" id="flyoutHeader">Feed</div>
                 <div class="flyout-body" id="flyoutBody">
                     <div class="flyout-section" id="flyoutFeed">
                         <div class="flyout-option active" data-option="all">
-                            <span class="flyout-opt-icon" style="background:#10b981;">📋</span>
-                            <span>All Options</span>
+                            <span class="flyout-opt-icon"><i data-lucide="layers"></i></span>
+                            <span>All Messages</span>
                         </div>
                         <div class="flyout-option" data-option="quarterly_result">
-                            <span class="flyout-opt-icon">📈</span>
+                            <span class="flyout-opt-icon"><i data-lucide="file-bar-chart"></i></span>
                             <span>Quarterly Result</span>
                         </div>
                         <div class="flyout-option" data-option="investor_presentation">
-                            <span class="flyout-opt-icon">📊</span>
+                            <span class="flyout-opt-icon"><i data-lucide="presentation"></i></span>
                             <span>Investor Presentation</span>
                         </div>
                         <div class="flyout-option" data-option="concall">
-                            <span class="flyout-opt-icon">📞</span>
+                            <span class="flyout-opt-icon"><i data-lucide="phone-call"></i></span>
                             <span>Concall</span>
                         </div>
                         <div class="flyout-option" data-option="monthly_business_update">
-                            <span class="flyout-opt-icon">📅</span>
+                            <span class="flyout-opt-icon"><i data-lucide="calendar-range"></i></span>
                             <span>Monthly Business Update</span>
                         </div>
                         <div class="flyout-option" data-option="fund_raising">
-                            <span class="flyout-opt-icon">💰</span>
+                            <span class="flyout-opt-icon"><i data-lucide="banknote"></i></span>
                             <span>Fund Raising</span>
                         </div>
                         <div class="flyout-option" data-option="result_concall">
-                            <span class="flyout-opt-icon">📋</span>
+                            <span class="flyout-opt-icon"><i data-lucide="clipboard-check"></i></span>
                             <span>Outcome of Board Meeting</span>
                         </div>
                     </div>
                     <div class="flyout-section" id="flyoutAnalytics" style="display:none;">
                         <div class="flyout-option" data-option="pe_analysis">
-                            <span class="flyout-opt-icon">📈</span>
+                            <span class="flyout-opt-icon"><i data-lucide="line-chart"></i></span>
                             <span>PE Analysis</span>
                         </div>
                         <div class="flyout-option" data-option="stock_value">
-                            <span class="flyout-opt-icon">💰</span>
+                            <span class="flyout-opt-icon"><i data-lucide="indian-rupee"></i></span>
                             <span>Stock Value</span>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
+            <!-- Content Area -->
             <div class="content-area">
+                <!-- Stats Row -->
                 <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-number" id="totalMessages">0</div>
-                        <div class="stat-label">Total Messages</div>
+                    <div class="stat-card stat-total">
+                        <div class="stat-icon"><i data-lucide="mail"></i></div>
+                        <div class="stat-body">
+                            <div class="stat-number" id="totalMessages" data-count="0">0</div>
+                            <div class="stat-label">Total Messages</div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="todayMessages">0</div>
-                        <div class="stat-label">Today's Messages</div>
+                    <div class="stat-card stat-today">
+                        <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
+                        <div class="stat-body">
+                            <div class="stat-number" id="todayMessages" data-count="0">0</div>
+                            <div class="stat-label">Today's Messages</div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="uniqueSymbols">0</div>
-                        <div class="stat-label">Unique Symbols</div>
+                    <div class="stat-card stat-symbols">
+                        <div class="stat-icon"><i data-lucide="hash"></i></div>
+                        <div class="stat-body">
+                            <div class="stat-number" id="uniqueSymbols" data-count="0">0</div>
+                            <div class="stat-label">Unique Symbols</div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="lastMessageTime">-</div>
-                        <div class="stat-label">Last Message</div>
+                    <div class="stat-card stat-time">
+                        <div class="stat-icon"><i data-lucide="clock"></i></div>
+                        <div class="stat-body">
+                            <div class="stat-number stat-number-sm" id="lastMessageTime">-</div>
+                            <div class="stat-label">Last Message</div>
+                        </div>
                     </div>
                 </div>
-                
+
+                <!-- Controls Bar -->
                 <div class="controls">
                     <div class="control-group global-search-group">
-                        <label>Global Search:</label>
-                        <input type="text" id="globalSearch" placeholder="Search symbol, company, description, sector...">
+                        <div class="search-input-wrap">
+                            <i data-lucide="search" class="search-icon"></i>
+                            <input type="text" id="globalSearch" placeholder="Search symbol, company, sector...">
+                        </div>
                     </div>
                     <div class="control-group">
-                        <label>Filter by Exchange:</label>
+                        <label>Exchange</label>
                         <select id="exchangeFilter">
                             <option value="">All</option>
                             <option value="NSE">NSE</option>
@@ -116,31 +154,27 @@
                         </select>
                     </div>
                     <div class="control-group">
-                        <label>Filter by Sector:</label>
+                        <label>Sector</label>
                         <select id="sectorFilter">
                             <option value="">All Sectors</option>
                         </select>
                     </div>
                     <div class="control-group">
-                        <label>Show last:</label>
+                        <label>Show</label>
                         <select id="limitSelect">
-                            <option value="50">50 messages</option>
-                            <option value="100">100 messages</option>
-                            <option value="200">200 messages</option>
-                            <option value="0" selected>All messages</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="0" selected>All</option>
                         </select>
                     </div>
-                    <button onclick="refreshData()">🔄 Refresh</button>
+                    <button class="btn-refresh" onclick="refreshData()">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Refresh</span>
+                    </button>
                 </div>
-                
-                <div class="status">
-                    <div class="connection-status">
-                        <div class="status-dot" id="statusDot"></div>
-                        <span id="connectionStatus">Connecting to WebSocket...</span>
-                    </div>
-                    <div id="lastUpdate">Last update: Never</div>
-                </div>
-                
+
+                <!-- Messages Table -->
                 <div class="table-container" id="messagesTableContainer">
                     <table>
                         <thead>
@@ -157,62 +191,116 @@
                         <tbody id="messagesTable">
                             <tr>
                                 <td colspan="7" class="no-messages">
-                                    No messages yet. Waiting for corporate announcements...
+                                    <div class="empty-state">
+                                        <i data-lucide="inbox" class="empty-icon"></i>
+                                        <p>No messages yet. Waiting for corporate announcements...</p>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                
+
+                <!-- Financial Metrics Table -->
                 <div class="table-container" id="financialMetricsContainer" style="display: none;">
-                    <h3>📊 Financial Metrics - Board Meeting Outcomes</h3>
+                    <div class="section-header">
+                        <i data-lucide="bar-chart-3"></i>
+                        <h3>Financial Metrics &mdash; Board Meeting Outcomes</h3>
+                    </div>
                     <table>
                         <thead>
                             <tr>
                                 <th>Stock</th>
                                 <th>Period</th>
                                 <th>Year</th>
-                                <th>Revenue (₹ L)</th>
-                                <th>PBT (₹ L)</th>
-                                <th>PAT (₹ L)</th>
-                                <th>Total Income (₹ L)</th>
-                                <th>Other Income (₹ L)</th>
-                                <th>EPS (₹)</th>
+                                <th>Revenue (&#8377; L)</th>
+                                <th>PBT (&#8377; L)</th>
+                                <th>PAT (&#8377; L)</th>
+                                <th>Total Income (&#8377; L)</th>
+                                <th>Other Income (&#8377; L)</th>
+                                <th>EPS (&#8377;)</th>
                                 <th>Reported At</th>
                             </tr>
                         </thead>
                         <tbody id="financialMetricsTable">
                             <tr>
                                 <td colspan="10" class="no-messages">
-                                    No financial metrics data available yet...
+                                    <div class="empty-state">
+                                        <i data-lucide="database" class="empty-icon"></i>
+                                        <p>No financial metrics data available yet...</p>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                
+
+                <!-- Analytics Container -->
                 <div class="analytics-container" id="analyticsContainer" style="display: none;">
                     <div class="analytics-view" id="peAnalysisView" style="display: none;">
-                        <h3>📈 PE Analysis</h3>
-                        <p class="analytics-desc">EPS and PE ratio from Quarterly Result data. Data source: financial_metrics.</p>
-                        <div class="analytics-placeholder" id="peAnalysisPlaceholder">
-                            <p>PE Analysis view – coming soon. Will display EPS and PE ratio for stocks from Quarterly Result.</p>
+                        <div class="section-header">
+                            <i data-lucide="line-chart"></i>
+                            <h3>PE Analysis &mdash; Quarterly Results</h3>
+                        </div>
+                        <div class="pe-controls">
+                            <div class="search-input-wrap search-input-sm">
+                                <i data-lucide="search" class="search-icon"></i>
+                                <input type="text" id="peSymbolFilter" placeholder="Filter by symbol or sector...">
+                            </div>
+                            <button id="peRefreshBtn" class="btn-refresh btn-sm">
+                                <i data-lucide="refresh-cw"></i>
+                                <span>Refresh</span>
+                            </button>
+                            <button id="peFetchCmpBtn" class="btn-refresh btn-sm" title="Fetch live CMP from Kotak API">
+                                <i data-lucide="indian-rupee"></i>
+                                <span>Fetch CMP</span>
+                            </button>
+                            <span id="peResultCount" class="result-count"></span>
+                        </div>
+                        <div class="table-container">
+                            <table class="data-table" id="peAnalysisTable">
+                                <thead>
+                                    <tr>
+                                        <th>Stock</th>
+                                        <th>Quarter</th>
+                                        <th>FY</th>
+                                        <th>FY EPS (Est.)</th>
+                                        <th>CMP (&#8377;)</th>
+                                        <th>PE</th>
+                                        <th>Sector</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="peAnalysisBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="peAnalysisEmpty" style="display:none;" class="empty-state-block">
+                            <i data-lucide="file-search" class="empty-icon"></i>
+                            <p>No quarterly results yet. Data will appear as quarterly result PDFs are processed.</p>
                         </div>
                     </div>
                     <div class="analytics-view" id="stockValueView" style="display: none;">
-                        <h3>💰 Stock Value</h3>
+                        <div class="section-header">
+                            <i data-lucide="indian-rupee"></i>
+                            <h3>Stock Value</h3>
+                        </div>
                         <p class="analytics-desc">Stock value analytics from Quarterly Result data.</p>
-                        <div class="analytics-placeholder" id="stockValuePlaceholder">
-                            <p>Stock Value view – coming soon.</p>
+                        <div class="empty-state-block" id="stockValuePlaceholder">
+                            <i data-lucide="construction" class="empty-icon"></i>
+                            <p>Stock Value view &ndash; coming soon.</p>
                         </div>
                     </div>
                 </div>
-                
+
+                <!-- AI Analyzer -->
                 <div class="ai-analyzer-container" id="aiAnalyzerContainer" style="display: none;">
-                    <h3>🤖 AI Financial Document Analyzer</h3>
+                    <div class="section-header">
+                        <i data-lucide="brain-circuit"></i>
+                        <h3>AI Financial Document Analyzer</h3>
+                    </div>
                     <div class="upload-section">
                         <div class="upload-area" id="uploadArea">
-                            <div class="upload-icon">📄</div>
+                            <div class="upload-icon"><i data-lucide="file-up"></i></div>
                             <div class="upload-text">
                                 <strong>Drop your PDF file here or click to browse</strong>
                                 <p>Supported format: PDF files only</p>
@@ -220,27 +308,32 @@
                             <input type="file" id="fileInput" accept=".pdf" style="display: none;">
                         </div>
                         <div class="upload-status" id="uploadStatus" style="display: none;">
-                            <div class="status-icon">⏳</div>
+                            <div class="status-icon">
+                                <i data-lucide="loader-2" class="spin"></i>
+                            </div>
                             <div class="status-text">Processing your document...</div>
                             <div class="progress-bar">
                                 <div class="progress-fill" id="progressFill"></div>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="ai-results-container" id="aiResultsContainer" style="display: none;">
-                        <h4>📈 Analysis Results</h4>
+                        <div class="section-header section-header-sm">
+                            <i data-lucide="file-bar-chart"></i>
+                            <h4>Analysis Results</h4>
+                        </div>
                         <table>
                             <thead>
                                 <tr>
                                     <th>Period</th>
                                     <th>Year</th>
-                                    <th>Revenue (₹ L)</th>
-                                    <th>PBT (₹ L)</th>
-                                    <th>PAT (₹ L)</th>
-                                    <th>Total Income (₹ L)</th>
-                                    <th>Other Income (₹ L)</th>
-                                    <th>EPS (₹)</th>
+                                    <th>Revenue (&#8377; L)</th>
+                                    <th>PBT (&#8377; L)</th>
+                                    <th>PAT (&#8377; L)</th>
+                                    <th>Total Income (&#8377; L)</th>
+                                    <th>Other Income (&#8377; L)</th>
+                                    <th>EPS (&#8377;)</th>
                                     <th>Analyzed At</th>
                                 </tr>
                             </thead>
@@ -254,24 +347,33 @@
                         </table>
                     </div>
                 </div>
-                
+
             </div>
-            
+
             <!-- Place Order Page -->
             <div class="place-order-page" id="placeOrderPage" style="display: none;">
                 <div class="page-header">
-                    <h3>📈 Place Order</h3>
-                    <p>Market orders and TOTP authentication</p>
+                    <i data-lucide="arrow-up-circle" class="page-header-icon"></i>
+                    <div>
+                        <h3>Place Order</h3>
+                        <p>Market orders and TOTP authentication</p>
+                    </div>
                 </div>
-                
+
                 <div class="place-order-layout">
                     <!-- Left side - Google Sheet Preview -->
                     <div class="sheet-preview-section">
                         <div class="sheet-header">
-                            <h4>📊 Market Open Orders</h4>
+                            <h4><i data-lucide="table-2"></i> Market Open Orders</h4>
                             <div style="display: flex; gap: 10px;">
-                                <button id="openSheetBtn" class="refresh-sheet-btn" style="background: #10b981;">📊 Open Google Sheet</button>
-                                <button id="refreshSheetBtn" class="refresh-sheet-btn">🔄 Refresh</button>
+                                <button id="openSheetBtn" class="btn-refresh btn-sm" style="--accent: #10b981;">
+                                    <i data-lucide="external-link"></i>
+                                    <span>Open Sheet</span>
+                                </button>
+                                <button id="refreshSheetBtn" class="btn-refresh btn-sm">
+                                    <i data-lucide="refresh-cw"></i>
+                                    <span>Refresh</span>
+                                </button>
                             </div>
                         </div>
                         <div class="sheet-container">
@@ -286,74 +388,74 @@
                             </table>
                         </div>
                     </div>
-                    
-                    <!-- Right side - TOTP Section -->
+
+                    <!-- Right side -->
                     <div class="totp-auth-section">
                         <!-- Instructions Card -->
-                        <div class="instructions-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <h4 style="margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 18px;">📋</span>
-                                <span>Place Order Automation Steps</span>
-                            </h4>
-                            <ol style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
-                                <li><strong>OPEN GOOGLE DOCS</strong></li>
-                                <li><strong>UPDATE IN PLACE_ORDER_V2 sheet</strong></li>
-                                <li><strong>UPDATE SCRIP LIST IN GOOGLE DOCS</strong></li>
-                                <li><strong>REFRESH IN DASHBOARD</strong></li>
-                                <li><strong>PUT TOTP</strong> (Google Authenticator)</li>
-                                <li><strong>CLICK "PLACE ORDER"</strong></li>
+                        <div class="instructions-card">
+                            <h4><i data-lucide="list-ordered"></i> Place Order Steps</h4>
+                            <ol>
+                                <li>Open Google Docs</li>
+                                <li>Update in PLACE_ORDER_V2 sheet</li>
+                                <li>Update scrip list in Google Docs</li>
+                                <li>Refresh in Dashboard</li>
+                                <li>Put TOTP (Google Authenticator)</li>
+                                <li>Click "Place Order"</li>
                             </ol>
                         </div>
-                        
+
                         <!-- Get Quotes Section -->
                         <div class="get-quotes-section">
                             <div class="quotes-header">
-                                <h4>📊 Get Quotes</h4>
+                                <h4><i data-lucide="candlestick-chart"></i> Get Quotes</h4>
                                 <p>Fetch latest market quotes (3-4 mins)</p>
-                                <div id="autoScheduledInfo" class="scheduled-info" style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 6px 10px; margin-top: 8px; font-size: 11px; color: #818cf8;">
-                                    ⏰ Auto-scheduled: <strong id="scheduledTimeDisplay">12:40:00 PM IST</strong> (Mon-Fri)
-                                    <button id="editScheduleBtn" style="margin-left: 8px; padding: 2px 6px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 4px; color: #818cf8; cursor: pointer; font-size: 10px;">✏️ Edit</button>
+                                <div id="autoScheduledInfo" class="scheduled-info">
+                                    <i data-lucide="timer" style="width:14px;height:14px;"></i>
+                                    Auto-scheduled: <strong id="scheduledTimeDisplay">12:40:00 PM IST</strong> (Mon-Fri)
+                                    <button id="editScheduleBtn" class="btn-tiny">
+                                        <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+                                    </button>
                                 </div>
                             </div>
-                            
+
                             <!-- Schedule Editor (hidden by default) -->
-                            <div id="scheduleEditor" style="display: none; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; padding: 12px; margin-top: 8px;">
-                                <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #6366f1;">Edit Scheduled Time</div>
-                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                                    <div style="display: flex; gap: 4px; align-items: center;">
-                                        <label style="font-size: 11px; color: #6b7280;">Hour:</label>
-                                        <input type="number" id="scheduleHour" min="0" max="23" value="12" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                            <div id="scheduleEditor" style="display: none;" class="schedule-editor">
+                                <div class="schedule-editor-title">Edit Scheduled Time</div>
+                                <div class="schedule-editor-fields">
+                                    <div class="schedule-field">
+                                        <label>Hour</label>
+                                        <input type="number" id="scheduleHour" min="0" max="23" value="12">
                                     </div>
-                                    <div style="display: flex; gap: 4px; align-items: center;">
-                                        <label style="font-size: 11px; color: #6b7280;">Min:</label>
-                                        <input type="number" id="scheduleMinute" min="0" max="59" value="40" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                                    <div class="schedule-field">
+                                        <label>Min</label>
+                                        <input type="number" id="scheduleMinute" min="0" max="59" value="40">
                                     </div>
-                                    <div style="display: flex; gap: 4px; align-items: center;">
-                                        <label style="font-size: 11px; color: #6b7280;">Sec:</label>
-                                        <input type="number" id="scheduleSecond" min="0" max="59" value="0" style="width: 50px; padding: 4px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px;">
+                                    <div class="schedule-field">
+                                        <label>Sec</label>
+                                        <input type="number" id="scheduleSecond" min="0" max="59" value="0">
                                     </div>
-                                    <div style="display: flex; gap: 4px; align-items: center;">
-                                        <input type="checkbox" id="scheduleEnabled" checked style="width: 16px; height: 16px;">
-                                        <label style="font-size: 11px; color: #6b7280;">Enabled</label>
+                                    <div class="schedule-field schedule-check">
+                                        <input type="checkbox" id="scheduleEnabled" checked>
+                                        <label>Enabled</label>
                                     </div>
-                                    <div style="display: flex; gap: 4px; align-items: center;">
-                                        <input type="checkbox" id="scheduleWeekdaysOnly" checked style="width: 16px; height: 16px;">
-                                        <label style="font-size: 11px; color: #6b7280;">Weekdays Only</label>
+                                    <div class="schedule-field schedule-check">
+                                        <input type="checkbox" id="scheduleWeekdaysOnly" checked>
+                                        <label>Weekdays Only</label>
                                     </div>
                                 </div>
-                                <div style="display: flex; gap: 6px; margin-top: 8px;">
-                                    <button id="saveScheduleBtn" style="padding: 4px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">💾 Save</button>
-                                    <button id="cancelScheduleBtn" style="padding: 4px 12px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500;">✖ Cancel</button>
+                                <div class="schedule-editor-actions">
+                                    <button id="saveScheduleBtn" class="btn-sm btn-save"><i data-lucide="save" style="width:14px;height:14px;"></i> Save</button>
+                                    <button id="cancelScheduleBtn" class="btn-sm btn-cancel"><i data-lucide="x" style="width:14px;height:14px;"></i> Cancel</button>
                                 </div>
                             </div>
-                            
-                            <!-- Scheduled Task Status Indicator (always visible) -->
+
+                            <!-- Scheduled Task Status Indicator -->
                             <div id="scheduledTaskIndicator" class="scheduled-task-status waiting">
                                 <div class="status-animation">
-                                    <div class="status-dot"></div>
+                                    <div class="sched-dot"></div>
                                 </div>
                                 <div class="status-info">
-                                    <div class="status-title" id="scheduledTaskTitle">⏳ Loading...</div>
+                                    <div class="status-title" id="scheduledTaskTitle">Loading...</div>
                                     <div class="status-message" id="scheduledTaskMessage">Loading schedule configuration...</div>
                                     <div class="status-progress" id="scheduledProgressContainer" style="display: none;">
                                         <div class="progress-bar-mini">
@@ -364,38 +466,39 @@
                                     <div class="status-time" id="scheduledTaskTime"></div>
                                 </div>
                             </div>
-                            
+
                             <div class="button-group">
                                 <button id="getQuotesBtn" class="get-quotes-btn">
-                                    <span class="btn-icon">📊</span>
+                                    <i data-lucide="candlestick-chart"></i>
                                     GET QUOTES (Manual)
                                 </button>
                             </div>
                             <div class="last-action-hint" id="lastQuotesHint">
-                                <span class="hint-icon">🕐</span>
+                                <i data-lucide="clock" style="width:14px;height:14px;opacity:0.5;"></i>
                                 <span class="hint-text">Last fetch: <span id="lastQuotesTime">--</span></span>
                             </div>
-                            
+
                             <div class="quotes-status" id="quotesStatus" style="display: none;">
-                                <div class="status-icon" id="quotesStatusIcon">⏳</div>
+                                <div class="status-icon" id="quotesStatusIcon"><i data-lucide="loader-2" class="spin"></i></div>
                                 <div class="status-message" id="quotesStatusMessage">Fetching quotes...</div>
                             </div>
                         </div>
-                        
+
+                        <!-- TOTP Auth -->
                         <div class="totp-container">
                             <div class="totp-header">
-                                <h4>🔐 Authentication</h4>
+                                <h4><i data-lucide="shield-check"></i> Authentication</h4>
                                 <p>Enter TOTP to activate trading</p>
                             </div>
-                            
+
                             <div class="totp-form">
                                 <div class="form-group">
                                     <label for="totpInput">TOTP Code</label>
-                                    <input 
-                                        type="text" 
-                                        id="totpInput" 
-                                        placeholder="Enter 6-digit TOTP code" 
-                                        maxlength="6" 
+                                    <input
+                                        type="text"
+                                        id="totpInput"
+                                        placeholder="Enter 6-digit TOTP code"
+                                        maxlength="6"
                                         pattern="[0-9]{6}"
                                         class="totp-input"
                                     >
@@ -403,58 +506,41 @@
                                         Enter the 6-digit code from your authenticator app
                                     </div>
                                 </div>
-                                
+
                                 <div class="button-group">
                                     <button id="checkTotpBtn" class="check-btn">
-                                        <span class="btn-icon">🔐</span>
+                                        <i data-lucide="shield-check"></i>
                                         Check
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <div class="totp-status" id="totpStatus" style="display: none;">
-                                <div class="status-icon" id="statusIcon">⏳</div>
+                                <div class="status-icon" id="statusIcon"><i data-lucide="loader-2" class="spin"></i></div>
                                 <div class="status-message" id="statusMessage">Verifying TOTP...</div>
                             </div>
                         </div>
-                        
+
                         <!-- Place Order Section -->
                         <div class="place-order-section">
                             <div class="order-header">
-                                <h4>🚀 Execute Orders</h4>
+                                <h4><i data-lucide="rocket"></i> Execute Orders</h4>
                                 <p>Place buy/sell orders for all stocks in the sheet</p>
                             </div>
-                            
-                            <!-- <div class="order-description">
-                                <div class="order-info">
-                                    <div class="info-item">
-                                        <span class="info-icon">📈</span>
-                                        <span>BUY orders: 5% below LTP</span>
-                                    </div>
-                                    <div class="info-item">
-                                        <span class="info-icon">📉</span>
-                                        <span>SELL orders: 5% above LTP</span>
-                                    </div>
-                                    <div class="info-item">
-                                        <span class="info-icon">⚡</span>
-                                        <span>Batch processing for all stocks</span>
-                                    </div>
-                                </div>
-                            </div> -->
-                            
+
                             <div class="button-group">
                                 <button id="placeOrderBtn" class="place-order-btn">
-                                    <span class="btn-icon">🚀</span>
+                                    <i data-lucide="rocket"></i>
                                     PLACE ORDERS
                                 </button>
                             </div>
                             <div class="last-action-hint" id="lastOrderHint">
-                                <span class="hint-icon">🕐</span>
+                                <i data-lucide="clock" style="width:14px;height:14px;opacity:0.5;"></i>
                                 <span class="hint-text">Last order: <span id="lastOrderTime">--</span></span>
                             </div>
-                            
+
                             <div class="order-status" id="orderStatus" style="display: none;">
-                                <div class="status-icon" id="orderStatusIcon">⏳</div>
+                                <div class="status-icon" id="orderStatusIcon"><i data-lucide="loader-2" class="spin"></i></div>
                                 <div class="status-message" id="orderStatusMessage">Processing orders...</div>
                             </div>
                         </div>
@@ -468,7 +554,7 @@
     <div class="confirm-modal-overlay" id="placeOrderModal" style="display: none;">
         <div class="confirm-modal">
             <div class="confirm-modal-header">
-                <span class="confirm-modal-icon">⚠️</span>
+                <i data-lucide="alert-triangle" class="confirm-modal-icon"></i>
                 <h3>Confirm Order Execution</h3>
             </div>
             <div class="confirm-modal-body">
@@ -477,15 +563,18 @@
             </div>
             <div class="confirm-modal-footer">
                 <button class="confirm-modal-btn cancel" id="cancelOrderBtn">
-                    <span>✕</span> Cancel
+                    <i data-lucide="x"></i> Cancel
                 </button>
                 <button class="confirm-modal-btn confirm" id="confirmOrderBtn">
-                    <span>🚀</span> Yes, Place Orders
+                    <i data-lucide="rocket"></i> Yes, Place Orders
                 </button>
             </div>
         </div>
     </div>
 
     <script src="/static/js/dashboard.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>

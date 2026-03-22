@@ -5,6 +5,134 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-22: PE Analysis Redesign — FY EPS + PE Ratio View
+
+**Feature**: Analytics > PE Analysis page redesigned from raw quarterly data dump to **PE ratio analytics** view.
+
+**New API**: `GET /api/pe_analysis?result_type=standalone|consolidated`
+- Returns **latest quarter per stock** (excludes FY rows) with:
+  - `fy_eps` (estimated full-year EPS from quarterly extrapolation)
+  - `fy_eps_formula` (e.g. `Q3*4/3`, `(Q1+Q2)*2`)
+  - `sector`, `exchange` (from `stocks` master table via JOIN)
+  - `cmp` placeholder (for client-side or future live quote integration)
+- SQL: subquery picks latest non-FY quarter per `stock_symbol` ordered by `financial_year DESC, quarter DESC`
+
+**Frontend**: PE Analysis table columns: Stock, Quarter, FY, FY EPS (Est.), Formula, CMP, PE, Sector, Units, Updated
+- PE color coding: green (< 15), amber (15-30), red (> 30)
+- CMP column placeholder — ready for live quote integration
+- PE = CMP / FY EPS (computed client-side when CMP available)
+- Standalone/Consolidated toggle re-fetches from API (different EPS columns)
+- Symbol filter also searches by sector
+
+**Exchange Token Support**:
+- `stocks` table: added `nse_token` (INTEGER), `bse_token` (INTEGER), `isin` (TEXT) columns via migration
+- `POST /api/import_scrip_master` — upload Kotak scrip master Excel/CSV to populate tokens. Auto-detects columns (trading_symbol/symbol, exchange_token/token, isin, company_name). Params: `exchange=NSE|BSE`
+- `/api/pe_analysis?fetch_cmp=true` — when tokens available, batch-fetches live CMP from Kotak API, computes PE server-side
+- Future: daily auto-download from Kotak Neo (see `FUTURE_KOTAK_MASTER_SYNC.md`)
+
+**PE Analysis Dashboard** (`/api/pe_analysis`):
+- **One row per stock** — latest non-FY quarter, consolidated EPS first (fallback standalone)
+- Token lookup from Google Sheet `nse_cm_neo` (gid=1765483913): `pSymbolName` strip `-EQ` → `pSymbol` = exchange token. Cached in `_nse_token_cache` after first fetch.
+- `fetch_cmp=true` param → batch Kotak quote API → stores CMP + PE in `quarterly_results` table
+- Removed Standalone/Consolidated toggle — always picks consolidated first (shows `S` badge if standalone used)
+- **"Fetch CMP" button** on dashboard — triggers live quote fetch, updates table in-place
+- Columns: Stock | Quarter | FY | FY EPS (Est.) | CMP | PE | Sector | Updated
+- PE color: green (<15), amber (15-30), red (>30)
+- EPS hover shows formula + basis (e.g. `(Q1+Q2)*2 (Consolidated)`)
+
+**PE Pipeline in `test_quarterly_extract.py`**:
+- `fetch_nse_token_map()` — fetches Google Sheet `nse_cm_neo` (gid=1765483913), builds `{SYMBOL: exchange_token}` map from `pSymbolName` (strip `-EQ`) → `pSymbol`. Cached after first call.
+- `fetch_cmp(symbol)` — looks up token → calls Kotak `get_single_quote(nse_cm|{token})` → extracts `ohlc.close` → returns CMP in ₹
+- `print_pe_summary()` — uses consolidated periods first (fallback standalone), computes PE = CMP / FY EPS, color-coded: 🟢 <15, 🟡 15-30, 🔴 >30
+- Usage: `python test_quarterly_extract.py <pdf> SYMBOL` — full pipeline: OCR → AI → EPS → CMP → PE
+- `quarterly_results` table: added `cmp` (REAL), `pe` (REAL), `cmp_updated_at` (TEXT) columns via migration
+
+**Files Changed**: `nse_url_test.py` (new endpoints, migration), `test_quarterly_extract.py` (PE pipeline), `static/index.html` (table headers), `static/js/dashboard.js` (PE render), `static/css/styles.css` (PE colors)
+
+---
+
+### 2026-03-22: Master `stocks` Table + Deprecate `financial_metrics`
+
+**Master Stocks Table**: New `stocks` table (auto-populated):
+- Columns: id (PK), symbol (UNIQUE), company_name, exchange, sector, is_active, added_at, updated_at
+- `get_or_create_stock(db, symbol, company_name, exchange, sector)` → auto-inserts on first encounter, returns `stocks.id`
+- `quarterly_results.stock_id` FK added (nullable for backward compat, populated on every new UPSERT)
+- New API: `GET /api/stocks` (active_only param)
+
+**Deprecated `financial_metrics`**:
+- Removed `financial_metrics` table creation from `init_db()` (existing table left in DB, not used)
+- Removed `process_financial_metrics()` function entirely
+- Removed `main_ocr_async()` call from both NSE and BSE quarterly flows — saves one OpenAI API call per PDF
+- Removed `/api/financial_metrics` endpoint
+- Removed `main_ocr_async` from import in `nse_url_test.py`
+- `analyze_financial_metrics_async` kept — still used by `/api/ai_analyze` (manual PDF upload AI Analyzer)
+
+**Frontend**: "Outcome of Board Meeting" view (`result_concall`) now reads from `quarterly_results` API instead of deprecated `financial_metrics`. WebSocket `quarterly_results` event refreshes both PE Analysis and board meeting views.
+
+**Files Changed**: `nse_url_test.py` (DB schema, pipeline, API), `static/js/dashboard.js` (board meeting view)
+
+**Performance**: Eliminated redundant OpenAI API call per quarterly PDF (was running both `main_ocr_async` + `run_quarterly_extraction` in parallel on same PDF). Now only `run_quarterly_extraction` runs.
+
+**Stocks master sync** (in `init_db()`, idempotent — runs per policy):
+1. INSERT missing symbols from `messages` (latest name/sector/exchange per symbol)
+2. INSERT missing from `quarterly_results`
+3. `UPDATE quarterly_results SET stock_id` where NULL (match `UPPER(TRIM(stock_symbol))`)
+4. Fill `stocks.sector` from `sector_map` only for rows with empty sector (not full xlsx scan)
+- **Policy** (env): `STOCKS_SYNC_POLICY` = `always` (default) | `empty_only` | `below_threshold`; `STOCKS_SYNC_THRESHOLD` (default 1000) used with `below_threshold`
+- `always` = every startup (recovers interrupted migration); switch to `empty_only` or `below_threshold` after master list is stable
+- Startup: `load_sector_map()` before `init_db()` so sector xlsx is available
+
+---
+
+### 2026-03-20: Quarterly Results – Full Extraction + Analytics PE Analysis
+
+**Feature**: Separate `quarterly_results` system for Analytics > PE Analysis. Extracts both Standalone + Consolidated results from quarterly result PDFs with EPS basic/diluted.
+
+**Database**: New `quarterly_results` table (hybrid JSON + denormalized):
+- Columns: stock_symbol, company_name, quarter (Q1-Q4), financial_year, period_ended
+- EPS denormalized: eps_basic_standalone, eps_diluted_standalone, eps_basic_consolidated, eps_diluted_consolidated
+- JSON blobs: standalone_data, consolidated_data, raw_ai_response
+- UNIQUE(stock_symbol, quarter, financial_year) → UPSERT support
+- Indexes on stock_symbol, quarter+financial_year
+
+**OCR**: New `process_ocr_all_financial_pages_async()` in `async_ocr_from_image.py` — collects ALL financial pages (doesn't return early). Needed for PDFs with 2+ result tables (Standalone page 1 + Consolidated page 2).
+
+**AI Extraction**: New `analyze_quarterly_results_async()` in `async_ocr_from_image.py`:
+- **Column-by-column extraction** — prompt enforces independent per-column reading, uses images as primary source
+- Returns flat arrays: `standalone_periods[]` and `consolidated_periods[]` (one entry per data column)
+- Each entry: revenue, other_income, total_income, total_expenses, PBT, PAT, tax, exceptional items, comprehensive income, paid-up capital, face value, EPS basic, EPS diluted
+- "Year Ended" columns stored as quarter="FY", period_type="annual"
+- Quarter mapping: Jun→Q1(FY+1), Sep→Q2(FY+1), Dec→Q3(FY+1), Mar→Q4(same year)
+- Trailing comma fix in JSON parser (`re.sub` for `,}` and `,]`)
+- Raw response logged on parse failure for debugging
+- Model: gpt-4o-mini (unchanged)
+
+**Pipeline**: `run_quarterly_extraction()` → full pipeline: PDF→OCR all pages→AI→DB UPSERT. Called via `asyncio.create_task()` alongside existing `process_financial_metrics()` in both NSE and BSE flows.
+
+**API**: `GET /api/quarterly_results` — params: symbol, financial_year, limit. Returns parsed JSON for standalone/consolidated.
+
+**Frontend**: Analytics > PE Analysis page with:
+- Standalone/Consolidated toggle
+- Symbol filter
+- Table: Stock, Quarter, FY, Revenue, PBT, PAT, EPS Basic, EPS Diluted, Units, Updated
+- WebSocket auto-refresh on new quarterly_results
+
+**Files Changed**: `nse_url_test.py` (DB + pipeline + API), `async_ocr_from_image.py` (OCR + AI prompt), `static/index.html`, `static/js/dashboard.js`
+
+**Existing Feed flow unchanged** — `financial_metrics` table and `process_financial_metrics()` still work as before.
+
+**Implementation Guide**: `IMPLEMENTATION_GUIDE_QUARTERLY_RESULTS.md` (delete after verification)
+
+---
+
+### 2026-03-20: OCR Single-Page – detected_image_paths Consistency
+
+**Issue**: Single-page detection returned `detected_image_path` (singular); callers expect `detected_image_paths` (plural). Images were not sent to AI for single-page detection.
+
+**Fix**: `async_ocr_from_image.py` – single-page return now uses `detected_image_paths: [path]` (list of 1). All detection types (single, combined, none) now consistently return `detected_image_paths` as a list (1, 2, or more paths).
+
+---
+
 ### 2026-03-11: Google 403 Debug – Enhanced Error Logging
 
 **Added**: Detailed 403 logging in `get_quote.py` and `nse_url_test.py` – logs HTTP status, response body, and full traceback when Google Sheets write fails. Helps trace root cause (Shared Drive, API disabled, scope, etc.).
@@ -20,6 +148,14 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 **Checks**: File exists, valid JSON, required fields, client_email vs expected, API access test (open sheet, read row).
 
 **Note**: Service account keys do NOT expire in JSON; valid until revoked/rotated in GCP Console.
+
+---
+
+### 2026-03-11: Trade Report Test Script
+
+**Added**: `test_trade_report.py` – standalone script to fetch daily trade report from Kotak Neo API. Uses `KotakSessionManager` + `GET {base_url}/quick/user/trades`. Requires valid `kotak_session.json` (login via dashboard TOTP first). Saves output to `trade_report.json`.
+
+**Run**: `python test_trade_report.py`
 
 ---
 
@@ -4130,3 +4266,121 @@ CLEANUP_CONFIG["cleanup_interval_hours"] = 12  # Run every 12 hours
 - ✅ **Zero Manual Intervention**: Fully automated cleanup system
 - ✅ **Production-Grade**: Robust, scalable, and efficient
 - ✅ **Flexible**: Three-tier approach for different use cases
+
+---
+
+## 2026-03-20 - Quarterly Extract Speed + Truncation Fix (Compressed)
+
+**Files**: `test_quarterly_extract.py`
+
+**Change Summary**:
+- Set PDF render default to lower workload: `dpi=120` (was 150).
+- Kept strict flow to pass only detected financial pages to LLM path.
+- Added chunked quarterly extraction: split financial images into chunks of 2 pages.
+- Added async parallel LLM chunk calls (`asyncio.gather`) per chunk.
+- Added deterministic merge layer for chunk outputs:
+  - first non-null `company_name`/`units`
+  - dedupe + combine `standalone_periods` and `consolidated_periods`
+  - keep partial success via `warnings` if any chunk fails.
+
+**Performance / Reliability Impact**:
+- Lower DPI reduces rendered pixel count and OCR load (faster pre-LLM path).
+- Chunked calls reduce single-request payload size and token pressure.
+- Parallel chunk processing reduces wall-clock time vs one large sequential request.
+- Prevents frequent `finish_reason=length` failures by avoiding oversized single response.
+
+## 2026-03-20 - Model Upgrade for Quarterly Vision Extraction (Compressed)
+
+**Files**: `async_ocr_from_image.py`
+
+**Change Summary**:
+- Updated OpenAI model from `gpt-4o-mini` to `gpt-4.1-mini` in:
+  - `analyze_financial_metrics_async`
+  - `analyze_quarterly_results_async`
+
+**Performance / Accuracy Impact**:
+- Improved table-cell reading accuracy for multimodal financial statements.
+- Better reliability for row-level fields like `other_income` vs dash/null cases.
+- Cost remains controlled vs full-size flagship models while improving extraction quality.
+
+## 2026-03-20 - Quarterly Pipeline Integration in Production API (Compressed)
+
+**Files**: `nse_url_test.py`
+
+**Change Summary**:
+- Added chunked quarterly AI pipeline for production extraction (`run_quarterly_extraction`):
+  - `_analyze_quarterly_results_chunked(...)`
+  - `_merge_quarterly_ai_responses(...)`
+  - default `QUARTERLY_AI_IMAGE_CHUNK_SIZE=1` (via env var, per-image call)
+- Integrated same chunked path into `/api/test_quarterly_extract` endpoint.
+- Added deterministic merge metadata (`chunks_processed`, standalone/consolidated counts).
+- Kept DB storage path unchanged (`process_quarterly_results` -> `quarterly_results` table), so Analytics/PE API automatically receives improved extracted values.
+
+**Performance / Accuracy Impact**:
+- Better row/column precision by isolating one financial table image per LLM call.
+- Lower cross-table confusion (Standalone vs Consolidated mixups).
+- Reduced bad `other_income` defaults by minimizing multi-image prompt interference.
+- Async chunk gather preserves throughput while improving extraction reliability.
+
+## 2026-03-21 - Modern Light Dashboard UI Redesign (Compressed)
+
+**Files**: `static/index.html`, `static/css/styles.css`, `static/js/dashboard.js`
+
+**Change Summary**:
+- **Light theme**: Clean light color scheme (`--bg-base: #f1f5f9`, `--bg-surface: #ffffff`) via CSS custom properties. Dark sidebar rail + top bar kept for contrast.
+- **Inter font**: Google Fonts Inter with `font-feature-settings` for tabular numbers.
+- **Lucide Icons**: Replaced ALL emojis (sidebar, flyout, stats, buttons, modals) with Lucide SVG icons via CDN.
+- **Compact top-bar**: Replaced tall gradient header with 56px top bar (logo left, connection chip center, logout right).
+- **Stat cards**: Icon + accent top-border per card type (indigo/green/blue/amber), animated number counters.
+- **Sidebar rail**: Reduced to 64px, active indicator bar, icon-only with labels.
+- **Tables**: Dark surface bg, subtle row hover, transparent borders, uppercase sticky headers.
+- **Controls**: Search input with icon prefix, pill-styled selects with custom chevron.
+- **Place Order**: Dark-themed cards, instructions card with gradient border, schedule editor dark inputs.
+- **Modal**: Dark confirm modal with amber accent.
+- **JS changes**: `animateCount()` for stat numbers, `iconHtml()`/`refreshIcons()` helpers for dynamic Lucide icon rendering, replaced all emoji `textContent`/`innerHTML` with Lucide `<i data-lucide="...">` tags, CSS variable color refs (`var(--green)` etc) instead of hardcoded hex.
+
+**Performance / UX Impact**:
+- Clean light theme with strong readability and professional look.
+- Consistent icon weight/style across all UI (Lucide SVG vs inconsistent emoji rendering).
+- Animated stat counters provide visual feedback on data refresh.
+- Smaller header frees vertical space for data tables.
+
+## 2026-03-21 - Unified Keyword Source: Removed result_concall_keywords, Single Source of Truth
+
+**Files**: `nse_url_test.py`
+
+**Problem**:
+- Two separate Google Sheet keyword sources: `group_id_keywords` (main sheet) and `result_concall_keywords` (gid 341478113).
+- `result_concall_keywords` overwrote `dashboard_option` to hardcoded `"result_concall"`, breaking the main sheet's classification.
+- `run_quarterly_extraction` + `main_ocr_async` only triggered inside `result_concall_keywords` block, not for `quaterly_result` option.
+- Announcements classified as `quaterly_result` by main sheet never got PE extraction.
+
+**Changes**:
+- Removed `concall_gid`, `result_concall_url`, `result_concall_keywords` global, `load_result_concall_keywords()` function.
+- Removed startup `load_result_concall_keywords()` call from `asyncio.gather`.
+- Removed `result_concall_keywords` overwrite loop in both NSE and BSE flows (was forcing `dashboard_option = "result_concall"`).
+- Removed old result_concall sending blocks in both NSE and BSE flows.
+- Added `run_quarterly_extraction` + `main_ocr_async` + `process_financial_metrics` to trigger when `dashboard_option in ("quaterly_result", "quarterly_result")` in both NSE and BSE flows.
+- Single source of truth: `group_id_keywords` (main sheet) determines all options.
+
+**Flow now**: Announcement → keyword match from main sheet → `dashboard_option` set → saved to dashboard → if option is `quaterly_result`, triggers OCR + financial metrics + quarterly PE extraction.
+
+## 2026-03-21 - Full-Year Estimated EPS Calculation + DB Storage
+
+**Files**: `nse_url_test.py`, `test_quarterly_extract.py`
+
+**Change Summary**:
+- Added `_parse_period_date()`, `_calculate_full_year_eps()`, `_compute_all_fy_eps()` helper functions.
+- Formula logic based on current quarter (latest date in quarterly periods):
+  - Q1 → Q1*4 | Q2 → (Q1+Q2)*2 | Q3 → (Q1+Q2+Q3)*4/3 | Q4/FY → annual EPS directly
+- Computes 4 values: standalone basic, standalone diluted, consolidated basic, consolidated diluted.
+- **DB schema**: Added 6 new columns to `quarterly_results` table:
+  - `fy_eps_basic_standalone REAL`, `fy_eps_diluted_standalone REAL`
+  - `fy_eps_basic_consolidated REAL`, `fy_eps_diluted_consolidated REAL`
+  - `fy_eps_formula_standalone TEXT`, `fy_eps_formula_consolidated TEXT`
+- `ALTER TABLE` migration runs on startup for existing DBs (gracefully ignores if columns exist).
+- `_upsert_quarterly_result` now inserts/updates all 6 new fields.
+- `process_quarterly_results` calls `_compute_all_fy_eps(ai_response)` before DB write, passes values to upsert.
+- Same FY EPS values stored on **every row** for that stock (stock-level, not per-quarter).
+- API `/api/quarterly_results` automatically returns new fields (uses `SELECT *`).
+- `test_quarterly_extract.py` updated with `calculate_full_year_eps()` + `print_eps_analysis()` for standalone testing.

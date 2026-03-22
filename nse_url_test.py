@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import pyotp
 import secrets
 import sqlite3
@@ -43,7 +43,7 @@ import sys
 import codecs
 from stock_info import SME_companies, BSE_NSE_companies
 from bse import BSE
-from async_ocr_from_image import main_ocr_async, pdf_to_png_async, process_ocr_from_images_async, encode_images_async, analyze_financial_metrics_async, get_global_ocr_model
+from async_ocr_from_image import pdf_to_png_async, process_ocr_from_images_async, encode_images_async, analyze_financial_metrics_async, get_global_ocr_model, analyze_quarterly_results_async, process_ocr_all_financial_pages_async
 from neo_main_login import main as neo_main_login
 from place_order import main as place_order_main
 from dotenv import load_dotenv
@@ -445,22 +445,15 @@ async def lifespan(app: FastAPI):
     os.makedirs(CLEANUP_CONFIG["folders"]["downloads"], exist_ok=True)
     os.makedirs(CLEANUP_CONFIG["folders"]["temp_uploads"], exist_ok=True)
     
-    # Initialize database
-    await init_db()
-    logger.info("Dashboard database initialized")
-    
     # Load scheduled fetch config from config.json (single source of truth)
     load_scheduled_fetch_config_sync()
     
     # Load Google Sheets data asynchronously during startup
     logger.info("Loading Google Sheets data...")
-    await asyncio.gather(
-        load_watchlist_chat_ids(),
-        load_result_concall_keywords()
-    )
+    await load_watchlist_chat_ids()
     logger.info("Google Sheets data loaded successfully")
     
-    # Load sector map from all-bse-companies-sectors.csv (BSE Code, NSE Code -> Sector)
+    # Load sector map BEFORE init_db so migration can backfill sectors
     await asyncio.to_thread(load_sector_map)
     if not bse_sector_map and not nse_sector_map and not sector_map:
         logger.warning("Sector map empty on first load. Retrying in 2s (file may still be mounting)...")
@@ -468,6 +461,10 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(load_sector_map)
     if not bse_sector_map and not nse_sector_map and not sector_map:
         logger.warning("Sector map still empty after retry. Sectors will be blank until file is available.")
+    
+    # Initialize database (after sector_map loaded — one-time migration uses it)
+    await init_db()
+    logger.info("Dashboard database initialized")
     
     # Pre-load OCR model at startup for 80% speed improvement
     logger.info("🔥 Pre-loading OCR model for global caching...")
@@ -558,6 +555,51 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Database setup for dashboard - use environment variable for Docker persistence
 DB_PATH = os.getenv('DB_PATH', 'messages.db')
+
+# Stocks master sync on every init_db (idempotent). Policy:
+#   "always" — run insert-missing + backfills each startup (recovers interrupted migrations).
+#   "empty_only" — run only when stocks table has zero rows.
+#   "below_threshold" — run while COUNT(stocks) < STOCKS_SYNC_THRESHOLD (e.g. partial load).
+STOCKS_SYNC_POLICY = os.getenv("STOCKS_SYNC_POLICY", "always")
+STOCKS_SYNC_THRESHOLD = int(os.getenv("STOCKS_SYNC_THRESHOLD", "1000"))
+
+# NSE scrip master from Google Sheet (nse_cm_neo tab) for exchange token lookup
+NSE_CM_NEO_GID = "1765483913"
+_nse_token_cache: Dict[str, int] = {}
+
+
+async def _fetch_nse_token_map() -> Dict[str, int]:
+    """Fetch nse_cm_neo sheet → {SYMBOL: exchange_token}. Cached in-memory after first call."""
+    global _nse_token_cache
+    if _nse_token_cache:
+        return _nse_token_cache
+    sheet_id = os.getenv("sheet_id", "1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM")
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={NSE_CM_NEO_GID}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning(f"Failed to fetch nse_cm_neo sheet: HTTP {resp.status}")
+                    return {}
+                csv_text = await resp.text()
+        import io
+        df = pd.read_csv(io.StringIO(csv_text))
+        df.columns = [c.strip() for c in df.columns]
+        for _, row in df.iterrows():
+            sym_name = str(row.get("pSymbolName", "")).strip()
+            token = row.get("pSymbol")
+            if not sym_name or pd.isna(token):
+                continue
+            clean_sym = sym_name.split("-")[0].strip().upper()
+            try:
+                _nse_token_cache[clean_sym] = int(float(token))
+            except (ValueError, TypeError):
+                continue
+        logger.info(f"Loaded {len(_nse_token_cache)} NSE symbol→token mappings from nse_cm_neo sheet")
+    except Exception as e:
+        logger.error(f"Error fetching nse_cm_neo token map: {e}")
+    return _nse_token_cache
+
 # Default admin: change DEFAULT_ADMIN_PASSWORD and deploy – existing server admin will be updated on startup
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "Arixjhifi@007"  # Change this; server admin password will sync on next deploy
@@ -621,6 +663,126 @@ class WebSocketManager:
 # WebSocket manager instance
 ws_manager = WebSocketManager()
 
+
+async def _should_run_stocks_sync(db) -> bool:
+    cursor = await db.execute("SELECT COUNT(*) FROM stocks")
+    n = (await cursor.fetchone())[0]
+    p = (STOCKS_SYNC_POLICY or "always").strip().lower()
+    if p == "always":
+        return True
+    if p == "empty_only":
+        return n == 0
+    if p in ("below_threshold", "below", "threshold"):
+        return n < STOCKS_SYNC_THRESHOLD
+    logger.warning("Unknown STOCKS_SYNC_POLICY=%r; using always", STOCKS_SYNC_POLICY)
+    return True
+
+
+async def _sync_stocks_master_from_sources(db) -> None:
+    """Idempotent: add missing symbols from messages + quarterly_results, backfill stock_id and sector."""
+    import time as _time
+    sync_start = _time.time()
+    now_iso = get_ist_now().isoformat()
+    cursor = await db.execute("SELECT COUNT(*) FROM stocks")
+    before = (await cursor.fetchone())[0]
+    logger.info("📦 Stocks master sync STARTED (existing=%s, policy=%s)", before, STOCKS_SYNC_POLICY)
+
+    # Step 1: Insert missing symbols from messages
+    logger.info("  [1/4] Syncing stocks from messages...")
+    cursor = await db.execute(
+        """
+        INSERT INTO stocks (symbol, company_name, exchange, sector, is_active, added_at, updated_at)
+        SELECT
+            UPPER(TRIM(m.symbol)),
+            (SELECT m2.company_name FROM messages m2
+             WHERE UPPER(TRIM(m2.symbol)) = UPPER(TRIM(m.symbol)) AND m2.company_name IS NOT NULL AND TRIM(m2.company_name) != ''
+             ORDER BY m2.id DESC LIMIT 1),
+            (SELECT m3.exchange FROM messages m3
+             WHERE UPPER(TRIM(m3.symbol)) = UPPER(TRIM(m.symbol)) AND m3.exchange IS NOT NULL AND TRIM(m3.exchange) != ''
+             ORDER BY m3.id DESC LIMIT 1),
+            (SELECT m4.sector FROM messages m4
+             WHERE UPPER(TRIM(m4.symbol)) = UPPER(TRIM(m.symbol)) AND m4.sector IS NOT NULL AND TRIM(m4.sector) != ''
+             ORDER BY m4.id DESC LIMIT 1),
+            1, ?, ?
+        FROM messages m
+        WHERE m.symbol IS NOT NULL AND TRIM(m.symbol) != ''
+        AND NOT EXISTS (SELECT 1 FROM stocks s WHERE s.symbol = UPPER(TRIM(m.symbol)))
+        GROUP BY UPPER(TRIM(m.symbol))
+        """,
+        (now_iso, now_iso),
+    )
+    from_messages = cursor.rowcount
+    logger.info("  [1/4] Done — %s new stocks from messages", from_messages)
+
+    # Step 2: Insert missing symbols from quarterly_results
+    logger.info("  [2/4] Syncing stocks from quarterly_results...")
+    cursor = await db.execute(
+        """
+        INSERT INTO stocks (symbol, company_name, exchange, sector, is_active, added_at, updated_at)
+        SELECT
+            UPPER(TRIM(qr.stock_symbol)),
+            (SELECT q2.company_name FROM quarterly_results q2
+             WHERE UPPER(TRIM(q2.stock_symbol)) = UPPER(TRIM(qr.stock_symbol)) AND q2.company_name IS NOT NULL AND TRIM(q2.company_name) != ''
+             ORDER BY q2.id DESC LIMIT 1),
+            (SELECT q3.exchange FROM quarterly_results q3
+             WHERE UPPER(TRIM(q3.stock_symbol)) = UPPER(TRIM(qr.stock_symbol)) AND q3.exchange IS NOT NULL AND TRIM(q3.exchange) != ''
+             ORDER BY q3.id DESC LIMIT 1),
+            NULL,
+            1, ?, ?
+        FROM quarterly_results qr
+        WHERE qr.stock_symbol IS NOT NULL AND TRIM(qr.stock_symbol) != ''
+        AND NOT EXISTS (SELECT 1 FROM stocks s WHERE s.symbol = UPPER(TRIM(qr.stock_symbol)))
+        GROUP BY UPPER(TRIM(qr.stock_symbol))
+        """,
+        (now_iso, now_iso),
+    )
+    from_qr = cursor.rowcount
+    logger.info("  [2/4] Done — %s new stocks from quarterly_results", from_qr)
+
+    # Step 3: Backfill quarterly_results.stock_id
+    logger.info("  [3/4] Backfilling quarterly_results.stock_id...")
+    cursor = await db.execute(
+        """
+        UPDATE quarterly_results
+        SET stock_id = (
+            SELECT id FROM stocks WHERE stocks.symbol = UPPER(TRIM(quarterly_results.stock_symbol))
+        )
+        WHERE stock_id IS NULL
+        AND EXISTS (
+            SELECT 1 FROM stocks WHERE stocks.symbol = UPPER(TRIM(quarterly_results.stock_symbol))
+        )
+        """
+    )
+    stock_id_filled = cursor.rowcount
+    logger.info("  [3/4] Done — %s quarterly_results rows linked to stock_id", stock_id_filled)
+
+    # Step 4: Fill sector from xlsx map where still empty
+    logger.info("  [4/4] Backfilling sectors from xlsx map...")
+    sector_filled = 0
+    if sector_map:
+        cursor = await db.execute(
+            "SELECT symbol FROM stocks WHERE sector IS NULL OR TRIM(sector) = ''"
+        )
+        missing_sector_rows = await cursor.fetchall()
+        for (sym,) in missing_sector_rows:
+            sec = sector_map.get(sym)
+            if sec:
+                await db.execute(
+                    "UPDATE stocks SET sector = ?, updated_at = ? WHERE symbol = ?",
+                    (sec, now_iso, sym),
+                )
+                sector_filled += 1
+    logger.info("  [4/4] Done — %s stocks got sector backfilled", sector_filled)
+
+    cursor = await db.execute("SELECT COUNT(*) FROM stocks")
+    after = (await cursor.fetchone())[0]
+    elapsed = _time.time() - sync_start
+    logger.info(
+        "✅ Stocks master sync COMPLETED in %.2fs — before=%s after=%s (new_from_messages=%s new_from_qr=%s stock_id_linked=%s sectors_filled=%s)",
+        elapsed, before, after, from_messages, from_qr, stock_id_filled, sector_filled,
+    )
+
+
 async def init_db():
     """Initialize SQLite database with migration support"""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -639,24 +801,83 @@ async def init_db():
             )
         """)
         
-        # Create financial metrics table
+        # Master stocks table
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS financial_metrics (
+            CREATE TABLE IF NOT EXISTS stocks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                stock_symbol TEXT NOT NULL,
-                period TEXT NOT NULL,
-                year TEXT NOT NULL,
-                revenue REAL,
-                pbt REAL,
-                pat REAL,
-                total_income REAL,
-                other_income REAL,
-                eps REAL,
-                reported_at TEXT NOT NULL,
-                message_id INTEGER,
-                FOREIGN KEY (message_id) REFERENCES messages (id)
+                symbol TEXT UNIQUE NOT NULL,
+                company_name TEXT,
+                exchange TEXT,
+                sector TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                added_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON stocks(symbol)")
+        # Migration: add token columns to stocks
+        for col, col_type in [
+            ("nse_token", "INTEGER"),
+            ("bse_token", "INTEGER"),
+            ("isin", "TEXT"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE stocks ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+        
+        # Create quarterly_results table (Analytics - PE Analysis)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS quarterly_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_symbol TEXT NOT NULL,
+                company_name TEXT,
+                quarter TEXT NOT NULL,
+                financial_year TEXT NOT NULL,
+                period_ended TEXT,
+                eps_basic_standalone REAL,
+                eps_diluted_standalone REAL,
+                eps_basic_consolidated REAL,
+                eps_diluted_consolidated REAL,
+                fy_eps_basic_standalone REAL,
+                fy_eps_diluted_standalone REAL,
+                fy_eps_basic_consolidated REAL,
+                fy_eps_diluted_consolidated REAL,
+                fy_eps_formula_standalone TEXT,
+                fy_eps_formula_consolidated TEXT,
+                standalone_data TEXT,
+                consolidated_data TEXT,
+                raw_ai_response TEXT,
+                source_pdf_url TEXT,
+                source_message_id INTEGER,
+                exchange TEXT,
+                units TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(stock_symbol, quarter, financial_year),
+                FOREIGN KEY (source_message_id) REFERENCES messages(id)
+            )
+        """)
+        # Add new columns if upgrading from older schema
+        for col, col_type in [
+            ("fy_eps_basic_standalone", "REAL"),
+            ("fy_eps_diluted_standalone", "REAL"),
+            ("fy_eps_basic_consolidated", "REAL"),
+            ("fy_eps_diluted_consolidated", "REAL"),
+            ("fy_eps_formula_standalone", "TEXT"),
+            ("fy_eps_formula_consolidated", "TEXT"),
+            ("stock_id", "INTEGER REFERENCES stocks(id)"),
+            ("cmp", "REAL"),
+            ("pe", "REAL"),
+            ("cmp_updated_at", "TEXT"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_symbol ON quarterly_results(stock_symbol)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_quarter_fy ON quarterly_results(quarter, financial_year)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_stock_id ON quarterly_results(stock_id)")
         
         # Create users table for authentication
         await db.execute("""
@@ -749,8 +970,44 @@ async def init_db():
                     )
                     logger.info(f"Updated default admin password to new default (deploy sync)")
         
+        if await _should_run_stocks_sync(db):
+            await _sync_stocks_master_from_sources(db)
+
         await db.commit()
     logger.info("Database initialized with authentication tables")
+
+
+async def get_or_create_stock(db, symbol: str, company_name: str = None, exchange: str = None, sector: str = None) -> int:
+    """Get existing stock_id or auto-insert a new stock. Returns stocks.id."""
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise ValueError("get_or_create_stock: empty symbol")
+    cursor = await db.execute("SELECT id, company_name, exchange FROM stocks WHERE symbol = ?", (symbol,))
+    row = await cursor.fetchone()
+    now_iso = get_ist_now().isoformat()
+    if row:
+        stock_id = row[0]
+        updates = []
+        params = []
+        if company_name and not row[1]:
+            updates.append("company_name = ?")
+            params.append(company_name)
+        if exchange and not row[2]:
+            updates.append("exchange = ?")
+            params.append(exchange)
+        if updates:
+            updates.append("updated_at = ?")
+            params.append(now_iso)
+            params.append(stock_id)
+            await db.execute(f"UPDATE stocks SET {', '.join(updates)} WHERE id = ?", params)
+        return stock_id
+    cursor = await db.execute(
+        "INSERT INTO stocks (symbol, company_name, exchange, sector, is_active, added_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+        (symbol, company_name, exchange, sector, now_iso, now_iso)
+    )
+    logger.info(f"Auto-inserted new stock: {symbol} (exchange={exchange})")
+    return cursor.lastrowid
+
 
 def parse_message_content(message: str) -> Dict:
     """Parse the HTML message to extract structured data"""
@@ -1188,9 +1445,6 @@ TELEGRAM_BOT_TOKEN = "7468886861:AAGA_IllxDqMn06N13D2RNNo8sx9G5qJ0Rc"
 gid = "1091746650"
 keyword_custom_group_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
 
-concall_gid = "341478113"
-result_concall_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={concall_gid}"
-
 # Sector map: all-bse-companies-sectors.xlsx only (BSE Code, NSE Code, Sector)
 SECTOR_XLSX_PATH = Path(__file__).parent / "all-bse-companies-sectors.xlsx"
 SECTOR_XLSX_PATH_ALT = Path(__file__).parent.parent / "all-bse-companies-sectors.xlsx"
@@ -1250,36 +1504,6 @@ def get_sector_for_symbol(symbol: str, exchange: str = "NSE") -> str:
         return bse_sector_map.get(key, "") if bse_sector_map else ""
     key_upper = key.upper()
     return nse_sector_map.get(key_upper, "") or sector_map.get(key_upper, "") if (nse_sector_map or sector_map) else ""
-
-# Initialize empty dict - will be populated async during startup
-result_concall_keywords = {}
-
-async def load_result_concall_keywords():
-    """Load result concall keywords from Google Sheets asynchronously"""
-    global result_concall_keywords
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(result_concall_url)
-            response.raise_for_status()
-            
-            result_concall_df = pd.read_csv(io.StringIO(response.text))
-            print("Result concall DataFrame loaded:", result_concall_df)
-            
-            result_concall_keywords = {}
-            for index, row in result_concall_df.iterrows():
-                group_id = "@" + str(row['group_id']).strip()
-                keywords_str = str(row['keywords']) if pd.notna(row['keywords']) else ""
-                # Split by comma and strip each keyword
-                keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
-                result_concall_keywords[group_id] = keywords
-                print("these are the result_concall id and keywords - ", result_concall_keywords)
-                
-            logger.info(f"Loaded result concall keywords for {len(result_concall_keywords)} groups")
-            
-    except Exception as e:
-        logger.error(f"Error reading Google Sheet: {str(e)}")
-        logger.info("Continuing without custom group keywords due to sheet being edited or unavailable")
-        result_concall_keywords = {}  # Set empty dict to continue processing without custom groups
 
 async def load_group_keywords_async():
     """Load group keywords from Google Sheets asynchronously"""
@@ -1563,76 +1787,384 @@ async def trigger_test_message(chat_idd, message, type="test", symbol="", compan
         print(f"⚠️ Error saving to dashboard database: {e}")
         return None
 
-async def process_financial_metrics(financial_metrics, stock_symbol, message_id=None):
-    """Process financial metrics data and store in database"""
+def _parse_period_date(column_header: str) -> datetime:
+    """Parse column_header like '30.06.2025' to datetime for sorting."""
+    for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(column_header).strip(), fmt)
+        except (ValueError, TypeError):
+            continue
+    return datetime.min
+
+
+def _calculate_full_year_eps(periods: List[Dict[str, Any]], eps_key: str = "eps_basic") -> Dict[str, Any]:
+    """
+    Calculate full_year_estimated_EPS from extracted quarterly periods.
+    Q1 -> Q1*4 | Q2 -> (Q1+Q2)*2 | Q3 -> (Q1+Q2+Q3)*4/3 | Q4/FY -> annual EPS
+    """
+    if not periods:
+        return {}
+
+    quarterly = [p for p in periods if p.get("period_type") == "quarter"]
+    annual = [p for p in periods if p.get("period_type") == "annual"]
+
+    if not quarterly and not annual:
+        return {}
+
+    quarterly.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+
+    latest = quarterly[0] if quarterly else None
+    current_q = latest.get("quarter", "").upper() if latest else None
+    current_fy = latest.get("financial_year", "") if latest else None
+
+    same_fy = {}
+    for p in quarterly:
+        if p.get("financial_year") == current_fy:
+            q = p.get("quarter", "").upper()
+            eps = p.get(eps_key)
+            if eps is not None and q:
+                same_fy[q] = eps
+
+    fy_eps = None
+    for a in annual:
+        if a.get("financial_year") == current_fy:
+            fy_eps = a.get(eps_key)
+            break
+
+    result = {"current_quarter": current_q, "financial_year": current_fy, "formula": None, "value": None}
+
+    if current_q == "Q4" or (not current_q and fy_eps is not None):
+        result["formula"] = "FY"
+        result["value"] = fy_eps
+    elif current_q == "Q1":
+        q1 = same_fy.get("Q1")
+        if q1 is not None:
+            result["formula"] = "Q1*4"
+            result["value"] = round(q1 * 4, 4)
+    elif current_q == "Q2":
+        q1, q2 = same_fy.get("Q1"), same_fy.get("Q2")
+        if q1 is not None and q2 is not None:
+            result["formula"] = "(Q1+Q2)*2"
+            result["value"] = round((q1 + q2) * 2, 4)
+        elif q2 is not None:
+            result["formula"] = "Q2*4"
+            result["value"] = round(q2 * 4, 4)
+    elif current_q == "Q3":
+        vals = [same_fy.get(q) for q in ("Q1", "Q2", "Q3")]
+        available = [v for v in vals if v is not None]
+        if available:
+            n = len(available)
+            result["formula"] = f"sum({n}Q)*4/{n}"
+            result["value"] = round(sum(available) * 4 / n, 4)
+    elif current_q == "FY":
+        result["formula"] = "FY"
+        result["value"] = fy_eps
+
+    return result
+
+
+def _compute_all_fy_eps(ai_response: Dict[str, Any]) -> Dict[str, Any]:
+    """Compute full_year_estimated_eps for all 4 combinations (standalone/consolidated × basic/diluted)."""
+    standalone = ai_response.get("standalone_periods", [])
+    consolidated = ai_response.get("consolidated_periods", [])
+
+    return {
+        "fy_eps_basic_standalone": _calculate_full_year_eps(standalone, "eps_basic"),
+        "fy_eps_diluted_standalone": _calculate_full_year_eps(standalone, "eps_diluted"),
+        "fy_eps_basic_consolidated": _calculate_full_year_eps(consolidated, "eps_basic"),
+        "fy_eps_diluted_consolidated": _calculate_full_year_eps(consolidated, "eps_diluted"),
+    }
+
+
+async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, financial_year,
+                                    period_ended, standalone_data, consolidated_data,
+                                    raw_ai_response, source_pdf_url, source_message_id,
+                                    exchange, units, now_iso, stock_id=None,
+                                    fy_eps_basic_s=None, fy_eps_diluted_s=None,
+                                    fy_eps_basic_c=None, fy_eps_diluted_c=None,
+                                    fy_eps_formula_s=None, fy_eps_formula_c=None):
+    """UPSERT a single quarterly result row with full-year estimated EPS and stock_id FK."""
+    eps_basic_s = standalone_data.get('eps_basic') if standalone_data else None
+    eps_diluted_s = standalone_data.get('eps_diluted') if standalone_data else None
+    eps_basic_c = consolidated_data.get('eps_basic') if consolidated_data else None
+    eps_diluted_c = consolidated_data.get('eps_diluted') if consolidated_data else None
+
+    await db.execute("""
+        INSERT INTO quarterly_results
+        (stock_symbol, company_name, quarter, financial_year, period_ended,
+         eps_basic_standalone, eps_diluted_standalone, eps_basic_consolidated, eps_diluted_consolidated,
+         fy_eps_basic_standalone, fy_eps_diluted_standalone,
+         fy_eps_basic_consolidated, fy_eps_diluted_consolidated,
+         fy_eps_formula_standalone, fy_eps_formula_consolidated,
+         standalone_data, consolidated_data, raw_ai_response,
+         source_pdf_url, source_message_id, exchange, units, stock_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(stock_symbol, quarter, financial_year)
+        DO UPDATE SET
+            company_name = excluded.company_name,
+            period_ended = excluded.period_ended,
+            eps_basic_standalone = excluded.eps_basic_standalone,
+            eps_diluted_standalone = excluded.eps_diluted_standalone,
+            eps_basic_consolidated = excluded.eps_basic_consolidated,
+            eps_diluted_consolidated = excluded.eps_diluted_consolidated,
+            fy_eps_basic_standalone = excluded.fy_eps_basic_standalone,
+            fy_eps_diluted_standalone = excluded.fy_eps_diluted_standalone,
+            fy_eps_basic_consolidated = excluded.fy_eps_basic_consolidated,
+            fy_eps_diluted_consolidated = excluded.fy_eps_diluted_consolidated,
+            fy_eps_formula_standalone = excluded.fy_eps_formula_standalone,
+            fy_eps_formula_consolidated = excluded.fy_eps_formula_consolidated,
+            standalone_data = excluded.standalone_data,
+            consolidated_data = excluded.consolidated_data,
+            raw_ai_response = excluded.raw_ai_response,
+            source_pdf_url = excluded.source_pdf_url,
+            units = excluded.units,
+            stock_id = excluded.stock_id,
+            updated_at = excluded.updated_at
+    """, (
+        stock_symbol, company_name, quarter, financial_year, period_ended,
+        eps_basic_s, eps_diluted_s, eps_basic_c, eps_diluted_c,
+        fy_eps_basic_s, fy_eps_diluted_s, fy_eps_basic_c, fy_eps_diluted_c,
+        fy_eps_formula_s, fy_eps_formula_c,
+        json.dumps(standalone_data) if standalone_data else None,
+        json.dumps(consolidated_data) if consolidated_data else None,
+        json.dumps(raw_ai_response) if raw_ai_response else None,
+        source_pdf_url, source_message_id, exchange, units, stock_id,
+        now_iso, now_iso
+    ))
+
+
+async def process_quarterly_results(ai_response, stock_symbol, message_id=None, pdf_url=None, exchange=None):
+    """Process AI quarterly results (flat array structure) and UPSERT into quarterly_results table."""
     try:
-        if not financial_metrics or 'quarterly_data' not in financial_metrics:
-            logger.warning(f"No quarterly data found in financial metrics for {stock_symbol}")
+        if not ai_response or ai_response.get('error'):
+            logger.warning(f"No valid quarterly results for {stock_symbol}: {ai_response.get('error', 'empty')}")
             return []
-            
-        quarterly_data = financial_metrics.get('quarterly_data', [])
-        reported_at = get_ist_now().isoformat()
-        
-        stored_metrics = []
-        
+
+        company_name = ai_response.get('company_name')
+        units = ai_response.get('units')
+        standalone_periods = ai_response.get('standalone_periods', [])
+        consolidated_periods = ai_response.get('consolidated_periods', [])
+
+        if not standalone_periods and not consolidated_periods:
+            logger.warning(f"No periods extracted for {stock_symbol}")
+            return []
+
+        fy_eps = _compute_all_fy_eps(ai_response)
+        fy_basic_s = fy_eps["fy_eps_basic_standalone"].get("value")
+        fy_diluted_s = fy_eps["fy_eps_diluted_standalone"].get("value")
+        fy_basic_c = fy_eps["fy_eps_basic_consolidated"].get("value")
+        fy_diluted_c = fy_eps["fy_eps_diluted_consolidated"].get("value")
+        fy_formula_s = fy_eps["fy_eps_basic_standalone"].get("formula")
+        fy_formula_c = fy_eps["fy_eps_basic_consolidated"].get("formula")
+
+        logger.info(f"FY EPS for {stock_symbol}: S_basic={fy_basic_s} ({fy_formula_s}), C_basic={fy_basic_c} ({fy_formula_c})")
+
+        # Build a lookup: (quarter, financial_year) → {standalone_data, consolidated_data}
+        period_map = {}
+        for p in standalone_periods:
+            q = p.get('quarter')
+            fy = p.get('financial_year')
+            if not q or not fy:
+                continue
+            key = (q, fy)
+            if key not in period_map:
+                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+            period_map[key]["standalone"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+
+        for p in consolidated_periods:
+            q = p.get('quarter')
+            fy = p.get('financial_year')
+            if not q or not fy:
+                continue
+            key = (q, fy)
+            if key not in period_map:
+                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+            period_map[key]["consolidated"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+
+        now_iso = get_ist_now().isoformat()
+        stored = []
+
         async with aiosqlite.connect(DB_PATH) as db:
-            for quarter in quarterly_data:
-                # Insert financial metrics data
-                cursor = await db.execute("""
-                    INSERT INTO financial_metrics 
-                    (stock_symbol, period, year, revenue, pbt, pat, total_income, other_income, eps, reported_at, message_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    stock_symbol,
-                    quarter.get('period', ''),
-                    quarter.get('year_ended', ''),
-                    quarter.get('revenue_from_operations', 0),
-                    quarter.get('profit_before_tax', 0),
-                    quarter.get('profit_after_tax', 0),
-                    quarter.get('total_income', 0),
-                    quarter.get('other_income', 0),
-                    quarter.get('earnings_per_share', 0),
-                    reported_at,
-                    message_id
-                ))
-                
-                # Prepare data for frontend
-                metric_data = {
-                    "id": cursor.lastrowid,
-                    "stock_symbol": stock_symbol,
-                    "period": quarter.get('period', ''),
-                    "year": quarter.get('year_ended', ''),
-                    "revenue": quarter.get('revenue_from_operations', 0),
-                    "pbt": quarter.get('profit_before_tax', 0),
-                    "pat": quarter.get('profit_after_tax', 0),
-                    "total_income": quarter.get('total_income', 0),
-                    "other_income": quarter.get('other_income', 0),
-                    "eps": quarter.get('earnings_per_share', 0),
-                    "reported_at": reported_at
-                }
-                stored_metrics.append(metric_data)
-            
+            stock_id = await get_or_create_stock(db, stock_symbol, company_name, exchange)
+            for (quarter, fy), data in period_map.items():
+                await _upsert_quarterly_result(
+                    db, stock_symbol, company_name, quarter, fy,
+                    data["period_ended"], data["standalone"], data["consolidated"],
+                    ai_response if not stored else None,
+                    pdf_url, message_id, exchange, units, now_iso,
+                    stock_id=stock_id,
+                    fy_eps_basic_s=fy_basic_s, fy_eps_diluted_s=fy_diluted_s,
+                    fy_eps_basic_c=fy_basic_c, fy_eps_diluted_c=fy_diluted_c,
+                    fy_eps_formula_s=fy_formula_s, fy_eps_formula_c=fy_formula_c,
+                )
+                stored.append({"stock_symbol": stock_symbol, "quarter": quarter, "financial_year": fy})
             await db.commit()
-        
-        logger.info(f"Stored {len(stored_metrics)} financial metrics for {stock_symbol}")
-        
-        # Send to frontend via WebSocket
+
+        logger.info(f"Stored {len(stored)} quarterly results for {stock_symbol}")
+
         await ws_manager.broadcast_message({
-            "type": "financial_metrics",
-            "data": {
-                "stock_symbol": stock_symbol,
-                "metrics": stored_metrics,
-                "total_quarters": len(stored_metrics)
-            }
+            "type": "quarterly_results",
+            "data": {"stock_symbol": stock_symbol, "results": stored, "total": len(stored)}
         })
-        
-        return stored_metrics
-        
+
+        return stored
+
     except Exception as e:
-        logger.error(f"Error processing financial metrics for {stock_symbol}: {e}")
+        logger.error(f"Error processing quarterly results for {stock_symbol}: {e}")
         return []
 
-        
+
+def _chunk_list(items: List[Any], chunk_size: int) -> List[List[Any]]:
+    """Split a list into fixed-size chunks."""
+    if chunk_size <= 0:
+        return [items]
+    return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+
+
+def _quarterly_period_key(period: Dict[str, Any]) -> tuple:
+    """Stable dedupe key for quarterly/annual period rows."""
+    return (
+        str(period.get("column_header")),
+        str(period.get("period_type")),
+        str(period.get("quarter")),
+        str(period.get("financial_year")),
+    )
+
+
+def _merge_quarterly_ai_responses(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge per-image quarterly AI responses into one deterministic payload."""
+    merged = {
+        "company_name": None,
+        "units": None,
+        "standalone_periods": [],
+        "consolidated_periods": []
+    }
+
+    seen_standalone = set()
+    seen_consolidated = set()
+    warnings = []
+
+    for res in responses:
+        if not isinstance(res, dict):
+            continue
+
+        if not merged["company_name"] and res.get("company_name"):
+            merged["company_name"] = res.get("company_name")
+        if not merged["units"] and res.get("units"):
+            merged["units"] = res.get("units")
+
+        for p in res.get("standalone_periods", []) or []:
+            if not isinstance(p, dict):
+                continue
+            key = _quarterly_period_key(p)
+            if key in seen_standalone:
+                continue
+            seen_standalone.add(key)
+            merged["standalone_periods"].append(p)
+
+        for p in res.get("consolidated_periods", []) or []:
+            if not isinstance(p, dict):
+                continue
+            key = _quarterly_period_key(p)
+            if key in seen_consolidated:
+                continue
+            seen_consolidated.add(key)
+            merged["consolidated_periods"].append(p)
+
+        if res.get("error"):
+            warnings.append(res["error"])
+
+    if warnings and not merged["standalone_periods"] and not merged["consolidated_periods"]:
+        merged["error"] = "; ".join(warnings)
+    elif warnings:
+        merged["warnings"] = warnings
+
+    merged["merge_metadata"] = {
+        "chunks_processed": len(responses),
+        "standalone_periods": len(merged["standalone_periods"]),
+        "consolidated_periods": len(merged["consolidated_periods"])
+    }
+    return merged
+
+
+async def _analyze_quarterly_results_chunked(financial_image_paths: List[str], text_for_analysis: str) -> Dict[str, Any]:
+    """
+    Run quarterly extraction as small image chunks (default 1 image/call) and merge outputs.
+    This improves table-cell reliability for standalone vs consolidated pages.
+    """
+    chunk_size = max(1, int(os.getenv("QUARTERLY_AI_IMAGE_CHUNK_SIZE", "1")))
+
+    if not financial_image_paths:
+        logger.info("Quarterly AI: No financial images found, using text fallback")
+        result = await analyze_quarterly_results_async(text_for_analysis, [])
+        if "merge_metadata" not in result:
+            result["merge_metadata"] = {
+                "chunks_processed": 1,
+                "standalone_periods": len(result.get("standalone_periods", [])),
+                "consolidated_periods": len(result.get("consolidated_periods", []))
+            }
+        return result
+
+    chunks = _chunk_list(financial_image_paths, chunk_size)
+    logger.info(f"Quarterly AI: Processing {len(financial_image_paths)} images in {len(chunks)} chunk(s), chunk_size={chunk_size}")
+
+    async def _process_chunk(idx: int, chunk_paths: List[str]) -> Dict[str, Any]:
+        logger.info(f"Quarterly AI chunk {idx + 1}/{len(chunks)}: encoding {len(chunk_paths)} image(s)")
+        encoded_images = await encode_images_async(chunk_paths)
+        logger.info(f"Quarterly AI chunk {idx + 1}/{len(chunks)}: running model")
+        return await analyze_quarterly_results_async(text_for_analysis, encoded_images)
+
+    chunk_tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
+    chunk_results = await asyncio.gather(*chunk_tasks)
+    merged_result = _merge_quarterly_ai_responses(chunk_results)
+    logger.info(
+        "Quarterly AI merged result: chunks=%s, standalone=%s, consolidated=%s",
+        merged_result["merge_metadata"]["chunks_processed"],
+        merged_result["merge_metadata"]["standalone_periods"],
+        merged_result["merge_metadata"]["consolidated_periods"]
+    )
+    return merged_result
+
+
+async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, exchange=None):
+    """Full pipeline: PDF → OCR all pages → AI quarterly extraction → DB store."""
+    try:
+        from async_ocr_from_image import download_pdf_async, pdf_to_png_async, process_ocr_all_financial_pages_async, encode_images_async, analyze_quarterly_results_async
+
+        pdf_path = await download_pdf_async(pdf_url, "downloads_concall")
+        image_paths, images_folder = await pdf_to_png_async(pdf_path, "images_concall")
+
+        if not image_paths:
+            logger.error(f"No images from PDF for {stock_symbol}")
+            return None
+
+        ocr_results = await process_ocr_all_financial_pages_async(image_paths)
+
+        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
+        if not text_for_analysis:
+            logger.warning(f"No text extracted for quarterly results: {stock_symbol}")
+            return None
+
+        ai_response = await _analyze_quarterly_results_chunked(
+            ocr_results.get('detected_image_paths', []),
+            text_for_analysis
+        )
+        result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange)
+
+        # Cleanup images
+        if images_folder:
+            try:
+                import shutil
+                await asyncio.to_thread(shutil.rmtree, images_folder, True)
+            except Exception:
+                pass
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Quarterly extraction failed for {stock_symbol}: {e}")
+        return None
+
 
 async def set_webhook():
     url = f"{TELEGRAM_API_URL}/setWebhook"
@@ -2046,11 +2578,6 @@ async def process_ca_data(ca_docs):
                     if any(any(kw in val for val in row_values) for kw in keywords_lower):
                         dashboard_option = option
                         break
-                for group_id, keywords in result_concall_keywords.items():
-                    result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
-                    if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
-                        dashboard_option = "result_concall"
-                        break
                 
                 # Save every announcement to dashboard (DB + WebSocket)
                 message_id = await save_announcement_to_dashboard(
@@ -2087,21 +2614,12 @@ async def process_ca_data(ca_docs):
                 
                 
                 ################################################################
-                ###### x --------- sending result concal message -------x ########
-                #### this is getting the group id and keywords from the google sheet
-                for group_id, keywords in result_concall_keywords.items():
-                    result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
-                    if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
-                        financial_metrics = await main_ocr_async(attachment_file)
-                        print("FINANCIAL METRICS ARE - ", financial_metrics)
-                        await trigger_test_message(group_id, message, "result_concall", row['symbol'], row['sm_name'], row['desc'], attachment_file, exchange="NSE", save_to_dashboard=False)
-                        if financial_metrics and message_id:
-                            await process_financial_metrics(
-                                financial_metrics, 
-                                row['symbol'], 
-                                message_id
-                            )
-                ###### X --------------------------------------------X #########      
+                ###### x ---- Quarterly extraction (quarterly_results only) ---- x ########
+                if dashboard_option in ("quaterly_result", "quarterly_result"):
+                    asyncio.create_task(
+                        run_quarterly_extraction(attachment_file, row['symbol'], message_id, exchange="NSE")
+                    )
+                ###### X --------------------------------------------X #########
                 ################################################################
             
             # For CSV storage, keep original URLs to maintain duplicate detection
@@ -2209,11 +2727,6 @@ async def process_bse_ca_data(bse_data):
             if any(any(kw in val for val in row_values) for kw in keywords_lower):
                 dashboard_option = option
                 break
-        for group_id, keywords in result_concall_keywords.items():
-            result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
-            if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
-                dashboard_option = "result_concall"
-                break
         
         # Save every announcement to dashboard
         message_id = await save_announcement_to_dashboard(
@@ -2236,17 +2749,11 @@ async def process_bse_ca_data(bse_data):
                     norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
                     attachment_file, exchange="BSE", save_to_dashboard=False
                 )
-        for group_id, keywords in result_concall_keywords.items():
-            result_concall_keywords_lower = [str(kw).lower() for kw in keywords]
-            if any(any(kw in val for val in row_values) for kw in result_concall_keywords_lower):
-                financial_metrics = await main_ocr_async(attachment_file)
-                await trigger_test_message(
-                    group_id, message, "result_concall",
-                    norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
-                    attachment_file, exchange="BSE", save_to_dashboard=False
-                )
-                if financial_metrics and message_id:
-                    await process_financial_metrics(financial_metrics, norm_row["symbol"], message_id)
+        # Quarterly extraction (quarterly_results only)
+        if dashboard_option in ("quaterly_result", "quarterly_result"):
+            asyncio.create_task(
+                run_quarterly_extraction(attachment_file, norm_row["symbol"], message_id, exchange="BSE")
+            )
     df_raw = pd.DataFrame(raw_rows_to_append)
     if await aiofiles.os.path.exists(bse_csv_file_path):
         df_existing = pd.read_csv(bse_csv_file_path, dtype="object")
@@ -2840,32 +3347,269 @@ async def get_messages(limit: int = 0):
         logger.error(f"Error fetching messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/financial_metrics")
-async def get_financial_metrics(limit: int = 100):
-    """Get financial metrics data"""
+@app.get("/api/stocks")
+async def get_stocks(active_only: bool = True):
+    """Get all stocks from master table."""
     try:
         async with aiosqlite.connect(DB_PATH) as db:
-            if limit > 0:
-                cursor = await db.execute("""
-                    SELECT * FROM financial_metrics 
-                    ORDER BY reported_at DESC 
-                    LIMIT ?
-                """, (limit,))
-            else:
-                cursor = await db.execute("""
-                    SELECT * FROM financial_metrics 
-                    ORDER BY reported_at DESC
-                """)
-            
+            query = "SELECT * FROM stocks"
+            if active_only:
+                query += " WHERE is_active = 1"
+            query += " ORDER BY symbol ASC"
+            cursor = await db.execute(query)
             rows = await cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            
-            metrics = [dict(zip(columns, row)) for row in rows]
-            
-            return {"success": True, "metrics": metrics}
+            columns = [d[0] for d in cursor.description]
+            stocks = [dict(zip(columns, row)) for row in rows]
+            return {"success": True, "stocks": stocks}
     except Exception as e:
-        logger.error(f"Error fetching financial metrics: {e}")
+        logger.error(f"Error fetching stocks: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/import_scrip_master")
+async def import_scrip_master(file: UploadFile = File(...), exchange: str = "NSE"):
+    """Import Kotak scrip master Excel/CSV to populate nse_token/bse_token in stocks table."""
+    try:
+        content = await file.read()
+        if file.filename.lower().endswith('.csv'):
+            df = pd.read_csv(pd.io.common.BytesIO(content))
+        else:
+            df = pd.read_excel(pd.io.common.BytesIO(content))
+
+        df.columns = [c.strip() for c in df.columns]
+        cols_lower = {c.lower(): c for c in df.columns}
+
+        sym_col = cols_lower.get("trading_symbol") or cols_lower.get("tradingsymbol") or cols_lower.get("symbol") or cols_lower.get("nse code") or cols_lower.get("nse symbol")
+        token_col = cols_lower.get("exchange_token") or cols_lower.get("exchangetoken") or cols_lower.get("token") or cols_lower.get("instrument_token")
+        isin_col = cols_lower.get("isin") or cols_lower.get("isin_code")
+        name_col = cols_lower.get("company_name") or cols_lower.get("name") or cols_lower.get("company") or cols_lower.get("instrument_name")
+
+        if not sym_col or not token_col:
+            available = list(df.columns)
+            return {"success": False, "message": f"Could not find symbol/token columns. Available: {available}"}
+
+        token_field = "nse_token" if exchange.upper() == "NSE" else "bse_token"
+        now_iso = get_ist_now().isoformat()
+        updated = 0
+        inserted = 0
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            for _, row in df.iterrows():
+                sym = str(row.get(sym_col, "")).strip().upper()
+                if not sym or sym == "NAN":
+                    continue
+                try:
+                    token = int(float(row.get(token_col, 0)))
+                except (ValueError, TypeError):
+                    continue
+                if token <= 0:
+                    continue
+
+                isin_val = str(row.get(isin_col, "")).strip() if isin_col else None
+                if isin_val == "nan" or isin_val == "":
+                    isin_val = None
+                name_val = str(row.get(name_col, "")).strip() if name_col else None
+                if name_val == "nan" or name_val == "":
+                    name_val = None
+
+                cursor = await db.execute("SELECT id FROM stocks WHERE symbol = ?", (sym,))
+                existing = await cursor.fetchone()
+                if existing:
+                    updates = [f"{token_field} = ?"]
+                    params = [token]
+                    if isin_val:
+                        updates.append("isin = ?")
+                        params.append(isin_val)
+                    if name_val:
+                        updates.append("company_name = COALESCE(NULLIF(company_name, ''), ?)")
+                        params.append(name_val)
+                    updates.append("updated_at = ?")
+                    params.append(now_iso)
+                    params.append(existing[0])
+                    await db.execute(f"UPDATE stocks SET {', '.join(updates)} WHERE id = ?", params)
+                    updated += 1
+                else:
+                    await db.execute(
+                        f"INSERT INTO stocks (symbol, company_name, exchange, {token_field}, isin, is_active, added_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+                        (sym, name_val, exchange.upper(), token, isin_val, now_iso, now_iso)
+                    )
+                    inserted += 1
+            await db.commit()
+
+        logger.info(f"Scrip master import ({exchange}): {updated} updated, {inserted} inserted from {file.filename}")
+        return {"success": True, "exchange": exchange, "updated": updated, "inserted": inserted, "filename": file.filename}
+
+    except Exception as e:
+        logger.error(f"Error importing scrip master: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/quarterly_results")
+async def get_quarterly_results(symbol: str = None, financial_year: str = None, limit: int = 200):
+    """Get quarterly results for Analytics PE Analysis."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            query = "SELECT * FROM quarterly_results"
+            params = []
+            conditions = []
+
+            if symbol:
+                conditions.append("stock_symbol = ?")
+                params.append(symbol)
+            if financial_year:
+                conditions.append("financial_year = ?")
+                params.append(financial_year)
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY updated_at DESC"
+            if limit > 0:
+                query += " LIMIT ?"
+                params.append(limit)
+
+            cursor = await db.execute(query, params)
+            rows = await cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+
+            results = []
+            for row in rows:
+                r = dict(zip(columns, row))
+                if r.get('standalone_data'):
+                    try:
+                        r['standalone_data'] = json.loads(r['standalone_data'])
+                    except Exception:
+                        pass
+                if r.get('consolidated_data'):
+                    try:
+                        r['consolidated_data'] = json.loads(r['consolidated_data'])
+                    except Exception:
+                        pass
+                if r.get('raw_ai_response'):
+                    try:
+                        r['raw_ai_response'] = json.loads(r['raw_ai_response'])
+                    except Exception:
+                        pass
+                results.append(r)
+
+            return {"success": True, "results": results, "total": len(results)}
+    except Exception as e:
+        logger.error(f"Error fetching quarterly results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pe_analysis")
+async def get_pe_analysis(fetch_cmp: bool = False):
+    """PE Analysis: one row per stock (latest non-FY quarter), consolidated-first FY EPS, optional live CMP + PE."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT
+                    qr.stock_symbol,
+                    qr.company_name,
+                    qr.quarter,
+                    qr.financial_year,
+                    qr.fy_eps_diluted_consolidated AS fy_eps_basic_consolidated,
+                    qr.fy_eps_formula_consolidated,
+                    qr.units,
+                    qr.updated_at,
+                    qr.cmp AS stored_cmp,
+                    qr.pe AS stored_pe,
+                    qr.cmp_updated_at,
+                    s.sector,
+                    s.exchange
+                FROM quarterly_results qr
+                LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
+                WHERE qr.quarter NOT IN ('FY')
+                AND qr.id IN (
+                    SELECT id FROM quarterly_results q2
+                    WHERE q2.stock_symbol = qr.stock_symbol
+                    AND q2.quarter NOT IN ('FY')
+                    ORDER BY q2.financial_year DESC, q2.quarter DESC
+                    LIMIT 1
+                )
+                ORDER BY qr.updated_at DESC
+            """)
+            rows = await cursor.fetchall()
+
+        stock_data = []
+        symbols_needing_cmp = []
+        for r in rows:
+            fy_eps = r["fy_eps_basic_consolidated"]
+            fy_formula = r["fy_eps_formula_consolidated"]
+            stock_data.append({
+                "stock_symbol": r["stock_symbol"],
+                "company_name": r["company_name"],
+                "quarter": r["quarter"],
+                "financial_year": r["financial_year"],
+                "fy_eps": round(fy_eps, 2) if fy_eps else None,
+                "fy_eps_formula": fy_formula,
+                "units": r["units"],
+                "sector": r["sector"],
+                "exchange": r["exchange"],
+                "cmp": r["stored_cmp"],
+                "pe": r["stored_pe"],
+                "cmp_updated_at": r["cmp_updated_at"],
+                "updated_at": r["updated_at"],
+            })
+            if fetch_cmp and fy_eps and fy_eps > 0:
+                symbols_needing_cmp.append(r["stock_symbol"])
+
+        # Fetch live CMP from Kotak API using nse_cm_neo sheet tokens
+        cmp_map = {}
+        if fetch_cmp and symbols_needing_cmp:
+            try:
+                token_map = await _fetch_nse_token_map()
+                tokens_to_fetch = []
+                token_to_symbol = {}
+                for sym in symbols_needing_cmp:
+                    token = token_map.get(sym)
+                    if token:
+                        sym_str = f"nse_cm|{token}"
+                        tokens_to_fetch.append(sym_str)
+                        token_to_symbol[str(token)] = sym
+
+                if tokens_to_fetch:
+                    from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
+                    batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
+                    raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
+                    flattened = await flatten_quote_result_list(raw_results)
+                    for q in flattened:
+                        if q.get("error"):
+                            continue
+                        close_price = q.get("ohlc", {}).get("close")
+                        token_val = str(q.get("exchange_token", ""))
+                        if close_price and token_val in token_to_symbol:
+                            cmp_raw = float(close_price)
+                            cmp_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
+                    logger.info(f"PE Analysis: fetched CMP for {len(cmp_map)}/{len(tokens_to_fetch)} stocks")
+
+                    # Store CMP + PE in DB for persistence
+                    if cmp_map:
+                        now_iso = get_ist_now().isoformat()
+                        async with aiosqlite.connect(DB_PATH) as db:
+                            for sym, cmp_val in cmp_map.items():
+                                await db.execute(
+                                    "UPDATE quarterly_results SET cmp = ?, cmp_updated_at = ? WHERE stock_symbol = ? AND quarter != 'FY' ORDER BY financial_year DESC, quarter DESC LIMIT 1",
+                                    (cmp_val, now_iso, sym)
+                                )
+                            await db.commit()
+            except Exception as e:
+                logger.warning(f"CMP fetch failed: {e}")
+
+        # Merge live CMP into results + compute PE
+        for item in stock_data:
+            live_cmp = cmp_map.get(item["stock_symbol"])
+            if live_cmp:
+                item["cmp"] = round(live_cmp, 2)
+                if item["fy_eps"] and item["fy_eps"] > 0:
+                    item["pe"] = round(live_cmp / item["fy_eps"], 2)
+
+        return {"success": True, "results": stock_data, "total": len(stock_data)}
+    except Exception as e:
+        logger.error(f"Error in PE analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 async def process_local_pdf_async_optimized(pdf_path: str):
     """Memory-optimized PDF processing with background task pausing, batch processing, and memory monitoring."""
@@ -3079,7 +3823,65 @@ async def ai_analyze(file: UploadFile = File(...)):
         logger.error(f"Error in AI analyzer: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
-# OCR dependencies test endpoint removed - was only for debugging
+@app.post("/api/test_quarterly_extract")
+async def test_quarterly_extract(file: UploadFile = File(...)):
+    """Test quarterly results extraction from PDF — returns AI result, does NOT store in DB."""
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file_path = os.path.join(temp_dir, file.filename)
+
+        async with aiofiles.open(temp_file_path, 'wb') as f:
+            content = await file.read()
+            await f.write(content)
+
+        logger.info(f"[TEST] Quarterly extraction for: {file.filename}")
+
+        image_paths, images_folder = await pdf_to_png_async(temp_file_path, "images_concall")
+        if not image_paths:
+            raise HTTPException(status_code=422, detail="No images created from PDF")
+
+        ocr_results = await process_ocr_all_financial_pages_async(image_paths)
+
+        encoded_images = []
+        if ocr_results.get('detected_image_paths'):
+            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
+
+        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
+        if not text_for_analysis:
+            raise HTTPException(status_code=422, detail="No text extracted from PDF")
+
+        ai_response = await _analyze_quarterly_results_chunked(
+            ocr_results.get('detected_image_paths', []),
+            text_for_analysis
+        )
+
+        # Cleanup
+        try:
+            await aiofiles.os.remove(temp_file_path)
+            if images_folder:
+                import shutil
+                await asyncio.to_thread(shutil.rmtree, images_folder, True)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "financial_pages_found": len(ocr_results.get('financial_pages', [])),
+            "images_sent_to_ai": len(ocr_results.get('detected_image_paths', [])),
+            "quarterly_results": ai_response
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[TEST] Quarterly extraction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/pause_background_tasks")
 async def pause_background_tasks():

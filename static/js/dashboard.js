@@ -1,7 +1,8 @@
 let ws = null;
 let messages = [];
-let financialMetrics = [];
+let boardMeetingResults = [];
 let aiAnalysisResults = [];
+let quarterlyResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
 let selectedNavSection = 'feed'; // feed | analytics | ai_analyzer | place_order
@@ -178,8 +179,9 @@ function connectWebSocket() {
             addNewMessage(data.message);
         } else if (data.type === 'messages_list') {
             loadMessages(data.messages);
-        } else if (data.type === 'financial_metrics') {
-            addFinancialMetrics(data.data);
+        } else if (data.type === 'quarterly_results') {
+            loadQuarterlyResults();
+            loadBoardMeetingResults();
         } else if (data.type === 'ai_analysis_status') {
             updateAIAnalysisStatus(data);
         } else if (data.type === 'ai_analysis_complete') {
@@ -216,7 +218,7 @@ function updateConnectionStatus(status, isConnected) {
     const statusDot = document.getElementById('statusDot');
     
     statusElement.textContent = status;
-    statusDot.style.background = isConnected ? '#27ae60' : '#e74c3c';
+    statusDot.style.background = isConnected ? 'var(--green)' : 'var(--red)';
 }
 
 function addNewMessage(message) {
@@ -261,18 +263,33 @@ function updateSectorFilterOptions() {
     if (sectors.has(currentValue)) sectorFilter.value = currentValue;
 }
 
-function addFinancialMetrics(data) {
-    console.log('Adding financial metrics:', data);
-    // Add new metrics to the beginning of the array
-    data.metrics.forEach(metric => {
-        financialMetrics.unshift(metric);
-    });
-    renderFinancialMetrics();
+function loadBoardMeetingResults() {
+    fetch('/api/quarterly_results')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.results) {
+                boardMeetingResults = data.results;
+                renderBoardMeetingResults();
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching board meeting results:', error);
+        });
 }
 
-function loadFinancialMetrics(metricsList) {
-    financialMetrics = metricsList;
-    renderFinancialMetrics();
+function animateCount(el, target) {
+    const current = parseInt(el.dataset.count || '0');
+    if (current === target) return;
+    el.dataset.count = target;
+    const duration = 400;
+    const start = performance.now();
+    function step(now) {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(current + (target - current) * eased).toLocaleString();
+        if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
 }
 
 function updateStats() {
@@ -281,9 +298,9 @@ function updateStats() {
         new Date(msg.timestamp).toDateString() === today
     ).length;
     
-    document.getElementById('totalMessages').textContent = messages.length;
-    document.getElementById('todayMessages').textContent = todayCount;
-    document.getElementById('uniqueSymbols').textContent = uniqueSymbols.size;
+    animateCount(document.getElementById('totalMessages'), messages.length);
+    animateCount(document.getElementById('todayMessages'), todayCount);
+    animateCount(document.getElementById('uniqueSymbols'), uniqueSymbols.size);
     
     if (messages.length > 0) {
         const lastTime = new Date(messages[0].timestamp);
@@ -358,7 +375,7 @@ function renderMessages() {
     tbody.innerHTML = filteredMessages.map(msg => {
         const time = new Date(msg.timestamp);
         const fileLink = msg.file_url ? 
-            `<a href="${msg.file_url}" target="_blank" class="file-link">📄 View File</a>` : 
+            `<a href="${msg.file_url}" target="_blank" class="file-link">View File</a>` : 
             '-';
         const exchange = (msg.exchange || 'NSE').trim();
         const exchangeBadge = exchange === 'BSE' ? 
@@ -380,42 +397,44 @@ function renderMessages() {
     }).join('');
 }
 
-function renderFinancialMetrics() {
+function renderBoardMeetingResults() {
     const tbody = document.getElementById('financialMetricsTable');
     const limit = parseInt(document.getElementById('limitSelect').value);
-    
-    let filteredMetrics = financialMetrics;
-    
+
+    let filtered = boardMeetingResults;
     if (limit > 0) {
-        filteredMetrics = filteredMetrics.slice(0, limit);
+        filtered = filtered.slice(0, limit);
     }
-    
-    if (filteredMetrics.length === 0) {
+
+    if (filtered.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="10" class="no-messages">
-                    No financial metrics data available yet...
+                    No board meeting results data available yet...
                 </td>
             </tr>
         `;
         return;
     }
-    
-    tbody.innerHTML = filteredMetrics.map(metric => {
-        const reportedTime = new Date(metric.reported_at);
-        
+
+    tbody.innerHTML = filtered.map(r => {
+        const sd = r.standalone_data || {};
+        const cd = r.consolidated_data || {};
+        const data = sd.revenue ? sd : cd;
+        const updatedTime = new Date(r.updated_at);
+
         return `
             <tr class="new-message">
-                <td><span class="symbol-badge">${metric.stock_symbol}</span></td>
-                <td>${metric.period}</td>
-                <td>${metric.year}</td>
-                <td>${metric.revenue ? metric.revenue.toLocaleString() : '-'}</td>
-                <td>${metric.pbt ? metric.pbt.toLocaleString() : '-'}</td>
-                <td>${metric.pat ? metric.pat.toLocaleString() : '-'}</td>
-                <td>${metric.total_income ? metric.total_income.toLocaleString() : '-'}</td>
-                <td>${metric.other_income ? metric.other_income.toLocaleString() : '-'}</td>
-                <td>${metric.eps ? metric.eps.toFixed(2) : '-'}</td>
-                <td class="timestamp">${reportedTime.toLocaleString()}</td>
+                <td><span class="symbol-badge">${r.stock_symbol}</span></td>
+                <td>${r.quarter || '-'}</td>
+                <td>${r.financial_year || '-'}</td>
+                <td>${data.revenue ? Number(data.revenue).toLocaleString() : '-'}</td>
+                <td>${data.profit_before_tax ? Number(data.profit_before_tax).toLocaleString() : '-'}</td>
+                <td>${data.profit_after_tax ? Number(data.profit_after_tax).toLocaleString() : '-'}</td>
+                <td>${data.total_income ? Number(data.total_income).toLocaleString() : '-'}</td>
+                <td>${data.other_income ? Number(data.other_income).toLocaleString() : '-'}</td>
+                <td>${r.eps_basic_standalone ? Number(r.eps_basic_standalone).toFixed(2) : (r.eps_basic_consolidated ? Number(r.eps_basic_consolidated).toFixed(2) : '-')}</td>
+                <td class="timestamp">${updatedTime.toLocaleString()}</td>
             </tr>
         `;
     }).join('');
@@ -437,16 +456,7 @@ function refreshMessages() {
 }
 
 function loadFinancialMetricsFromAPI() {
-    fetch('/api/financial_metrics')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                loadFinancialMetrics(data.metrics);
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching financial metrics:', error);
-        });
+    loadBoardMeetingResults();
 }
 
 function refreshData() {
@@ -558,10 +568,14 @@ function showContentForOption(optionValue) {
         analyticsContainer.style.display = 'block';
         document.getElementById('peAnalysisView').style.display = optionValue === 'pe_analysis' ? 'block' : 'none';
         document.getElementById('stockValueView').style.display = optionValue === 'stock_value' ? 'block' : 'none';
+        if (optionValue === 'pe_analysis') {
+            renderPEAnalysis();
+            if (peAnalysisData.length === 0) loadPEAnalysis();
+        }
     } else if (optionValue === 'result_concall') {
         financialContainer.style.display = 'block';
-        renderFinancialMetrics();
-        if (financialMetrics.length === 0) loadFinancialMetricsFromAPI();
+        renderBoardMeetingResults();
+        if (boardMeetingResults.length === 0) loadBoardMeetingResults();
     } else if (optionValue === 'ai_analyzer') {
         aiAnalyzerContainer.style.display = 'block';
         renderAIAnalysisResults();
@@ -718,37 +732,37 @@ function renderAIAnalysisResults() {
 
 function updateAIAnalysisStatus(data) {
     const uploadStatus = document.getElementById('uploadStatus');
-    const statusText = document.querySelector('.status-text');
-    const statusIcon = document.querySelector('.status-icon');
+    const statusText = uploadStatus.querySelector('.status-text');
+    const statusIcon = uploadStatus.querySelector('.status-icon');
     const progressFill = document.getElementById('progressFill');
     
     uploadStatus.style.display = 'block';
     
     if (data.status === 'processing') {
-        statusIcon.textContent = '⏳';
+        statusIcon.innerHTML = iconHtml('loader-2', 'spin');
         statusText.textContent = data.message;
         progressFill.style.width = '50%';
     } else if (data.status === 'error') {
-        statusIcon.textContent = '❌';
+        statusIcon.innerHTML = iconHtml('x-circle');
         statusText.textContent = data.message;
         progressFill.style.width = '0%';
-        // Hide status after 5 seconds
         setTimeout(() => {
             uploadStatus.style.display = 'none';
         }, 5000);
     }
+    refreshIcons();
 }
 
 function handleAIAnalysisComplete(data) {
     const uploadStatus = document.getElementById('uploadStatus');
-    const statusText = document.querySelector('.status-text');
-    const statusIcon = document.querySelector('.status-icon');
+    const statusText = uploadStatus.querySelector('.status-text');
+    const statusIcon = uploadStatus.querySelector('.status-icon');
     const progressFill = document.getElementById('progressFill');
     const aiResultsContainer = document.getElementById('aiResultsContainer');
     
-    // Update status to complete
-    statusIcon.textContent = '✅';
+    statusIcon.innerHTML = iconHtml('check-circle');
     statusText.textContent = `Analysis complete for ${data.filename}`;
+    refreshIcons();
     progressFill.style.width = '100%';
     
     // Process the financial metrics data
@@ -790,9 +804,9 @@ async function uploadFileForAnalysis(file) {
         message: `Processing ${file.name}... Full analysis mode: 1-2 minutes expected.`
     });
     
-    // Start progress animation with timing
+    const uploadStatus = document.getElementById('uploadStatus');
     const progressFill = document.getElementById('progressFill');
-    const statusText = document.querySelector('.status-text');
+    const statusText = uploadStatus.querySelector('.status-text');
     let progress = 0;
     let seconds = 0;
     const startTime = Date.now();
@@ -826,10 +840,10 @@ async function uploadFileForAnalysis(file) {
         const endTime = Date.now();
         const totalTime = ((endTime - startTime) / 1000).toFixed(1);
         
-        // Show completion status with timing
-        const statusIcon = document.querySelector('.status-icon');
-        statusIcon.textContent = '✅';
-        statusText.textContent = `Analysis completed in ${totalTime}s! 🎉`;
+        const statusIcon = uploadStatus.querySelector('.status-icon');
+        statusIcon.innerHTML = iconHtml('check-circle');
+        statusText.textContent = `Analysis completed in ${totalTime}s!`;
+        refreshIcons();
         progressFill.style.width = '100%';
         
         // Handle successful analysis
@@ -913,7 +927,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (sectorFilterEl) sectorFilterEl.addEventListener('change', renderMessages);
     document.getElementById('limitSelect').addEventListener('change', function() {
         if (selectedOption === 'result_concall') {
-            renderFinancialMetrics();
+            renderBoardMeetingResults();
         } else if (selectedOption === 'ai_analyzer') {
             renderAIAnalysisResults();
         } else if (selectedOption !== 'pe_analysis' && selectedOption !== 'stock_value') {
@@ -1198,10 +1212,11 @@ function setupPlaceOrder() {
                 
                 // Deactivate the check button and input
                 checkTotpBtn.disabled = true;
-                checkTotpBtn.innerHTML = '<span class="btn-icon">✅</span>Session Active';
-                checkTotpBtn.style.background = '#10b981';
+                checkTotpBtn.innerHTML = '<i data-lucide="check-circle"></i> Session Active';
+                checkTotpBtn.style.background = 'var(--green)';
                 totpInput.disabled = true;
-                totpInput.style.background = '#f3f4f6';
+                totpInput.style.background = '';
+                refreshIcons();
                 
                 // Show session info if available
                 if (result.session_info) {
@@ -1225,7 +1240,8 @@ function setupPlaceOrder() {
         
         // Disable button during processing
         getQuotesBtn.disabled = true;
-        getQuotesBtn.innerHTML = '<span class="btn-icon">⏳</span>Fetching...';
+        getQuotesBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Fetching...';
+        refreshIcons();
         
         try {
             // Start background job - returns immediately with job_id
@@ -1262,7 +1278,8 @@ function setupPlaceOrder() {
                                 
                                 // Re-enable button
                                 getQuotesBtn.disabled = false;
-                                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+                                getQuotesBtn.innerHTML = '<i data-lucide="candlestick-chart"></i> GET QUOTES';
+                                refreshIcons();
                                 
                                 // Refresh sheet data
                                 setTimeout(() => {
@@ -1275,7 +1292,8 @@ function setupPlaceOrder() {
                                 
                                 // Re-enable button on error
                                 getQuotesBtn.disabled = false;
-                                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+                                getQuotesBtn.innerHTML = '<i data-lucide="candlestick-chart"></i> GET QUOTES';
+                                refreshIcons();
                             } else {
                                 // Update progress
                                 showQuotesStatus('loading', '⏳', `${job.message} (Progress: ${job.progress}%)`);
@@ -1289,14 +1307,16 @@ function setupPlaceOrder() {
             } else {
                 showQuotesStatus('error', '❌', result.message || 'Failed to start quote fetching');
                 getQuotesBtn.disabled = false;
-                getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+                getQuotesBtn.innerHTML = '<i data-lucide="candlestick-chart"></i> GET QUOTES';
+                refreshIcons();
             }
             
         } catch (error) {
             console.error('Error starting quote fetch:', error);
             showQuotesStatus('error', '❌', 'Error starting quote fetch. Please try again.');
             getQuotesBtn.disabled = false;
-            getQuotesBtn.innerHTML = '<span class="btn-icon">📊</span>GET QUOTES';
+            getQuotesBtn.innerHTML = '<i data-lucide="candlestick-chart"></i> GET QUOTES';
+            refreshIcons();
         }
     });
     
@@ -1340,7 +1360,8 @@ function setupPlaceOrder() {
         
         // Disable button during processing
         placeOrderBtn.disabled = true;
-        placeOrderBtn.innerHTML = '<span class="btn-icon">⏳</span>Processing...';
+        placeOrderBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
+        refreshIcons();
         
         try {
             // Start background job - returns immediately with job_id
@@ -1376,8 +1397,9 @@ function setupPlaceOrder() {
                                 updateLastAction('order');
                                 
                                 // Keep button disabled after successful execution
-                                placeOrderBtn.innerHTML = '<span class="btn-icon">✅</span>Orders Executed';
-                                placeOrderBtn.style.background = '#10b981';
+                                placeOrderBtn.innerHTML = '<i data-lucide="check-circle"></i> Orders Executed';
+                                placeOrderBtn.style.background = 'var(--green)';
+                                refreshIcons();
                                 
                             } else if (job.status === 'failed') {
                                 clearInterval(pollInterval);
@@ -1385,8 +1407,9 @@ function setupPlaceOrder() {
                                 
                                 // Re-enable button on error
                                 placeOrderBtn.disabled = false;
-                                placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
-                                placeOrderBtn.style.background = '#10b981';
+                                placeOrderBtn.innerHTML = '<i data-lucide="rocket"></i> PLACE ORDERS';
+                                placeOrderBtn.style.background = '';
+                                refreshIcons();
                             } else {
                                 // Update progress
                                 showOrderStatus('loading', '⏳', `${job.message} (Progress: ${job.progress}%)`);
@@ -1400,16 +1423,18 @@ function setupPlaceOrder() {
             } else {
                 showOrderStatus('error', '❌', result.message || 'Failed to start order execution');
                 placeOrderBtn.disabled = false;
-                placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
-                placeOrderBtn.style.background = '#10b981';
+                placeOrderBtn.innerHTML = '<i data-lucide="rocket"></i> PLACE ORDERS';
+                placeOrderBtn.style.background = '';
+                refreshIcons();
             }
             
         } catch (error) {
             console.error('Error starting order execution:', error);
             showOrderStatus('error', '❌', 'Error starting order execution. Please try again.');
             placeOrderBtn.disabled = false;
-            placeOrderBtn.innerHTML = '<span class="btn-icon">🚀</span>PLACE ORDERS';
-            placeOrderBtn.style.background = '#10b981';
+            placeOrderBtn.innerHTML = '<i data-lucide="rocket"></i> PLACE ORDERS';
+            placeOrderBtn.style.background = '';
+            refreshIcons();
         }
     });
 }
@@ -1424,45 +1449,43 @@ async function checkSessionStatus() {
         const checkTotpBtn = document.getElementById('checkTotpBtn');
         
         if (result.session_active) {
-            // Session is active - show session active state
             showTotpStatus('success', '🔐', `Session active until ${new Date(result.expires_at).toLocaleString()}`);
             
-            // Deactivate input and button
             totpInput.disabled = true;
-            totpInput.style.background = '#f3f4f6';
+            totpInput.style.background = '';
             totpInput.value = '******';
             
             checkTotpBtn.disabled = true;
-            checkTotpBtn.innerHTML = '<span class="btn-icon">✅</span>Session Active';
-            checkTotpBtn.style.background = '#10b981';
+            checkTotpBtn.innerHTML = '<i data-lucide="check-circle"></i> Session Active';
+            checkTotpBtn.style.background = 'var(--green)';
             checkTotpBtn.style.cursor = 'not-allowed';
+            refreshIcons();
         } else {
-            // No active session - show input form
             totpInput.disabled = false;
-            totpInput.style.background = '#ffffff';
+            totpInput.style.background = '';
             totpInput.value = '';
             totpInput.placeholder = 'Enter 6-digit TOTP code';
             
             checkTotpBtn.disabled = false;
-            checkTotpBtn.innerHTML = '<span class="btn-icon">🔐</span>Check';
-            checkTotpBtn.style.background = '#3b82f6';
+            checkTotpBtn.innerHTML = '<i data-lucide="shield-check"></i> Check';
+            checkTotpBtn.style.background = '';
             checkTotpBtn.style.cursor = 'pointer';
+            refreshIcons();
             
-            // Hide status initially
             document.getElementById('totpStatus').style.display = 'none';
         }
         
     } catch (error) {
         console.error('Error checking session status:', error);
-        // Default to showing input form on error
         const totpInput = document.getElementById('totpInput');
         const checkTotpBtn = document.getElementById('checkTotpBtn');
         
         totpInput.disabled = false;
-        totpInput.style.background = '#ffffff';
+        totpInput.style.background = '';
         checkTotpBtn.disabled = false;
-        checkTotpBtn.innerHTML = '<span class="btn-icon">🔐</span>Check';
-        checkTotpBtn.style.background = '#3b82f6';
+        checkTotpBtn.innerHTML = '<i data-lucide="shield-check"></i> Check';
+        checkTotpBtn.style.background = '';
+        refreshIcons();
     }
 }
 
@@ -1524,15 +1547,26 @@ async function loadPlaceOrderSheet() {
     }
 }
 
+function iconHtml(name, cls) {
+    return `<i data-lucide="${name}" ${cls ? `class="${cls}"` : ''}></i>`;
+}
+
+function refreshIcons() {
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
 function showTotpStatus(type, icon, message) {
     const statusDiv = document.getElementById('totpStatus');
     const statusIcon = document.getElementById('statusIcon');
     const statusMessage = document.getElementById('statusMessage');
     
     statusDiv.className = `totp-status ${type}`;
-    statusIcon.textContent = icon;
+    const iconMap = {'⏳': 'loader-2', '✅': 'check-circle', '❌': 'x-circle', '🔐': 'shield-check'};
+    const lucideName = iconMap[icon] || 'info';
+    statusIcon.innerHTML = iconHtml(lucideName, icon === '⏳' ? 'spin' : '');
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';
+    refreshIcons();
 }
 
 // Show Place Order confirmation modal
@@ -1554,9 +1588,12 @@ function showOrderStatus(type, icon, message) {
     const statusMessage = document.getElementById('orderStatusMessage');
     
     statusDiv.className = `order-status ${type}`;
-    statusIcon.textContent = icon;
+    const iconMap = {'⏳': 'loader-2', '✅': 'check-circle', '❌': 'x-circle'};
+    const lucideName = iconMap[icon] || 'info';
+    statusIcon.innerHTML = iconHtml(lucideName, icon === '⏳' ? 'spin' : '');
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';
+    refreshIcons();
 }
 
 function showQuotesStatus(type, icon, message) {
@@ -1565,9 +1602,12 @@ function showQuotesStatus(type, icon, message) {
     const statusMessage = document.getElementById('quotesStatusMessage');
     
     statusDiv.className = `quotes-status ${type}`;
-    statusIcon.textContent = icon;
+    const iconMap = {'⏳': 'loader-2', '✅': 'check-circle', '❌': 'x-circle', '⚠️': 'alert-triangle'};
+    const lucideName = iconMap[icon] || 'info';
+    statusIcon.innerHTML = iconHtml(lucideName, icon === '⏳' ? 'spin' : '');
     statusMessage.textContent = message;
     statusDiv.style.display = 'block';
+    refreshIcons();
 }
 
 // Logout function
@@ -1648,9 +1688,8 @@ function updateScheduledTaskIndicator(status, message, progress) {
     const dateTimeStr = `${currentDate} at ${currentTime}`;
     
     if (status === 'started' || status === 'progress') {
-        // Show running state with progress
         indicator.className = 'scheduled-task-status running';
-        titleEl.textContent = '🔄 Auto Fetch Running';
+        titleEl.textContent = 'Auto Fetch Running';
         messageEl.textContent = message;
         progressContainer.style.display = 'flex';
         timeEl.textContent = `Started: ${dateTimeStr}`;
@@ -1660,26 +1699,23 @@ function updateScheduledTaskIndicator(status, message, progress) {
             percentEl.textContent = `${progress}%`;
         }
     } else if (status === 'completed') {
-        // Show completed state (stays visible until midnight)
         indicator.className = 'scheduled-task-status completed';
-        titleEl.textContent = '✅ Auto Fetch Completed';
+        titleEl.textContent = 'Auto Fetch Completed';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `✓ Completed: ${dateTimeStr}`;
+        timeEl.textContent = `Completed: ${dateTimeStr}`;
     } else if (status === 'failed') {
-        // Show failed state (stays visible)
         indicator.className = 'scheduled-task-status failed';
-        titleEl.textContent = '❌ Auto Fetch Failed';
+        titleEl.textContent = 'Auto Fetch Failed';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `✗ Failed: ${dateTimeStr}`;
+        timeEl.textContent = `Failed: ${dateTimeStr}`;
     } else if (status === 'skipped') {
-        // Show skipped state (stays visible)
         indicator.className = 'scheduled-task-status skipped';
-        titleEl.textContent = '⚠️ Auto Fetch Skipped';
+        titleEl.textContent = 'Auto Fetch Skipped';
         messageEl.textContent = message;
         progressContainer.style.display = 'none';
-        timeEl.textContent = `⚠ Skipped: ${dateTimeStr}`;
+        timeEl.textContent = `Skipped: ${dateTimeStr}`;
     }
     
     // Save last status to localStorage with DATE for midnight reset check
@@ -1740,7 +1776,7 @@ async function restoreScheduledTaskStatus() {
                         const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
                         
                         indicator.className = 'scheduled-task-status waiting';
-                        titleEl.textContent = `⏳ Waiting for ${timeStr}`;
+                        titleEl.textContent = `Waiting for ${timeStr}`;
                         messageEl.textContent = 'Next auto-fetch scheduled';
                         progressContainer.style.display = 'none';
                         timeEl.textContent = '';
@@ -1748,7 +1784,7 @@ async function restoreScheduledTaskStatus() {
                     } else {
                         // Fallback to default
                         indicator.className = 'scheduled-task-status waiting';
-                        titleEl.textContent = '⏳ Waiting for scheduled time';
+                        titleEl.textContent = 'Waiting for scheduled time';
                         messageEl.textContent = 'Next auto-fetch scheduled';
                         progressContainer.style.display = 'none';
                         timeEl.textContent = '';
@@ -1757,7 +1793,7 @@ async function restoreScheduledTaskStatus() {
                 }).catch(() => {
                     // Fallback on error
                     indicator.className = 'scheduled-task-status waiting';
-                    titleEl.textContent = '⏳ Waiting for scheduled time';
+                    titleEl.textContent = 'Waiting for scheduled time';
                     messageEl.textContent = 'Next auto-fetch scheduled';
                     progressContainer.style.display = 'none';
                     timeEl.textContent = '';
@@ -1771,19 +1807,19 @@ async function restoreScheduledTaskStatus() {
             
             if (data.status === 'completed') {
                 indicator.className = 'scheduled-task-status completed';
-                titleEl.textContent = '✅ Already Fetched Today';
+                titleEl.textContent = 'Already Fetched Today';
                 messageEl.textContent = data.message || 'Auto-fetch completed successfully';
                 progressContainer.style.display = 'none';
                 timeEl.textContent = `Already fetched: ${dateStr} at ${data.time}`;
             } else if (data.status === 'failed') {
                 indicator.className = 'scheduled-task-status failed';
-                titleEl.textContent = '❌ Auto Fetch Failed Today';
+                titleEl.textContent = 'Auto Fetch Failed Today';
                 messageEl.textContent = data.message;
                 progressContainer.style.display = 'none';
                 timeEl.textContent = `✗ Failed: ${dateStr} at ${data.time}`;
             } else if (data.status === 'skipped') {
                 indicator.className = 'scheduled-task-status skipped';
-                titleEl.textContent = '⚠️ Auto Fetch Skipped Today';
+                titleEl.textContent = 'Auto Fetch Skipped Today';
                 messageEl.textContent = data.message;
                 progressContainer.style.display = 'none';
                 timeEl.textContent = `⚠ Skipped: ${dateStr} at ${data.time}`;
@@ -1812,7 +1848,7 @@ async function restoreScheduledTaskStatus() {
                     const timeStr = `${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
                     
                     indicator.className = 'scheduled-task-status waiting';
-                    if (titleEl) titleEl.textContent = `⏳ Waiting for ${timeStr}`;
+                    if (titleEl) titleEl.textContent = `Waiting for ${timeStr}`;
                     if (messageEl) messageEl.textContent = 'Next auto-fetch scheduled';
                     if (progressContainer) progressContainer.style.display = 'none';
                     if (timeEl) timeEl.textContent = '';
@@ -2076,7 +2112,7 @@ function checkIfAlreadyFetchedToday(lastCompletionStr, config) {
             });
             
             indicator.className = 'scheduled-task-status completed';
-            titleEl.textContent = '✅ Already Fetched Today';
+            titleEl.textContent = 'Already Fetched Today';
             messageEl.textContent = 'Auto-fetch completed successfully';
             if (progressContainer) progressContainer.style.display = 'none';
             if (timeEl) timeEl.textContent = `Already fetched: ${dateStr} at ${timeStr} IST`;
@@ -2109,7 +2145,7 @@ function updateScheduledTimeDisplay(config) {
     // Also update the scheduled task indicator title if it exists
     const titleEl = document.getElementById('scheduledTaskTitle');
     if (titleEl && titleEl.textContent.includes('Loading')) {
-        titleEl.textContent = `⏳ Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+        titleEl.textContent = `Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
         const messageEl = document.getElementById('scheduledTaskMessage');
         if (messageEl) {
             messageEl.textContent = 'Next auto-fetch scheduled';
@@ -2189,7 +2225,7 @@ function setupScheduleEditor(config) {
                 if (titleEl) {
                     const period = hour >= 12 ? 'PM' : 'AM';
                     const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
-                    titleEl.textContent = `⏳ Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
+                    titleEl.textContent = `Waiting for ${displayHour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${period}`;
                 }
             } else {
                 showNotificationToast(result.message || 'Failed to update schedule', 'error');
@@ -2203,4 +2239,103 @@ function setupScheduleEditor(config) {
         }
     });
 }
+
+
+// ============================================
+// PE Analysis — Quarterly Results
+// ============================================
+let peAnalysisData = [];
+
+async function loadQuarterlyResults() {
+    await loadPEAnalysis();
+}
+
+async function loadPEAnalysis(fetchCmp = false) {
+    try {
+        const resp = await fetch(`/api/pe_analysis?fetch_cmp=${fetchCmp}`);
+        const data = await resp.json();
+        if (data.success && data.results) {
+            peAnalysisData = data.results;
+            renderPEAnalysis();
+        }
+    } catch (e) {
+        console.error('Error loading PE analysis:', e);
+    }
+}
+
+function renderPEAnalysis() {
+    const tbody = document.getElementById('peAnalysisBody');
+    const emptyMsg = document.getElementById('peAnalysisEmpty');
+    if (!tbody) return;
+
+    const symbolFilter = (document.getElementById('peSymbolFilter')?.value || '').trim().toLowerCase();
+
+    let filtered = peAnalysisData;
+    if (symbolFilter) {
+        filtered = filtered.filter(r =>
+            (r.stock_symbol || '').toLowerCase().includes(symbolFilter) ||
+            (r.company_name || '').toLowerCase().includes(symbolFilter) ||
+            (r.sector || '').toLowerCase().includes(symbolFilter)
+        );
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        document.getElementById('peResultCount').textContent = '';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+    document.getElementById('peResultCount').textContent = `${filtered.length} stocks`;
+
+    const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '-';
+
+    tbody.innerHTML = filtered.map(r => {
+        const fyEps = r.fy_eps;
+        const cmp = r.cmp;
+        const pe = r.pe;
+        let peVal = '-';
+        let peClass = '';
+        const effectivePe = pe || (fyEps && fyEps > 0 && cmp && cmp > 0 ? cmp / fyEps : null);
+        if (effectivePe) {
+            peVal = effectivePe.toFixed(2);
+            if (effectivePe < 15) peClass = 'pe-low';
+            else if (effectivePe < 30) peClass = 'pe-mid';
+            else peClass = 'pe-high';
+        }
+        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '-';
+        const epsTitle = r.fy_eps_formula || '';
+
+        return `<tr>
+            <td><strong>${r.stock_symbol || '-'}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}</td>
+            <td>${r.quarter || '-'}</td>
+            <td>${r.financial_year || '-'}</td>
+            <td title="${epsTitle}">${fmt(fyEps)}</td>
+            <td>${cmp ? '₹' + fmt(cmp) : '<span style="color:#aaa">—</span>'}</td>
+            <td class="${peClass}" style="font-weight:600">${peVal}</td>
+            <td><small>${r.sector || '-'}</small></td>
+            <td>${updated}</td>
+        </tr>`;
+    }).join('');
+}
+
+(function initPEAnalysisControls() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const filterInput = document.getElementById('peSymbolFilter');
+        const refreshBtn = document.getElementById('peRefreshBtn');
+        const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
+        if (filterInput) filterInput.addEventListener('input', renderPEAnalysis);
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadPEAnalysis(false));
+        if (fetchCmpBtn) fetchCmpBtn.addEventListener('click', async () => {
+            fetchCmpBtn.disabled = true;
+            fetchCmpBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Fetching...';
+            if (typeof refreshIcons === 'function') refreshIcons();
+            await loadPEAnalysis(true);
+            fetchCmpBtn.disabled = false;
+            fetchCmpBtn.innerHTML = '<i data-lucide="indian-rupee"></i> Fetch CMP';
+            if (typeof refreshIcons === 'function') refreshIcons();
+        });
+    });
+})();
 
