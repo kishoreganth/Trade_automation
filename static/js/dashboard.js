@@ -2289,13 +2289,14 @@ function renderPEAnalysis() {
     emptyMsg.style.display = 'none';
     document.getElementById('peResultCount').textContent = `${filtered.length} stocks`;
 
-    const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '-';
+    const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '';
 
     tbody.innerHTML = filtered.map(r => {
+        const qtrEps = r.qtr_eps;
         const fyEps = r.fy_eps;
         const cmp = r.cmp;
         const pe = r.pe;
-        let peVal = '-';
+        let peVal = '';
         let peClass = '';
         const effectivePe = pe || (fyEps && fyEps > 0 && cmp && cmp > 0 ? cmp / fyEps : null);
         if (effectivePe) {
@@ -2304,20 +2305,33 @@ function renderPEAnalysis() {
             else if (effectivePe < 30) peClass = 'pe-mid';
             else peClass = 'pe-high';
         }
-        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '-';
+        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
         const epsTitle = r.fy_eps_formula || '';
+        const basisBadge = r.eps_basis === 'S' ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;">S</span>' : '';
+
+        const fy = r.financial_year || '';
+        const yearMatch = fy.match(/\d{4}/);
+        const yearDisplay = yearMatch ? yearMatch[0] : fy;
+
+        const fileLink = r.source_pdf_url
+            ? `<a href="${r.source_pdf_url}" target="_blank" rel="noopener" title="${r.source_pdf_url}" style="color:#60a5fa;"><i data-lucide="file-text" style="width:16px;height:16px;"></i></a>`
+            : '';
 
         return `<tr>
-            <td><strong>${r.stock_symbol || '-'}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}</td>
-            <td>${r.quarter || '-'}</td>
-            <td>${r.financial_year || '-'}</td>
+            <td><strong>${r.stock_symbol || ''}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}</td>
+            <td>${r.quarter || ''}</td>
+            <td>${yearDisplay}</td>
+            <td>${fmt(qtrEps)}${basisBadge}</td>
             <td title="${epsTitle}">${fmt(fyEps)}</td>
-            <td>${cmp ? '₹' + fmt(cmp) : '<span style="color:#aaa">—</span>'}</td>
+            <td>${cmp ? '₹' + fmt(cmp) : ''}</td>
             <td class="${peClass}" style="font-weight:600">${peVal}</td>
-            <td><small>${r.sector || '-'}</small></td>
+            <td><small>${r.sector || ''}</small></td>
+            <td style="text-align:center">${fileLink}</td>
             <td>${updated}</td>
         </tr>`;
     }).join('');
+
+    if (typeof refreshIcons === 'function') refreshIcons();
 }
 
 (function initPEAnalysisControls() {
@@ -2336,6 +2350,69 @@ function renderPEAnalysis() {
             fetchCmpBtn.innerHTML = '<i data-lucide="indian-rupee"></i> Fetch CMP';
             if (typeof refreshIcons === 'function') refreshIcons();
         });
+
+        const uploadToggle = document.getElementById('peUploadToggleBtn');
+        const uploadPanel = document.getElementById('peUploadPanel');
+        if (uploadToggle && uploadPanel) {
+            uploadToggle.addEventListener('click', () => {
+                uploadPanel.style.display = uploadPanel.style.display === 'none' ? 'block' : 'none';
+                if (typeof refreshIcons === 'function') refreshIcons();
+            });
+        }
+
+        const uploadForm = document.getElementById('peUploadForm');
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const symbolInput = document.getElementById('peUploadSymbol');
+                const fileInput = document.getElementById('peUploadFile');
+                const exchangeSel = document.getElementById('peUploadExchange');
+                const submitBtn = document.getElementById('peUploadSubmitBtn');
+                const statusDiv = document.getElementById('peUploadStatus');
+
+                const symbol = symbolInput.value.trim().toUpperCase();
+                if (!symbol || !fileInput.files.length) return;
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
+                statusDiv.style.display = 'block';
+                statusDiv.style.background = '#1e293b';
+                statusDiv.style.color = '#94a3b8';
+                statusDiv.textContent = `Processing ${fileInput.files[0].name} for ${symbol}...`;
+                if (typeof refreshIcons === 'function') refreshIcons();
+
+                try {
+                    const fd = new FormData();
+                    fd.append('file', fileInput.files[0]);
+                    fd.append('stock_symbol', symbol);
+                    fd.append('exchange', exchangeSel.value);
+
+                    const resp = await fetch('/api/upload_quarterly_pdf', { method: 'POST', body: fd });
+                    const data = await resp.json();
+
+                    if (data.success) {
+                        statusDiv.style.background = '#064e3b';
+                        statusDiv.style.color = '#6ee7b7';
+                        statusDiv.textContent = `Saved ${data.periods_stored} period(s) for ${data.stock_symbol}. Refreshing...`;
+                        await loadPEAnalysis(false);
+                        symbolInput.value = '';
+                        fileInput.value = '';
+                    } else {
+                        statusDiv.style.background = '#7f1d1d';
+                        statusDiv.style.color = '#fca5a5';
+                        statusDiv.textContent = data.detail || 'Processing failed';
+                    }
+                } catch (err) {
+                    statusDiv.style.background = '#7f1d1d';
+                    statusDiv.style.color = '#fca5a5';
+                    statusDiv.textContent = 'Error: ' + err.message;
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i data-lucide="cpu"></i> Process & Save';
+                    if (typeof refreshIcons === 'function') refreshIcons();
+                }
+            });
+        }
     });
 })();
 

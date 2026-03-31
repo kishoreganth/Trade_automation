@@ -5,6 +5,126 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-03-31: PE Analysis Table Revamp — New columns (Qtr EPS, Year, File link)
+
+**What changed**: PE Analysis table columns restructured for clarity.
+
+**Old columns**: Stock | Quarter | FY | FY EPS (Est.) | CMP (₹) | PE | Sector | Updated
+**New columns**: Stock | Quarter | Year | Qtr EPS | FY EPS (Est.) | CMP (₹) | PE | Sector | File | Date
+
+**Backend** (`nse_url_test.py` `/api/pe_analysis`):
+- Added `qtr_eps` field: `COALESCE(eps_diluted_consolidated, eps_basic_consolidated, eps_diluted_standalone, eps_basic_standalone)` — current quarter's EPS
+- Added `source_pdf_url` to SELECT and response payload
+- `qtr_eps` and `source_pdf_url` now returned in API response
+
+**Frontend** (`static/index.html`, `static/js/dashboard.js`):
+- "FY" column → "Year" (extracts numeric year from financial_year via regex)
+- New "Qtr EPS" column shows current quarter EPS with standalone badge
+- "FY EPS (Est.)" retains full-year estimated EPS
+- New "File" column renders clickable PDF link icon (lucide `file-text`) opening `source_pdf_url` in new tab
+- `refreshIcons()` called after render to initialize lucide icons in dynamic file links
+
+**Files changed**: `nse_url_test.py`, `static/index.html`, `static/js/dashboard.js`
+
+---
+
+### 2026-03-31: PyMuPDF Migration — Replaced Poppler + docTR OCR pipeline with PyMuPDF (fitz)
+
+**What changed**: Entire PDF extraction pipeline in `nse_url_test.py` replaced. Old flow (Poppler → docTR OCR → keyword filter → AI) replaced with new flow (PyMuPDF text extract → keyword filter FIRST → render only financial pages → AI).
+
+**Functions added** to `nse_url_test.py`:
+- `_extract_text_pymupdf()` — native text extraction via PyMuPDF (no OCR)
+- `_find_financial_pages()` — keyword filter on extracted text (runs BEFORE rendering)
+- `_find_financial_pages_image_fallback()` — for image-only PDFs, sends first 6 pages
+- `_render_page_to_png_bytes()` — renders single page via PyMuPDF (no Poppler)
+- `_extract_financial_pages_as_b64()` — full pipeline: text → filter → render → base64
+- `_call_openai_vision_quarterly()` — single OpenAI call for quarterly extraction
+- `_call_openai_vision_general()` — single OpenAI call for general financial analysis
+
+**Functions removed** from `nse_url_test.py`:
+- `_chunk_list()`, `_quarterly_period_key()`, `_merge_quarterly_ai_responses()`, `_analyze_quarterly_results_chunked()` — old chunked OCR pipeline
+- `process_local_pdf_async()` — backup function
+- OCR model preloading at startup (`get_global_ocr_model()`)
+
+**Endpoints updated** (all now use PyMuPDF flow):
+- `POST /api/upload_quarterly_pdf`
+- `POST /api/test_quarterly_extract`
+- `POST /api/ai_analyze` (via `process_local_pdf_async_optimized`)
+- `run_quarterly_extraction()` (Telegram auto-trigger)
+
+**Import changes**: Removed all `async_ocr_from_image` imports except `download_pdf_async`. Added `fitz`, `base64`, `AsyncOpenAI`.
+
+**Dependencies**: Added `PyMuPDF` to requirements.txt. No longer requires Poppler system install or docTR/PyTorch for PDF extraction.
+
+**Performance gains**:
+- No PyTorch/docTR model loading at startup (~5-10s saved)
+- Text extraction: ~10ms (PyMuPDF) vs ~5-15s (docTR OCR per page)
+- Renders only 2-3 financial pages vs ALL pages
+- No Poppler system dependency
+- Significantly lower memory usage (no PyTorch tensors)
+
+**Kept unchanged**: `process_quarterly_results()`, `_compute_all_fy_eps()`, `_calculate_full_year_eps()`, DB schema, AI JSON output schema.
+
+---
+
+### 2026-03-31: Docs Reorganization — Moved 12 stale MD files into `doc/` folder
+
+Moved all unused/stale markdown docs from project root, `resource/`, and `static/` into organized `doc/` subfolders:
+- `doc/auth/` — AUTH_README, SESSION_AUTH_SUMMARY, 2FA_LOGIN_HOWTO
+- `doc/architecture/` — ASYNC_ARCHITECTURE_EXPLAINED
+- `doc/setup/` — GOOGLE_SHEETS_SETUP
+- `doc/migration/` — NEO_API_MIGRATION_PLAN, FUTURE_KOTAK_MASTER_SYNC
+- `doc/guides/` — IMPLEMENTATION_GUIDE_QUARTERLY_RESULTS, DASHBOARD_README, CLEANUP_README
+- `doc/fixes/` — TIMEZONE_FIX_SUMMARY
+- `doc/frontend/` — static/README
+
+**Result**: Clean project root, docs organized by category for easy discovery.
+
+---
+
+### 2026-03-29: PE Analysis — CMP & PE Calculation Fix + test_pymupdf_speed DB Integration
+
+**Bugs Fixed** (in `/api/pe_analysis`):
+1. **Standalone EPS fallback**: Query now uses `COALESCE(fy_eps_diluted_consolidated, fy_eps_basic_consolidated, fy_eps_diluted_standalone, fy_eps_basic_standalone)` — if consolidated EPS is NULL, falls back to standalone instead of showing empty.
+2. **CMP storage SQL broken**: `UPDATE ... ORDER BY ... LIMIT 1` not supported in standard SQLite. Replaced with subquery: `WHERE id = (SELECT id ... ORDER BY ... LIMIT 1)`.
+3. **PE not persisted in DB**: CMP UPDATE now also stores computed `pe` value alongside `cmp`.
+4. **PE computed server-side on normal load**: When `fetch_cmp=false`, if stored CMP exists in DB, PE is computed server-side (`CMP / FY_EPS`) — no longer requires live fetch to see PE.
+
+**test_pymupdf_speed.py — Full Pipeline Integration**:
+- Usage: `python test_pymupdf_speed.py <pdf_path> SYMBOL [--exchange NSE|BSE] [--no-cmp]`
+- **STEP 5 (new)**: Stores extracted quarterly results into `quarterly_results` DB (same UPSERT pattern as server)
+- **STEP 6 (new)**: Fetches live CMP from Kotak API (nse_cm_neo token sheet → `get_quote`), computes PE = CMP / FY_EPS, stores both in DB
+- `--no-cmp` flag skips CMP/PE fetch
+- `--exchange NSE|BSE` sets exchange (default NSE)
+- Results now visible in PE Analysis dashboard page after running script
+
+**Frontend**: EPS basis badge (`S` for standalone) shown next to FY EPS when consolidated unavailable.
+
+**Performance**: CMP+PE now persist across page reloads. Previously CMP was lost on every reload due to SQLite UPDATE syntax issue.
+
+**Files Changed**: `nse_url_test.py` (PE analysis API query + CMP storage fix), `static/js/dashboard.js` (EPS basis badge), `test_pymupdf_speed.py` (DB store + CMP/PE pipeline)
+
+---
+
+### 2026-03-28: PE Analysis — Manual PDF Upload + Remove Dashes
+
+**New Endpoint**: `POST /api/upload_quarterly_pdf`
+- Accepts: `file` (PDF), `stock_symbol` (text), `exchange` (NSE/BSE, default NSE) via multipart form
+- Pipeline: PDF → OCR all pages → AI quarterly extraction → `process_quarterly_results()` → DB save
+- Returns: `{success, stock_symbol, periods_stored, quarterly_results}`
+- Added `Form` import to FastAPI imports
+
+**Frontend**: "Upload PDF" button in PE Analysis controls bar
+- Toggles an inline upload panel with: Symbol input, Exchange dropdown, File picker, "Process & Save" button
+- Shows processing status with success/error feedback
+- Auto-refreshes PE table after successful upload
+
+**Dash Cleanup**: Replaced all `-` and `—` placeholders in PE Analysis table with empty/blank cells.
+
+**Files Changed**: `nse_url_test.py` (new endpoint + Form import), `static/index.html` (upload panel HTML), `static/js/dashboard.js` (upload form JS + blank cells)
+
+---
+
 ### 2026-03-22: PE Analysis Redesign — FY EPS + PE Ratio View
 
 **Feature**: Analytics > PE Analysis page redesigned from raw quarterly data dump to **PE ratio analytics** view.

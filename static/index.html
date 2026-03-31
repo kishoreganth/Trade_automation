@@ -255,7 +255,37 @@
                                 <i data-lucide="indian-rupee"></i>
                                 <span>Fetch CMP</span>
                             </button>
+                            <button id="peUploadToggleBtn" class="btn-refresh btn-sm" title="Upload quarterly result PDF">
+                                <i data-lucide="upload"></i>
+                                <span>Upload PDF</span>
+                            </button>
                             <span id="peResultCount" class="result-count"></span>
+                        </div>
+                        <div id="peUploadPanel" style="display:none; margin-bottom:1rem; padding:1rem; border:1px solid var(--border-color, #2a3042); border-radius:8px; background:var(--card-bg, #1a1f2e);">
+                            <form id="peUploadForm" style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+                                <div style="flex:0 0 auto;">
+                                    <label style="font-size:0.75rem; color:#888; display:block; margin-bottom:4px;">Stock Symbol</label>
+                                    <input type="text" id="peUploadSymbol" placeholder="e.g. RELIANCE" required
+                                        style="padding:6px 10px; border-radius:6px; border:1px solid var(--border-color,#2a3042); background:var(--input-bg,#0f1219); color:#fff; font-size:0.85rem; width:140px;">
+                                </div>
+                                <div style="flex:0 0 auto;">
+                                    <label style="font-size:0.75rem; color:#888; display:block; margin-bottom:4px;">Exchange</label>
+                                    <select id="peUploadExchange" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border-color,#2a3042); background:var(--input-bg,#0f1219); color:#fff; font-size:0.85rem;">
+                                        <option value="NSE">NSE</option>
+                                        <option value="BSE">BSE</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1 1 auto;">
+                                    <label style="font-size:0.75rem; color:#888; display:block; margin-bottom:4px;">Quarterly Result PDF</label>
+                                    <input type="file" id="peUploadFile" accept=".pdf" required
+                                        style="padding:4px; font-size:0.8rem; color:#ccc;">
+                                </div>
+                                <button type="submit" id="peUploadSubmitBtn" class="btn-refresh btn-sm" style="background:#4f46e5; height:34px;">
+                                    <i data-lucide="cpu"></i>
+                                    <span>Process &amp; Save</span>
+                                </button>
+                            </form>
+                            <div id="peUploadStatus" style="display:none; margin-top:0.75rem; padding:8px 12px; border-radius:6px; font-size:0.85rem;"></div>
                         </div>
                         <div class="table-container">
                             <table class="data-table" id="peAnalysisTable">
@@ -263,12 +293,14 @@
                                     <tr>
                                         <th>Stock</th>
                                         <th>Quarter</th>
-                                        <th>FY</th>
+                                        <th>Year</th>
+                                        <th>Qtr EPS</th>
                                         <th>FY EPS (Est.)</th>
                                         <th>CMP (&#8377;)</th>
                                         <th>PE</th>
                                         <th>Sector</th>
-                                        <th>Updated</th>
+                                        <th>File</th>
+                                        <th>Date</th>
                                     </tr>
                                 </thead>
                                 <tbody id="peAnalysisBody"></tbody>

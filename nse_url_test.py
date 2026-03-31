@@ -6,7 +6,7 @@ import requests
 import os
 import json
 import pandas as pd
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -43,7 +43,10 @@ import sys
 import codecs
 from stock_info import SME_companies, BSE_NSE_companies
 from bse import BSE
-from async_ocr_from_image import pdf_to_png_async, process_ocr_from_images_async, encode_images_async, analyze_financial_metrics_async, get_global_ocr_model, analyze_quarterly_results_async, process_ocr_all_financial_pages_async
+import fitz
+import base64
+from openai import AsyncOpenAI
+from async_ocr_from_image import download_pdf_async
 from neo_main_login import main as neo_main_login
 from place_order import main as place_order_main
 from dotenv import load_dotenv
@@ -466,12 +469,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Dashboard database initialized")
     
-    # Pre-load OCR model at startup for 80% speed improvement
-    logger.info("🔥 Pre-loading OCR model for global caching...")
-    start_model_time = time.time()
-    await get_global_ocr_model()
-    model_load_time = time.time() - start_model_time
-    logger.info(f"✅ OCR model pre-loaded and cached in {model_load_time:.2f}s - All future requests will be 80% faster!")
+    logger.info("PyMuPDF (fitz) ready for PDF extraction — no OCR model needed")
     
     # Start all background tasks in parallel using asyncio.create_task
     # sme_task = asyncio.create_task(run_periodic_task_sme())
@@ -2014,151 +2012,259 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
         return []
 
 
-def _chunk_list(items: List[Any], chunk_size: int) -> List[List[Any]]:
-    """Split a list into fixed-size chunks."""
-    if chunk_size <= 0:
-        return [items]
-    return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+_FINANCIAL_KEYWORDS = ['revenue', 'expense', 'tax', 'profit', 'earning',
+                       'income', 'eps', 'share capital', 'diluted', 'comprehensive']
+_MIN_KEYWORD_MATCHES = 3
 
 
-def _quarterly_period_key(period: Dict[str, Any]) -> tuple:
-    """Stable dedupe key for quarterly/annual period rows."""
-    return (
-        str(period.get("column_header")),
-        str(period.get("period_type")),
-        str(period.get("quarter")),
-        str(period.get("financial_year")),
+def _extract_text_pymupdf(pdf_path: str) -> list:
+    """Extract text from each page using PyMuPDF (no OCR, no Poppler)."""
+    doc = fitz.open(pdf_path)
+    pages = []
+    for i, page in enumerate(doc):
+        text = page.get_text("text")
+        pages.append({"page_num": i + 1, "text": text, "has_text": bool(text.strip())})
+    doc.close()
+    return pages
+
+
+def _find_financial_pages(pages: list) -> list:
+    """Filter pages that contain financial keywords."""
+    financial = []
+    for p in pages:
+        text_lower = p["text"].lower()
+        matches = sum(1 for kw in _FINANCIAL_KEYWORDS if kw in text_lower)
+        if matches >= _MIN_KEYWORD_MATCHES:
+            financial.append(p["page_num"])
+    return financial
+
+
+def _find_financial_pages_image_fallback(total_pages: int) -> list:
+    """For image-based PDFs where text extraction fails: send first N pages to AI."""
+    return list(range(1, min(total_pages + 1, 7)))
+
+
+def _render_page_to_png_bytes(pdf_path: str, page_num: int, dpi: int = 150) -> bytes:
+    """Render a single page to PNG bytes using PyMuPDF."""
+    doc = fitz.open(pdf_path)
+    page = doc[page_num - 1]
+    zoom = dpi / 72
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat)
+    png_bytes = pix.tobytes("png")
+    doc.close()
+    return png_bytes
+
+
+async def _extract_financial_pages_as_b64(pdf_path: str) -> list:
+    """PyMuPDF pipeline: text extract → keyword filter → render financial pages → base64."""
+    pages = await asyncio.to_thread(_extract_text_pymupdf, pdf_path)
+    total_pages = len(pages)
+    text_pages = sum(1 for p in pages if p["has_text"])
+    logger.info(f"PyMuPDF: {total_pages} pages, {text_pages} with text")
+
+    if text_pages > 0:
+        financial_page_nums = _find_financial_pages(pages)
+        if not financial_page_nums and text_pages < total_pages:
+            logger.info("Text extraction found no financial pages, trying image fallback")
+            financial_page_nums = _find_financial_pages_image_fallback(total_pages)
+    else:
+        logger.info("No text layer found — image-based PDF, using fallback")
+        financial_page_nums = _find_financial_pages_image_fallback(total_pages)
+
+    if not financial_page_nums:
+        logger.warning("No financial pages detected in PDF")
+        return []
+
+    logger.info(f"PyMuPDF: rendering {len(financial_page_nums)} financial pages: {financial_page_nums}")
+    encoded_images = []
+    for pn in financial_page_nums:
+        png_bytes = await asyncio.to_thread(_render_page_to_png_bytes, pdf_path, pn)
+        encoded_images.append(base64.b64encode(png_bytes).decode("utf-8"))
+
+    return encoded_images
+
+
+async def _call_openai_vision_quarterly(encoded_images: list) -> dict:
+    """Single OpenAI Vision call with all financial page images for quarterly extraction."""
+    client = AsyncOpenAI()
+
+    base_prompt = """You are extracting data from an Indian company's quarterly financial results PDF.
+
+The document may have TWO tables: Standalone and Consolidated (check the title of each table).
+
+**TABLE STRUCTURE:**
+Each table has exactly 4 data columns:
+- Column 1, 2, 3: Under "Quarter ended" header (3 quarterly periods)
+- Column 4: Under "Year Ended" header (full year annual data)
+You MUST extract ALL 4 columns. Do not skip the Year Ended column.
+
+**ROW STRUCTURE (top to bottom in each table):**
+Row 1: "Revenue from Operations" — this is the FIRST income row
+Row 2: "Other Income" — this is the SECOND income row (separate from Revenue)
+Row 3: "Total Income" — sum row
+Then expense rows, then profit rows, then tax, then EPS at bottom.
+
+**CRITICAL — DASH HANDLING:**
+- A dash (-) means null. Return null, not 0, not 0.0.
+
+**face_value:** Read from the row label text "Face Value Rs. X/- Each".
+
+**Quarter & Financial Year mapping (Indian FY):**
+- June ending → Q1, FY = next March's year
+- September ending → Q2, FY = next March's year
+- December ending → Q3, FY = next March's year
+- March ending → Q4, FY = same year
+- Year Ended column → period_type = "annual", quarter = "FY"
+
+IMPORTANT: Return ONLY raw JSON. No markdown, no code blocks.
+If a page is NOT a financial results table, IGNORE it completely.
+
+{
+    "company_name": "string",
+    "units": "lakhs or crores",
+    "standalone_periods": [
+        {
+            "column_header": "30.06.2025",
+            "period_type": "quarter",
+            "quarter": "Q1",
+            "financial_year": "2026",
+            "revenue_from_operations": number_or_null,
+            "other_income": number_or_null,
+            "total_income": number_or_null,
+            "total_expenses": number_or_null,
+            "profit_before_exceptional": number_or_null,
+            "exceptional_items": number_or_null,
+            "profit_before_tax": number_or_null,
+            "tax_expense": number_or_null,
+            "profit_after_tax": number_or_null,
+            "profit_attributable_to_minority": number_or_null,
+            "other_comprehensive_income": number_or_null,
+            "total_comprehensive_income": number_or_null,
+            "paid_up_equity_share_capital": number_or_null,
+            "face_value": number_or_null,
+            "eps_basic": number_or_null,
+            "eps_diluted": number_or_null
+        }
+    ],
+    "consolidated_periods": []
+}
+
+Rules:
+- MUST be 4 entries per table: 3 quarterly + 1 annual.
+- null for dash (-) or blank cells. Never use 0 or 0.0 for dashes.
+- Return numbers exactly as printed in the document."""
+
+    content = [{"type": "text", "text": base_prompt}]
+    for img_b64 in encoded_images:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{img_b64}"}
+        })
+    content.append({
+        "type": "text",
+        "text": "\nSTEP-BY-STEP EXTRACTION:\n"
+               "1. Each image = one table (Standalone or Consolidated). Identify which from the title.\n"
+               "2. Locate the 4 data columns: 3 quarterly + 1 annual (Year Ended).\n"
+               "3. For EACH column, go row by row reading the cell at that column position.\n"
+               "4. Return 4 entries per table. Do NOT skip the Year Ended column.\n"
+               "5. VERIFY per column: Total Income ≈ Revenue + Other Income."
+    })
+
+    t0 = time.time()
+    response = await client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[{"role": "user", "content": content}],
+        temperature=0,
+        max_tokens=16000,
+        response_format={"type": "json_object"}
     )
+    elapsed = time.time() - t0
+    usage = response.usage
+    logger.info(f"OpenAI quarterly vision: {elapsed:.1f}s | tokens: prompt={usage.prompt_tokens}, completion={usage.completion_tokens}")
+
+    return json.loads(response.choices[0].message.content)
 
 
-def _merge_quarterly_ai_responses(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Merge per-image quarterly AI responses into one deterministic payload."""
-    merged = {
-        "company_name": None,
-        "units": None,
-        "standalone_periods": [],
-        "consolidated_periods": []
-    }
+async def _call_openai_vision_general(encoded_images: list) -> dict:
+    """Single OpenAI Vision call for general financial metrics extraction."""
+    client = AsyncOpenAI()
 
-    seen_standalone = set()
-    seen_consolidated = set()
-    warnings = []
+    base_prompt = """Extract these financial metrics from the provided images and return as JSON:
 
-    for res in responses:
-        if not isinstance(res, dict):
-            continue
+    Extract:
+    1. revenue_from_operations
+    2. profit_after_tax
+    3. profit_before_tax
+    4. total_income
+    5. other_income
+    6. earnings_per_share
 
-        if not merged["company_name"] and res.get("company_name"):
-            merged["company_name"] = res.get("company_name")
-        if not merged["units"] and res.get("units"):
-            merged["units"] = res.get("units")
+    Also get the quarterly values with period and year ended in a list of JSON.
 
-        for p in res.get("standalone_periods", []) or []:
-            if not isinstance(p, dict):
-                continue
-            key = _quarterly_period_key(p)
-            if key in seen_standalone:
-                continue
-            seen_standalone.add(key)
-            merged["standalone_periods"].append(p)
+    IMPORTANT: Return only the raw JSON object without any markdown formatting, code blocks, or additional text.
 
-        for p in res.get("consolidated_periods", []) or []:
-            if not isinstance(p, dict):
-                continue
-            key = _quarterly_period_key(p)
-            if key in seen_consolidated:
-                continue
-            seen_consolidated.add(key)
-            merged["consolidated_periods"].append(p)
-
-        if res.get("error"):
-            warnings.append(res["error"])
-
-    if warnings and not merged["standalone_periods"] and not merged["consolidated_periods"]:
-        merged["error"] = "; ".join(warnings)
-    elif warnings:
-        merged["warnings"] = warnings
-
-    merged["merge_metadata"] = {
-        "chunks_processed": len(responses),
-        "standalone_periods": len(merged["standalone_periods"]),
-        "consolidated_periods": len(merged["consolidated_periods"])
-    }
-    return merged
-
-
-async def _analyze_quarterly_results_chunked(financial_image_paths: List[str], text_for_analysis: str) -> Dict[str, Any]:
-    """
-    Run quarterly extraction as small image chunks (default 1 image/call) and merge outputs.
-    This improves table-cell reliability for standalone vs consolidated pages.
-    """
-    chunk_size = max(1, int(os.getenv("QUARTERLY_AI_IMAGE_CHUNK_SIZE", "1")))
-
-    if not financial_image_paths:
-        logger.info("Quarterly AI: No financial images found, using text fallback")
-        result = await analyze_quarterly_results_async(text_for_analysis, [])
-        if "merge_metadata" not in result:
-            result["merge_metadata"] = {
-                "chunks_processed": 1,
-                "standalone_periods": len(result.get("standalone_periods", [])),
-                "consolidated_periods": len(result.get("consolidated_periods", []))
+    Return JSON format:
+    {
+        "revenue_from_operations": number_or_null,
+        "profit_after_tax": number_or_null,
+        "profit_before_tax": number_or_null,
+        "total_income": number_or_null,
+        "other_income": number_or_null,
+        "earnings_per_share": number_or_null,
+        "units": "crores_or_lakhs_or_null",
+        "quarterly_data": [
+            {
+                "period": "Q1/Q2/Q3/Q4",
+                "year_ended": "YYYY",
+                "revenue_from_operations": number_or_null,
+                "profit_after_tax": number_or_null,
+                "profit_before_tax": number_or_null,
+                "total_income": number_or_null,
+                "other_income": number_or_null,
+                "earnings_per_share": number_or_null
             }
-        return result
+        ]
+    }"""
 
-    chunks = _chunk_list(financial_image_paths, chunk_size)
-    logger.info(f"Quarterly AI: Processing {len(financial_image_paths)} images in {len(chunks)} chunk(s), chunk_size={chunk_size}")
+    content = [{"type": "text", "text": base_prompt}]
+    for img_b64 in encoded_images:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{img_b64}"}
+        })
 
-    async def _process_chunk(idx: int, chunk_paths: List[str]) -> Dict[str, Any]:
-        logger.info(f"Quarterly AI chunk {idx + 1}/{len(chunks)}: encoding {len(chunk_paths)} image(s)")
-        encoded_images = await encode_images_async(chunk_paths)
-        logger.info(f"Quarterly AI chunk {idx + 1}/{len(chunks)}: running model")
-        return await analyze_quarterly_results_async(text_for_analysis, encoded_images)
-
-    chunk_tasks = [_process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
-    chunk_results = await asyncio.gather(*chunk_tasks)
-    merged_result = _merge_quarterly_ai_responses(chunk_results)
-    logger.info(
-        "Quarterly AI merged result: chunks=%s, standalone=%s, consolidated=%s",
-        merged_result["merge_metadata"]["chunks_processed"],
-        merged_result["merge_metadata"]["standalone_periods"],
-        merged_result["merge_metadata"]["consolidated_periods"]
+    t0 = time.time()
+    response = await client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[{"role": "user", "content": content}],
+        temperature=0,
+        response_format={"type": "json_object"}
     )
-    return merged_result
+    elapsed = time.time() - t0
+    usage = response.usage
+    logger.info(f"OpenAI general vision: {elapsed:.1f}s | tokens: prompt={usage.prompt_tokens}, completion={usage.completion_tokens}")
+
+    result = json.loads(response.choices[0].message.content)
+    result["analysis_metadata"] = {
+        "images_provided": len(encoded_images),
+        "total_content_items": len(content)
+    }
+    return result
 
 
 async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, exchange=None):
-    """Full pipeline: PDF → OCR all pages → AI quarterly extraction → DB store."""
+    """Full pipeline: PDF download → PyMuPDF extract → AI quarterly extraction → DB store."""
     try:
-        from async_ocr_from_image import download_pdf_async, pdf_to_png_async, process_ocr_all_financial_pages_async, encode_images_async, analyze_quarterly_results_async
-
         pdf_path = await download_pdf_async(pdf_url, "downloads_concall")
-        image_paths, images_folder = await pdf_to_png_async(pdf_path, "images_concall")
 
-        if not image_paths:
-            logger.error(f"No images from PDF for {stock_symbol}")
+        encoded_images = await _extract_financial_pages_as_b64(pdf_path)
+        if not encoded_images:
+            logger.error(f"No financial pages found in PDF for {stock_symbol}")
             return None
 
-        ocr_results = await process_ocr_all_financial_pages_async(image_paths)
-
-        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
-        if not text_for_analysis:
-            logger.warning(f"No text extracted for quarterly results: {stock_symbol}")
-            return None
-
-        ai_response = await _analyze_quarterly_results_chunked(
-            ocr_results.get('detected_image_paths', []),
-            text_for_analysis
-        )
+        ai_response = await _call_openai_vision_quarterly(encoded_images)
         result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange)
-
-        # Cleanup images
-        if images_folder:
-            try:
-                import shutil
-                await asyncio.to_thread(shutil.rmtree, images_folder, True)
-            except Exception:
-                pass
-
         return result
 
     except Exception as e:
@@ -3509,13 +3615,26 @@ async def get_pe_analysis(fetch_cmp: bool = False):
                     qr.company_name,
                     qr.quarter,
                     qr.financial_year,
-                    qr.fy_eps_diluted_consolidated AS fy_eps_basic_consolidated,
-                    qr.fy_eps_formula_consolidated,
+                    COALESCE(qr.eps_diluted_consolidated, qr.eps_basic_consolidated,
+                             qr.eps_diluted_standalone, qr.eps_basic_standalone) AS qtr_eps,
+                    COALESCE(qr.fy_eps_diluted_consolidated, qr.fy_eps_basic_consolidated,
+                             qr.fy_eps_diluted_standalone, qr.fy_eps_basic_standalone) AS fy_eps,
+                    CASE
+                        WHEN qr.fy_eps_diluted_consolidated IS NOT NULL THEN qr.fy_eps_formula_consolidated
+                        WHEN qr.fy_eps_basic_consolidated IS NOT NULL THEN qr.fy_eps_formula_consolidated
+                        ELSE qr.fy_eps_formula_standalone
+                    END AS fy_eps_formula,
+                    CASE
+                        WHEN qr.fy_eps_diluted_consolidated IS NOT NULL THEN 'C'
+                        WHEN qr.fy_eps_basic_consolidated IS NOT NULL THEN 'C'
+                        ELSE 'S'
+                    END AS eps_basis,
                     qr.units,
                     qr.updated_at,
                     qr.cmp AS stored_cmp,
                     qr.pe AS stored_pe,
                     qr.cmp_updated_at,
+                    qr.source_pdf_url,
                     s.sector,
                     s.exchange
                 FROM quarterly_results qr
@@ -3535,24 +3654,38 @@ async def get_pe_analysis(fetch_cmp: bool = False):
         stock_data = []
         symbols_needing_cmp = []
         for r in rows:
-            fy_eps = r["fy_eps_basic_consolidated"]
-            fy_formula = r["fy_eps_formula_consolidated"]
+            qtr_eps = r["qtr_eps"]
+            fy_eps = r["fy_eps"]
+            fy_formula = r["fy_eps_formula"]
+            eps_basis = r["eps_basis"]
+            stored_cmp = r["stored_cmp"]
+            stored_pe = r["stored_pe"]
+            qtr_eps_rounded = round(qtr_eps, 2) if qtr_eps is not None else None
+            fy_eps_rounded = round(fy_eps, 2) if fy_eps is not None else None
+
+            pe_val = stored_pe
+            if stored_cmp and fy_eps_rounded and fy_eps_rounded > 0 and not stored_pe:
+                pe_val = round(stored_cmp / fy_eps_rounded, 2)
+
             stock_data.append({
                 "stock_symbol": r["stock_symbol"],
                 "company_name": r["company_name"],
                 "quarter": r["quarter"],
                 "financial_year": r["financial_year"],
-                "fy_eps": round(fy_eps, 2) if fy_eps else None,
-                "fy_eps_formula": fy_formula,
+                "qtr_eps": qtr_eps_rounded,
+                "fy_eps": fy_eps_rounded,
+                "fy_eps_formula": f"{fy_formula or ''} ({eps_basis})".strip(),
+                "eps_basis": eps_basis,
                 "units": r["units"],
                 "sector": r["sector"],
                 "exchange": r["exchange"],
-                "cmp": r["stored_cmp"],
-                "pe": r["stored_pe"],
+                "cmp": round(stored_cmp, 2) if stored_cmp else None,
+                "pe": pe_val,
                 "cmp_updated_at": r["cmp_updated_at"],
                 "updated_at": r["updated_at"],
+                "source_pdf_url": r["source_pdf_url"],
             })
-            if fetch_cmp and fy_eps and fy_eps > 0:
+            if fetch_cmp and fy_eps_rounded and fy_eps_rounded > 0:
                 symbols_needing_cmp.append(r["stock_symbol"])
 
         # Fetch live CMP from Kotak API using nse_cm_neo sheet tokens
@@ -3584,14 +3717,21 @@ async def get_pe_analysis(fetch_cmp: bool = False):
                             cmp_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
                     logger.info(f"PE Analysis: fetched CMP for {len(cmp_map)}/{len(tokens_to_fetch)} stocks")
 
-                    # Store CMP + PE in DB for persistence
+                    # Store CMP + PE in DB using subquery (ORDER BY+LIMIT in UPDATE not supported in standard SQLite)
                     if cmp_map:
                         now_iso = get_ist_now().isoformat()
                         async with aiosqlite.connect(DB_PATH) as db:
                             for sym, cmp_val in cmp_map.items():
+                                eps_for_sym = next((s["fy_eps"] for s in stock_data if s["stock_symbol"] == sym), None)
+                                pe_computed = round(cmp_val / eps_for_sym, 2) if eps_for_sym and eps_for_sym > 0 else None
                                 await db.execute(
-                                    "UPDATE quarterly_results SET cmp = ?, cmp_updated_at = ? WHERE stock_symbol = ? AND quarter != 'FY' ORDER BY financial_year DESC, quarter DESC LIMIT 1",
-                                    (cmp_val, now_iso, sym)
+                                    """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
+                                       WHERE id = (
+                                           SELECT id FROM quarterly_results
+                                           WHERE stock_symbol = ? AND quarter != 'FY'
+                                           ORDER BY financial_year DESC, quarter DESC LIMIT 1
+                                       )""",
+                                    (cmp_val, pe_computed, now_iso, sym)
                                 )
                             await db.commit()
             except Exception as e:
@@ -3612,167 +3752,25 @@ async def get_pe_analysis(fetch_cmp: bool = False):
 
 
 async def process_local_pdf_async_optimized(pdf_path: str):
-    """Memory-optimized PDF processing with background task pausing, batch processing, and memory monitoring."""
-    global ai_processing_active
-
-    
+    """PyMuPDF-based PDF processing for general financial analysis (replaces Poppler + docTR OCR)."""
     try:
-        # Set AI processing flag to pause background tasks
-        ai_processing_active = True
-        
-        # Monitor initial memory
-        memory_start = psutil.virtual_memory().percent
-        logger.info(f"🚀 Starting MEMORY-OPTIMIZED PDF processing: {pdf_path}")
-        logger.info(f"💾 Initial memory usage: {memory_start:.1f}%")
-        logger.info("⏸️ Background tasks paused for faster processing")
-        
         start_time = time.time()
-        
-        # Step 1: Convert PDF to images with memory optimization (150 DPI + smart compression)
-        logger.info("📄 Converting PDF to images with memory optimization (DPI: 150, compression: 9)...")
-        image_paths, images_folder = await pdf_to_png_async(pdf_path, base_images_folder="images")
-        
-        if not image_paths:
-            logger.error("No images were created from the PDF")
+        logger.info(f"Starting PyMuPDF PDF processing: {pdf_path}")
+
+        encoded_images = await _extract_financial_pages_as_b64(pdf_path)
+        if not encoded_images:
+            logger.warning("No financial pages found in PDF")
             return None
-        
-        convert_time = time.time() - start_time
-        memory_after_convert = psutil.virtual_memory().percent
-        logger.info(f"✅ Created {len(image_paths)} images in {convert_time:.2f}s")
-        logger.info(f"💾 Memory after conversion: {memory_after_convert:.1f}%")
-        
-        # Memory check and cleanup if needed
-        if memory_after_convert > 75:
-            logger.info("⚠️ High memory usage, forcing cleanup...")
-            gc.collect()
-            memory_after_gc = psutil.virtual_memory().percent
-            logger.info(f"💾 Memory after cleanup: {memory_after_gc:.1f}%")
-        
-        # Step 2: Process pages with batch processing for memory control
-        logger.info(f"📄 Processing {len(image_paths)} pages with batch processing (5 pages per batch)")
-        
-        # Step 3: Run OCR with memory-optimized batch processing
-        ocr_start = time.time()
-        logger.info("🔍 Running memory-optimized OCR processing...")
-        ocr_results = await process_ocr_from_images_async(image_paths)
-        
-        if not ocr_results:
-            logger.error("OCR processing failed")
-            return None
-            
-        ocr_time = time.time() - ocr_start
-        memory_after_ocr = psutil.virtual_memory().percent
-        logger.info(f"✅ OCR completed in {ocr_time:.2f}s. Found {len(ocr_results.get('financial_pages', []))} pages with financial content")
-        logger.info(f"💾 Memory after OCR: {memory_after_ocr:.1f}%")
-        
-        # Step 4: Encode financial images with memory-optimized batch processing
-        encoded_images = []
-        if ocr_results.get('detected_image_paths'):
-            logger.info("🖼️ Encoding financial images with memory optimization...")
-            encode_start = time.time()
-            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
-            encode_time = time.time() - encode_start
-            memory_after_encode = psutil.virtual_memory().percent
-            logger.info(f"✅ Encoded {len(encoded_images)} images in {encode_time:.2f}s")
-            logger.info(f"💾 Memory after encoding: {memory_after_encode:.1f}%")
-        
-        # Memory cleanup before AI analysis
-        if memory_after_ocr > 70:
-            logger.info("⚠️ Performing memory cleanup before AI analysis...")
-            gc.collect()
-            memory_before_ai = psutil.virtual_memory().percent
-            logger.info(f"💾 Memory before AI analysis: {memory_before_ai:.1f}%")
-        
-        # Step 5: Use financial_text if available, otherwise use all_pages_text
-        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
-        
-        if not text_for_analysis:
-            logger.warning("No text extracted from PDF")
-            return None
-        
-        # Step 6: AI analysis with text AND images for maximum accuracy
-        ai_start = time.time()
-        logger.info("🤖 Starting comprehensive AI analysis (text + images)...")
-        financial_metrics = await analyze_financial_metrics_async(text_for_analysis, encoded_images)
-        
-        ai_time = time.time() - ai_start
+
+        financial_metrics = await _call_openai_vision_general(encoded_images)
+
         total_time = time.time() - start_time
-        memory_final = psutil.virtual_memory().percent
-        
-        logger.info(f"✅ AI analysis completed in {ai_time:.2f}s")
-        logger.info(f"🎉 TOTAL PROCESSING TIME: {total_time:.2f}s")
-        logger.info(f"💾 Final memory usage: {memory_final:.1f}% (started at {memory_start:.1f}%)")
-        logger.info(f"📊 Memory efficiency: {memory_final - memory_start:+.1f}% change")
-        
-        # Post-OCR cleanup: Delete images immediately after successful processing
-        if images_folder and CLEANUP_CONFIG["post_ocr_cleanup"]:
-            await post_ocr_cleanup_async(images_folder)
-        
+        logger.info(f"PDF processing completed in {total_time:.2f}s")
         return financial_metrics
-        
-    except Exception as e:
-        logger.error(f"Error in optimized PDF processing: {str(e)}")
-        # Cleanup images even on error
-        if 'images_folder' in locals() and images_folder and CLEANUP_CONFIG["post_ocr_cleanup"]:
-            await post_ocr_cleanup_async(images_folder)
-        return None
-    finally:
-        # Always resume background tasks
-        ai_processing_active = False
-        logger.info("▶️ Background tasks resumed")
 
-# Keep the original function as backup
-async def process_local_pdf_async(pdf_path: str):
-    """Process a local PDF file using OCR and extract financial metrics."""
-    try:
-        logger.info(f"Starting local PDF processing: {pdf_path}")
-        
-        # Convert PDF to images
-        logger.info("Converting PDF to images...")
-        image_paths, images_folder = await pdf_to_png_async(pdf_path, base_images_folder="images")
-        
-        if not image_paths:
-            logger.error("No images were created from the PDF")
-            return None
-        
-        logger.info(f"Created {len(image_paths)} images from PDF")
-        
-        # Run OCR on all pages
-        logger.info("Running OCR on all pages...")
-        ocr_results = await process_ocr_from_images_async(image_paths)
-        
-        if not ocr_results:
-            logger.error("OCR processing failed")
-            return None
-            
-        logger.info(f"OCR completed. Found {len(ocr_results.get('financial_pages', []))} pages with financial content")
-        
-        # Encode financial images to base64
-        encoded_images = []
-        if ocr_results.get('detected_image_paths'):
-            logger.info("Encoding financial images...")
-            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
-            logger.info(f"Encoded {len(encoded_images)} images")
-        
-        # Use financial_text if available, otherwise use all_pages_text
-        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
-        
-        if not text_for_analysis:
-            logger.warning("No text extracted from PDF")
-            return None
-        
-        # Analyze with AI
-        logger.info("Starting AI analysis...")
-        financial_metrics = await analyze_financial_metrics_async(text_for_analysis, encoded_images)
-        
-        logger.info("AI analysis completed successfully")
-        return financial_metrics
-        
     except Exception as e:
-        logger.error(f"Error in process_local_pdf_async: {str(e)}")
+        logger.error(f"Error in PDF processing: {str(e)}")
         return None
-
-# Clear messages API endpoint removed by user request
 
 @app.post("/api/ai_analyze")
 async def ai_analyze(file: UploadFile = File(...)):
@@ -3840,39 +3838,22 @@ async def test_quarterly_extract(file: UploadFile = File(...)):
 
         logger.info(f"[TEST] Quarterly extraction for: {file.filename}")
 
-        image_paths, images_folder = await pdf_to_png_async(temp_file_path, "images_concall")
-        if not image_paths:
-            raise HTTPException(status_code=422, detail="No images created from PDF")
+        encoded_images = await _extract_financial_pages_as_b64(temp_file_path)
+        if not encoded_images:
+            raise HTTPException(status_code=422, detail="No financial pages detected in PDF")
 
-        ocr_results = await process_ocr_all_financial_pages_async(image_paths)
+        ai_response = await _call_openai_vision_quarterly(encoded_images)
 
-        encoded_images = []
-        if ocr_results.get('detected_image_paths'):
-            encoded_images = await encode_images_async(ocr_results['detected_image_paths'])
-
-        text_for_analysis = ocr_results.get('financial_text') or ocr_results.get('all_pages_text', '')
-        if not text_for_analysis:
-            raise HTTPException(status_code=422, detail="No text extracted from PDF")
-
-        ai_response = await _analyze_quarterly_results_chunked(
-            ocr_results.get('detected_image_paths', []),
-            text_for_analysis
-        )
-
-        # Cleanup
         try:
             await aiofiles.os.remove(temp_file_path)
-            if images_folder:
-                import shutil
-                await asyncio.to_thread(shutil.rmtree, images_folder, True)
         except Exception:
             pass
 
         return {
             "success": True,
             "filename": file.filename,
-            "financial_pages_found": len(ocr_results.get('financial_pages', [])),
-            "images_sent_to_ai": len(ocr_results.get('detected_image_paths', [])),
+            "financial_pages_found": len(encoded_images),
+            "images_sent_to_ai": len(encoded_images),
             "quarterly_results": ai_response
         }
 
@@ -3880,6 +3861,53 @@ async def test_quarterly_extract(file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.error(f"[TEST] Quarterly extraction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/upload_quarterly_pdf")
+async def upload_quarterly_pdf(file: UploadFile = File(...), stock_symbol: str = Form(...), exchange: str = Form("NSE")):
+    """Upload a quarterly result PDF, run PyMuPDF + AI extraction, and save to quarterly_results DB."""
+    try:
+        stock_symbol = stock_symbol.strip().upper()
+        if not stock_symbol:
+            raise HTTPException(status_code=400, detail="stock_symbol is required")
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file_path = os.path.join(temp_dir, file.filename)
+
+        async with aiofiles.open(temp_file_path, 'wb') as f:
+            content = await file.read()
+            await f.write(content)
+
+        logger.info(f"[UPLOAD] Quarterly extraction for {stock_symbol}: {file.filename}")
+
+        encoded_images = await _extract_financial_pages_as_b64(temp_file_path)
+        if not encoded_images:
+            raise HTTPException(status_code=422, detail="No financial pages detected in PDF")
+
+        ai_response = await _call_openai_vision_quarterly(encoded_images)
+        stored = await process_quarterly_results(ai_response, stock_symbol, exchange=exchange)
+
+        try:
+            await aiofiles.os.remove(temp_file_path)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "stock_symbol": stock_symbol,
+            "filename": file.filename,
+            "periods_stored": len(stored) if stored else 0,
+            "quarterly_results": ai_response
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[UPLOAD] Quarterly extraction error for {stock_symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

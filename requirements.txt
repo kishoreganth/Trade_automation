@@ -46,6 +46,7 @@ opencv-python==4.12.0.88
 packaging==25.0
 pandas==2.3.3
 pdf2image==1.17.0
+PyMuPDF
 pillow==11.3.0
 propcache==0.4.1
 protobuf==6.32.1
