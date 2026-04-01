@@ -260,6 +260,11 @@
                                 <span>Upload PDF</span>
                             </button>
                             <span id="peResultCount" class="result-count"></span>
+                            <div style="flex:1"></div>
+                            <button id="peFormulaToggleBtn" class="btn-refresh btn-sm pe-formula-btn" title="Manage FY EPS formulas">
+                                <i data-lucide="sigma"></i>
+                                <span>Formulas</span>
+                            </button>
                         </div>
                         <div id="peUploadPanel" style="display:none; margin-bottom:1rem; padding:1rem; border:1px solid var(--border-color, #2a3042); border-radius:8px; background:var(--card-bg, #1a1f2e);">
                             <form id="peUploadForm" style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
@@ -295,6 +300,7 @@
                                         <th>Quarter</th>
                                         <th>Year</th>
                                         <th>Qtr EPS</th>
+                                        <th>Cum. EPS</th>
                                         <th>FY EPS (Est.)</th>
                                         <th>CMP (&#8377;)</th>
                                         <th>PE</th>
@@ -600,6 +606,42 @@
                 <button class="confirm-modal-btn confirm" id="confirmOrderBtn">
                     <i data-lucide="rocket"></i> Yes, Place Orders
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulas Modal (body-level for proper fixed positioning) -->
+    <div id="peFormulaModal" class="pe-modal-overlay" style="display:none;">
+        <div class="pe-modal-content">
+            <div class="pe-modal-header">
+                <h4 style="margin:0;font-size:1.05rem;">FY EPS Formulas</h4>
+                <button type="button" id="peFormulaModalClose" class="pe-modal-close">&times;</button>
+            </div>
+            <div class="pe-modal-section-label">Active Formulas</div>
+            <div id="peFormulaList" class="pe-formula-list"></div>
+            <div class="pe-modal-divider"></div>
+            <button type="button" id="peFormulaCreateToggle" class="pe-formula-create-toggle">
+                <i data-lucide="plus" style="width:15px;height:15px;"></i> Create New Formula
+            </button>
+            <div id="peFormulaCreatePanel" style="display:none;">
+                <form id="peFormulaForm">
+                    <div class="pe-modal-field" style="margin-top:12px;">
+                        <label>Formula Name</label>
+                        <input type="text" id="pfName" required placeholder="e.g. Latest Qtr Only">
+                    </div>
+                    <p class="pe-modal-hint">Variables: <code>Q1-Q4</code> (quarter), <code>N3/N6/N9</code> (cumulative), <code>PFY</code> (prev FY), <code>PQ4</code> (prev Q4), <code>PN9/PN6</code> (prev cumulative). e.g. <code>N9+PQ4</code>, <code>N6*2</code></p>
+                    <div class="pe-modal-expr-grid">
+                        <div class="pe-modal-field"><label>Q1</label><input type="text" id="pfQ1" value="Q1*4" required placeholder="Q1*4"></div>
+                        <div class="pe-modal-field"><label>Q2</label><input type="text" id="pfQ2" value="(Q1+Q2)*2" required placeholder="(Q1+Q2)*2"></div>
+                        <div class="pe-modal-field"><label>Q3</label><input type="text" id="pfQ3" value="(Q1+Q2+Q3)*4/3" required placeholder="(Q1+Q2+Q3)*4/3"></div>
+                        <div class="pe-modal-field"><label>Q4</label><input type="text" id="pfQ4" value="FY" required placeholder="FY"></div>
+                    </div>
+                    <div id="peFormulaModalStatus" style="display:none;padding:6px 10px;border-radius:4px;font-size:0.8rem;margin-top:8px;"></div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+                        <button type="button" id="peFormulaModalCancelBtn" class="pe-modal-btn-cancel">Cancel</button>
+                        <button type="submit" id="peFormulaModalSaveBtn" class="pe-modal-btn-save">Save Formula</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

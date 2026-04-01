@@ -84,10 +84,11 @@ async def call_openai_vision(encoded_images: list[str]) -> dict:
 The document may have TWO tables: Standalone and Consolidated (check the title of each table).
 
 **TABLE STRUCTURE:**
-Each table has exactly 4 data columns:
-- Column 1, 2, 3: Under "Quarter ended" header (3 quarterly periods)
-- Column 4: Under "Year Ended" header (full year annual data)
-You MUST extract ALL 4 columns. Do not skip the Year Ended column.
+Each table typically has 4-6+ data columns:
+- 3 columns under "Quarter ended" header (individual quarterly periods)
+- 0-2 columns under "Six Month ended" / "Nine Month ended" header (cumulative periods — NOT always present)
+- 1 column under "Year Ended" header (full year annual data)
+You MUST extract ALL columns as separate entries — quarterly, cumulative, AND annual.
 
 **ROW STRUCTURE (top to bottom in each table):**
 Row 1: "Revenue from Operations" — this is the FIRST income row
@@ -107,6 +108,11 @@ Then expense rows, then profit rows, then tax, then EPS at bottom.
 - March ending → Q4, FY = same year
 - Year Ended column → period_type = "annual", quarter = "FY"
 
+**period_type mapping for cumulative columns:**
+- "Six Month ended" column → period_type = "six_month", quarter = same as matching quarterly date (Q2)
+- "Nine Month ended" column → period_type = "nine_month", quarter = same as matching quarterly date (Q3)
+- These are FULL entries with ALL rows extracted (revenue, expenses, PAT, EPS, etc.), same schema as quarterly entries.
+
 IMPORTANT: Return ONLY raw JSON. No markdown, no code blocks.
 If a page is NOT a financial results table, IGNORE it completely.
 
@@ -116,7 +122,7 @@ If a page is NOT a financial results table, IGNORE it completely.
     "standalone_periods": [
         {
             "column_header": "30.06.2025",
-            "period_type": "quarter",
+            "period_type": "quarter | six_month | nine_month | annual",
             "quarter": "Q1",
             "financial_year": "2026",
             "revenue_from_operations": number_or_null,
@@ -141,7 +147,9 @@ If a page is NOT a financial results table, IGNORE it completely.
 }
 
 Rules:
-- MUST be 4 entries per table: 3 quarterly + 1 annual.
+- Extract EVERY data column as a separate entry: quarterly columns + cumulative columns (six_month/nine_month) + annual column.
+- A Q3 PDF typically has: 3 quarterly + 2 nine_month + 1 annual = 6 entries per table.
+- A Q2 PDF typically has: 3 quarterly + 2 six_month + 1 annual = 6 entries per table.
 - null for dash (-) or blank cells. Never use 0 or 0.0 for dashes.
 - Return numbers exactly as printed in the document."""
 
@@ -155,10 +163,11 @@ Rules:
         "type": "text",
         "text": "\nSTEP-BY-STEP EXTRACTION:\n"
                "1. Each image = one table (Standalone or Consolidated). Identify which from the title.\n"
-               "2. Locate the 4 data columns: 3 quarterly + 1 annual (Year Ended).\n"
-               "3. For EACH column, go row by row reading the cell at that column position.\n"
-               "4. Return 4 entries per table. Do NOT skip the Year Ended column.\n"
-               "5. VERIFY per column: Total Income ≈ Revenue + Other Income."
+               "2. Locate ALL data columns: quarterly + cumulative (Six/Nine Month ended) + annual (Year Ended).\n"
+               "3. For EACH column (including cumulative), extract ALL rows as a full entry with the correct period_type.\n"
+               "4. Cumulative columns get period_type 'six_month' or 'nine_month', with quarter matching the date.\n"
+               "5. Do NOT skip any column. Do NOT skip the Year Ended column.\n"
+               "6. VERIFY per column: Total Income ≈ Revenue + Other Income."
     })
 
     t0 = time.time()
@@ -192,13 +201,16 @@ def _parse_period_date(column_header: str):
 
 def calculate_fy_eps(periods: list[dict], eps_key: str = "eps_basic") -> dict:
     """
-    Q1 -> Q1*4 | Q2 -> (Q1+Q2)*2 | Q3 -> (Q1+Q2+Q3)*4/3 | Q4/FY -> annual EPS
+    Prefers cumulative period entries (nine_month/six_month) when available, falls back to sum of quarters.
+    Q1 -> Q1*4 | Q2 -> N6*2 or (Q1+Q2)*2 | Q3 -> N9*4/3 or (Q1+Q2+Q3)*4/3 | Q4/FY -> annual EPS
     """
     if not periods:
         return {"quarter": None, "fy": None, "formula": None, "value": None}
 
     quarterly = [p for p in periods if p.get("period_type") == "quarter"]
     annual = [p for p in periods if p.get("period_type") == "annual"]
+    nine_month = [p for p in periods if p.get("period_type") == "nine_month"]
+    six_month = [p for p in periods if p.get("period_type") == "six_month"]
 
     if not quarterly and not annual:
         return {"quarter": None, "fy": None, "formula": None, "value": None}
@@ -208,6 +220,18 @@ def calculate_fy_eps(periods: list[dict], eps_key: str = "eps_basic") -> dict:
     latest = quarterly[0] if quarterly else None
     current_q = latest.get("quarter", "").upper() if latest else None
     current_fy = latest.get("financial_year", "") if latest else None
+
+    cum_eps = None
+    if current_q == "Q3" and nine_month:
+        nm = [p for p in nine_month if p.get("financial_year") == current_fy]
+        nm.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+        if nm:
+            cum_eps = nm[0].get(eps_key)
+    elif current_q == "Q2" and six_month:
+        sm = [p for p in six_month if p.get("financial_year") == current_fy]
+        sm.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+        if sm:
+            cum_eps = sm[0].get(eps_key)
 
     same_fy = {}
     for p in quarterly:
@@ -234,20 +258,28 @@ def calculate_fy_eps(periods: list[dict], eps_key: str = "eps_basic") -> dict:
             result["formula"] = "Q1*4"
             result["value"] = round(q1 * 4, 4)
     elif current_q == "Q2":
-        q1, q2 = same_fy.get("Q1"), same_fy.get("Q2")
-        if q1 is not None and q2 is not None:
-            result["formula"] = "(Q1+Q2)*2"
-            result["value"] = round((q1 + q2) * 2, 4)
-        elif q2 is not None:
-            result["formula"] = "Q2*4"
-            result["value"] = round(q2 * 4, 4)
+        if cum_eps is not None:
+            result["formula"] = "N6*2"
+            result["value"] = round(cum_eps * 2, 4)
+        else:
+            q1, q2 = same_fy.get("Q1"), same_fy.get("Q2")
+            if q1 is not None and q2 is not None:
+                result["formula"] = "(Q1+Q2)*2"
+                result["value"] = round((q1 + q2) * 2, 4)
+            elif q2 is not None:
+                result["formula"] = "Q2*4"
+                result["value"] = round(q2 * 4, 4)
     elif current_q == "Q3":
-        vals = [same_fy.get(q) for q in ("Q1", "Q2", "Q3")]
-        available = [v for v in vals if v is not None]
-        if available:
-            n = len(available)
-            result["formula"] = f"sum({n}Q)*4/{n}"
-            result["value"] = round(sum(available) * 4 / n, 4)
+        if cum_eps is not None:
+            result["formula"] = "N9*4/3"
+            result["value"] = round(cum_eps * 4 / 3, 4)
+        else:
+            vals = [same_fy.get(q) for q in ("Q1", "Q2", "Q3")]
+            available = [v for v in vals if v is not None]
+            if available:
+                n = len(available)
+                result["formula"] = f"sum({n}Q)*4/{n}"
+                result["value"] = round(sum(available) * 4 / n, 4)
     elif current_q == "FY":
         result["formula"] = "FY"
         result["value"] = fy_eps
@@ -267,8 +299,28 @@ def compute_all_fy_eps(ai_response: dict) -> dict:
     }
 
 
-def print_fy_eps_summary(fy_eps: dict, symbol: str):
-    """Print a clean FY EPS summary table."""
+def print_fy_eps_summary(fy_eps: dict, symbol: str, ai_response: dict = None):
+    """Print a clean FY EPS summary table with cumulative period source values."""
+    if ai_response:
+        cum_vals = []
+        for tag, periods in [("Standalone", ai_response.get("standalone_periods", [])),
+                             ("Consolidated", ai_response.get("consolidated_periods", []))]:
+            for p in periods:
+                pt = p.get("period_type", "")
+                if pt in ("six_month", "nine_month"):
+                    n_label = "N6" if pt == "six_month" else "N9"
+                    q = p.get("quarter", "?")
+                    fy = p.get("financial_year", "?")
+                    cb = p.get("eps_basic")
+                    cd = p.get("eps_diluted")
+                    cum_vals.append(f"  {tag} {n_label} ({q}/{fy}): basic={cb}, diluted={cd}")
+        if cum_vals:
+            print(f"\nCumulative periods extracted from PDF:")
+            for line in cum_vals:
+                print(line)
+        else:
+            print(f"\nCumulative periods: Not available in this PDF")
+
     print(f"\nFY EPS ESTIMATES for {symbol}:")
     print(f"  {'Type':<25} {'Quarter':<8} {'FY':<6} {'Formula':<15} {'FY EPS':>10}")
     print(f"  {'-'*25} {'-'*8} {'-'*6} {'-'*15} {'-'*10}")
@@ -316,23 +368,44 @@ async def store_quarterly_results(ai_response, symbol, exchange, pdf_path):
     fy_formula_c = fy_eps["consolidated_basic"].get("formula")
 
     period_map = {}
+    cum_map_s = {}
+    cum_map_c = {}
     for p in standalone_periods:
         q, fy = p.get('quarter'), p.get('financial_year')
+        pt = p.get('period_type', 'quarter')
         if not q or not fy:
             continue
-        key = (q, fy)
-        if key not in period_map:
-            period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
-        period_map[key]["standalone"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+        data = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+        if pt in ('six_month', 'nine_month'):
+            cum_map_s[(q, fy)] = data
+        else:
+            key = (q, fy)
+            if key not in period_map:
+                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+            period_map[key]["standalone"] = data
 
     for p in consolidated_periods:
         q, fy = p.get('quarter'), p.get('financial_year')
+        pt = p.get('period_type', 'quarter')
         if not q or not fy:
             continue
-        key = (q, fy)
-        if key not in period_map:
-            period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
-        period_map[key]["consolidated"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+        data = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+        if pt in ('six_month', 'nine_month'):
+            cum_map_c[(q, fy)] = data
+        else:
+            key = (q, fy)
+            if key not in period_map:
+                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+            period_map[key]["consolidated"] = data
+
+    for (q, fy), cum_data in cum_map_s.items():
+        if (q, fy) in period_map and period_map[(q, fy)]["standalone"]:
+            period_map[(q, fy)]["standalone"]["cumulative_eps_basic"] = cum_data.get("eps_basic")
+            period_map[(q, fy)]["standalone"]["cumulative_eps_diluted"] = cum_data.get("eps_diluted")
+    for (q, fy), cum_data in cum_map_c.items():
+        if (q, fy) in period_map and period_map[(q, fy)]["consolidated"]:
+            period_map[(q, fy)]["consolidated"]["cumulative_eps_basic"] = cum_data.get("eps_basic")
+            period_map[(q, fy)]["consolidated"]["cumulative_eps_diluted"] = cum_data.get("eps_diluted")
 
     now_iso = datetime.now(IST).isoformat()
     stored = []
@@ -346,6 +419,10 @@ async def store_quarterly_results(ai_response, symbol, exchange, pdf_path):
             eps_diluted_s = s_data.get('eps_diluted') if s_data else None
             eps_basic_c = c_data.get('eps_basic') if c_data else None
             eps_diluted_c = c_data.get('eps_diluted') if c_data else None
+            cum_eps_basic_s = s_data.get('cumulative_eps_basic') if s_data else None
+            cum_eps_diluted_s = s_data.get('cumulative_eps_diluted') if s_data else None
+            cum_eps_basic_c = c_data.get('cumulative_eps_basic') if c_data else None
+            cum_eps_diluted_c = c_data.get('cumulative_eps_diluted') if c_data else None
 
             await db.execute("""
                 INSERT INTO quarterly_results
@@ -354,9 +431,11 @@ async def store_quarterly_results(ai_response, symbol, exchange, pdf_path):
                  fy_eps_basic_standalone, fy_eps_diluted_standalone,
                  fy_eps_basic_consolidated, fy_eps_diluted_consolidated,
                  fy_eps_formula_standalone, fy_eps_formula_consolidated,
+                 cumulative_eps_basic_standalone, cumulative_eps_diluted_standalone,
+                 cumulative_eps_basic_consolidated, cumulative_eps_diluted_consolidated,
                  standalone_data, consolidated_data, raw_ai_response,
                  source_pdf_url, source_message_id, exchange, units, stock_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(stock_symbol, quarter, financial_year)
                 DO UPDATE SET
                     company_name = excluded.company_name,
@@ -371,6 +450,10 @@ async def store_quarterly_results(ai_response, symbol, exchange, pdf_path):
                     fy_eps_diluted_consolidated = excluded.fy_eps_diluted_consolidated,
                     fy_eps_formula_standalone = excluded.fy_eps_formula_standalone,
                     fy_eps_formula_consolidated = excluded.fy_eps_formula_consolidated,
+                    cumulative_eps_basic_standalone = excluded.cumulative_eps_basic_standalone,
+                    cumulative_eps_diluted_standalone = excluded.cumulative_eps_diluted_standalone,
+                    cumulative_eps_basic_consolidated = excluded.cumulative_eps_basic_consolidated,
+                    cumulative_eps_diluted_consolidated = excluded.cumulative_eps_diluted_consolidated,
                     standalone_data = excluded.standalone_data,
                     consolidated_data = excluded.consolidated_data,
                     raw_ai_response = excluded.raw_ai_response,
@@ -382,6 +465,7 @@ async def store_quarterly_results(ai_response, symbol, exchange, pdf_path):
                 eps_basic_s, eps_diluted_s, eps_basic_c, eps_diluted_c,
                 fy_basic_s, fy_diluted_s, fy_basic_c, fy_diluted_c,
                 fy_formula_s, fy_formula_c,
+                cum_eps_basic_s, cum_eps_diluted_s, cum_eps_basic_c, cum_eps_diluted_c,
                 json.dumps(s_data) if s_data else None,
                 json.dumps(c_data) if c_data else None,
                 json.dumps(ai_response) if not stored else None,
@@ -554,12 +638,18 @@ async def main():
     print(f"\n{'='*60}")
     print(f"RESULTS: {result.get('company_name', 'Unknown')}")
     print(f"  Units: {result.get('units', '?')}")
-    print(f"  Standalone periods: {len(standalone)}")
-    print(f"  Consolidated periods: {len(consolidated)}")
+    s_qtr = [p for p in standalone if p.get("period_type") == "quarter"]
+    s_cum = [p for p in standalone if p.get("period_type") in ("six_month", "nine_month")]
+    s_ann = [p for p in standalone if p.get("period_type") == "annual"]
+    c_qtr = [p for p in consolidated if p.get("period_type") == "quarter"]
+    c_cum = [p for p in consolidated if p.get("period_type") in ("six_month", "nine_month")]
+    c_ann = [p for p in consolidated if p.get("period_type") == "annual"]
+    print(f"  Standalone: {len(s_qtr)} quarterly + {len(s_cum)} cumulative + {len(s_ann)} annual = {len(standalone)} total")
+    print(f"  Consolidated: {len(c_qtr)} quarterly + {len(c_cum)} cumulative + {len(c_ann)} annual = {len(consolidated)} total")
 
     # --- FY EPS ---
     fy_eps = compute_all_fy_eps(result)
-    print_fy_eps_summary(fy_eps, symbol)
+    print_fy_eps_summary(fy_eps, symbol, result)
 
     best = fy_eps["consolidated_diluted"] if fy_eps["consolidated_diluted"].get("value") else \
            fy_eps["consolidated_basic"] if fy_eps["consolidated_basic"].get("value") else \

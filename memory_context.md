@@ -5,6 +5,85 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-04-01: N-column cumulative EPS (N3/N6/N9) — extract + fallback + formula vars
+
+**What**: AI extracts `cumulative_eps_basic` / `cumulative_eps_diluted` from Three/Six/Nine Month ended columns; DB stores; API enriches `quarters_eps` with N3/N6/N9 (DB first, else Q1+Q2+Q3), PFY/PN9/PN6 from prior FY, PQ4=PFY−PN9; frontend `evalFormulaExpr` supports N3/N6/N9/PFY/PN9/PN6/PQ4.
+
+**DB** (`quarterly_results`): `cumulative_eps_*_{standalone,consolidated}` (ALTER migration).
+
+**Files**: `nse_url_test.py` (prompt, `_upsert_quarterly_result`, `/api/pe_analysis`, POST formula regex), `test_pymupdf_speed.py` (prompt, `store_quarterly_results`), `static/js/dashboard.js`, `static/index.html` (hint). Fixed INSERT typo: 30 placeholders for 30 columns.
+
+**Performance**: No extra network; one extra query per stock for prior FY rows; N fallback is O(1) per symbol.
+
+---
+
+### 2026-03-31: PE Formula UI/UX Cleanup — Dropdown replaced with blurred modal
+
+**What changed**: Replaced messy inline dropdown with a clean blurred-overlay modal for formula management.
+
+**HTML** (`index.html`):
+- Removed `pe-formula-dropdown-wrap` / `peFormulaDropdown` — no more inline dropdown
+- "Formulas" button pushed to far-right via `flex:1` spacer in `.pe-controls`
+- Single unified modal `#peFormulaModal`: top section = formula list with checkboxes, bottom = collapsible "Create New Formula" form
+- Expression inputs in 2×2 grid layout
+- "Create New" is a dashed-border toggle button inside the modal
+
+**CSS** (`styles.css`):
+- `.pe-modal-overlay` — `backdrop-filter: blur(6px)` + fade-in animation
+- `.pe-modal-content` — slide-in animation, rounded corners, scrollable
+- `.pe-formula-item` — card-style rows with hover states, delete button only appears on hover
+- `.pe-formula-btn` — distinct purple-tinted style for the Formulas button
+- `.pe-formula-create-toggle` — dashed border button
+- `.pe-modal-expr-grid` — 2-column grid for Q1/Q2/Q3/Q4 expression fields
+- Removed all old dropdown styles (`pe-formula-dropdown-wrap`, `pe-formula-dropdown`, etc.)
+
+**JS** (`dashboard.js`):
+- `renderPeFormulaDropdown()` → `renderPeFormulaList()` — renders formula cards with name + all 4 expressions shown
+- Removed dropdown toggle/click-outside logic
+- Formulas button now directly opens modal via `openFormulaModal()`
+- "Create New" toggles collapsible form panel inside modal
+- On save, form collapses, list refreshes, modal stays open
+- Cancel button collapses form (doesn't close modal)
+
+**Files changed**: `static/index.html`, `static/js/dashboard.js`, `static/css/styles.css`
+
+---
+
+### 2026-03-31: PE Analysis Formula System — DB-stored named formulas with multi-select
+
+**What changed**: Replaced per-row formula dropdown with global formula management system.
+
+**DB** (`pe_formulas` table):
+- Schema: `id, name (UNIQUE), q1_expr, q2_expr, q3_expr, q4_expr, is_default, created_at, updated_at`
+- Seeded with "Default" formula (`Q1*4`, `(Q1+Q2)*2`, `(Q1+Q2+Q3)*4/3`, `FY`)
+- Each formula stores an expression per quarter level (Q1/Q2/Q3/Q4)
+
+**Backend APIs** (`nse_url_test.py`):
+- `GET /api/pe_formulas` — list all formulas
+- `POST /api/pe_formulas` — create new formula (validates expression chars: Q1-Q4, digits, operators)
+- `DELETE /api/pe_formulas/{id}` — delete custom formula (default protected)
+- `/api/pe_analysis` — returns `quarters_eps` per stock for client-side formula evaluation
+
+**Frontend** (`dashboard.js`, `index.html`):
+- "Formulas" dropdown button at top-right of PE table controls
+- Dropdown shows all saved formulas with checkboxes + "Create New" button
+- Default formula always checked (disabled), custom formulas toggleable
+- "Create New" opens modal with: Name, Q1/Q2/Q3/Q4 expression fields, validation help text
+- `evalFormulaExpr(expr, quartersEps)` — safe expression evaluator (whitelist validation + Function constructor)
+- `renderPEAnalysis()` — when N formulas checked, uses `rowspan` for shared columns (Stock/Quarter/Year/QtrEPS/CMP/Sector/File/Date), separate cells for FY EPS + PE per formula
+- Active formula IDs in `localStorage('peActiveFormulaIds')`
+- Formula labels: green badge for Default, amber badge for custom
+
+**CSS** (`styles.css`):
+- `.pe-formula-dropdown` — positioned dropdown with checkboxes
+- `.pe-modal-overlay/content` — modal for formula creation
+- `.pe-formula-row` — sub-row styling with dashed border
+- `.pe-formula-label-default/custom` — colored badges
+
+**Files changed**: `nse_url_test.py`, `static/index.html`, `static/js/dashboard.js`, `static/css/styles.css`
+
+---
+
 ### 2026-03-31: PE Analysis Table Revamp — New columns (Qtr EPS, Year, File link)
 
 **What changed**: PE Analysis table columns restructured for clarity.
@@ -4504,3 +4583,31 @@ CLEANUP_CONFIG["cleanup_interval_hours"] = 12  # Run every 12 hours
 - Same FY EPS values stored on **every row** for that stock (stock-level, not per-quarter).
 - API `/api/quarterly_results` automatically returns new fields (uses `SELECT *`).
 - `test_quarterly_extract.py` updated with `calculate_full_year_eps()` + `print_eps_analysis()` for standalone testing.
+
+## 2026-04-01 - Cumulative Periods as Separate Entries + FY EPS from N6/N9
+
+**Files**: `nse_url_test.py`, `test_pymupdf_speed.py`
+
+**Problem**: AI was attaching cumulative EPS to quarterly entries via `cumulative_eps_basic/diluted` fields, but mapping was error-prone (e.g., "Nine Month ended 31-Dec-24" incorrectly assigned to Q2 FY2026 instead of Q3 FY2025). Also `_calculate_full_year_eps()` never used cumulative EPS.
+
+**Solution**: Cumulative columns (Six/Nine Month ended) are now extracted as **separate full entries** with `period_type = "six_month"` or `"nine_month"` — containing ALL financial data (revenue, PAT, EPS, etc.), not just EPS.
+
+**AI Prompt changes** (both files):
+- period_type now supports: `quarter | six_month | nine_month | annual`
+- Q3 PDF → 3 quarterly + 2 nine_month + 1 annual = 6 entries per table
+- Q2 PDF → 3 quarterly + 2 six_month + 1 annual = 6 entries per table
+- Removed old `cumulative_eps_basic/diluted` fields from prompt schema
+
+**`_calculate_full_year_eps()` / `calculate_fy_eps()`**:
+- Finds `nine_month`/`six_month` entries matching current FY
+- Q2: Prefer `N6*2` (from six_month entry) → fallback to `(Q1+Q2)*2` → `Q2*4`
+- Q3: Prefer `N9*4/3` (from nine_month entry) → fallback to `sum(nQ)*4/n`
+
+**`process_quarterly_results()` / `store_quarterly_results()`**:
+- Separates cumulative entries from quarterly/annual during period_map building
+- Injects cumulative EPS into matching quarterly row's `cumulative_eps_*` DB columns
+- Cumulative entries NOT stored as separate DB rows (no schema change needed)
+
+**Performance**: LLOYDSME Q3 FY2026: 58.22 → **53.85** (N9*4/3 from accurate 9-month cumulative)
+
+**Also fixed**: `test_pymupdf_speed.py` INSERT 30→29 placeholders.

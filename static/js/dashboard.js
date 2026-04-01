@@ -2242,9 +2242,111 @@ function setupScheduleEditor(config) {
 
 
 // ============================================
-// PE Analysis — Quarterly Results
+// PE Analysis — Quarterly Results + Formula System
 // ============================================
 let peAnalysisData = [];
+let peFormulas = [];
+let peActiveFormulaIds = JSON.parse(localStorage.getItem('peActiveFormulaIds') || '[]');
+
+function peClassFor(pe) {
+    if (!pe) return '';
+    if (pe < 15) return 'pe-low';
+    if (pe < 30) return 'pe-mid';
+    return 'pe-high';
+}
+
+function evalFormulaExpr(expr, quartersEps) {
+    if (!expr) return null;
+    if (expr === 'FY') return quartersEps['FY'] || null;
+    const vars = {
+        PQ4: quartersEps['PQ4'], PFY: quartersEps['PFY'],
+        PN9: quartersEps['PN9'], PN6: quartersEps['PN6'],
+        N9: quartersEps['N9'], N6: quartersEps['N6'], N3: quartersEps['N3'],
+        Q4: quartersEps['Q4'], Q3: quartersEps['Q3'], Q2: quartersEps['Q2'], Q1: quartersEps['Q1'],
+    };
+    let safe = expr;
+    for (const [k, v] of Object.entries(vars)) {
+        safe = safe.replace(new RegExp(k, 'g'), v != null ? String(v) : 'NaN');
+    }
+    if (!/^[\d\s+\-*/().NaN]+$/.test(safe) || safe.includes('NaN')) return null;
+    try { const v = new Function('return ' + safe)(); return isFinite(v) ? +v.toFixed(2) : null; }
+    catch { return null; }
+}
+
+function getFormulaExprForQuarter(formula, quarter) {
+    const q = (quarter || '').toUpperCase();
+    if (q === 'Q1') return formula.q1_expr;
+    if (q === 'Q2') return formula.q2_expr;
+    if (q === 'Q3') return formula.q3_expr;
+    if (q === 'Q4' || q === 'FY') return formula.q4_expr;
+    return null;
+}
+
+async function loadPeFormulas() {
+    try {
+        const resp = await fetch('/api/pe_formulas');
+        const data = await resp.json();
+        if (data.success) {
+            peFormulas = data.formulas;
+            const defaultF = peFormulas.find(f => f.is_default);
+            if (defaultF && !peActiveFormulaIds.includes(defaultF.id)) {
+                peActiveFormulaIds = [defaultF.id, ...peActiveFormulaIds.filter(id => id !== defaultF.id)];
+                localStorage.setItem('peActiveFormulaIds', JSON.stringify(peActiveFormulaIds));
+            }
+            peActiveFormulaIds = peActiveFormulaIds.filter(id => peFormulas.some(f => f.id === id));
+            renderPeFormulaList();
+        }
+    } catch (e) { console.error('Error loading PE formulas:', e); }
+}
+
+function renderPeFormulaList() {
+    const list = document.getElementById('peFormulaList');
+    if (!list) return;
+    list.innerHTML = peFormulas.map(f => {
+        const checked = peActiveFormulaIds.includes(f.id) ? 'checked' : '';
+        const disabled = f.is_default ? 'disabled' : '';
+        const delBtn = f.is_default ? '' : `<button class="pe-formula-del-btn" onclick="deletePeFormula(${f.id})" title="Delete">&times;</button>`;
+        const exprs = `Q1: ${f.q1_expr}  ·  Q2: ${f.q2_expr}  ·  Q3: ${f.q3_expr}  ·  Q4: ${f.q4_expr}`;
+        return `<div class="pe-formula-item">
+            <input type="checkbox" value="${f.id}" ${checked} ${disabled} onchange="togglePeFormula(${f.id}, this.checked)">
+            <div class="pe-formula-item-info">
+                <div class="pe-formula-item-name">${f.name}${f.is_default ? ' <span style="font-size:0.6rem;color:#888;font-weight:400;">(built-in)</span>' : ''}</div>
+                <div class="pe-formula-item-expr">${exprs}</div>
+            </div>
+            ${delBtn}
+        </div>`;
+    }).join('');
+}
+
+function togglePeFormula(id, checked) {
+    if (checked && !peActiveFormulaIds.includes(id)) peActiveFormulaIds.push(id);
+    if (!checked) peActiveFormulaIds = peActiveFormulaIds.filter(i => i !== id);
+    localStorage.setItem('peActiveFormulaIds', JSON.stringify(peActiveFormulaIds));
+    renderPEAnalysis();
+}
+
+async function deletePeFormula(id) {
+    if (!confirm('Delete this formula?')) return;
+    try {
+        const resp = await fetch(`/api/pe_formulas/${id}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.success) {
+            peActiveFormulaIds = peActiveFormulaIds.filter(i => i !== id);
+            localStorage.setItem('peActiveFormulaIds', JSON.stringify(peActiveFormulaIds));
+            await loadPeFormulas();
+            renderPEAnalysis();
+        }
+    } catch (e) { console.error('Delete formula error:', e); }
+}
+
+async function createPeFormula(name, q1, q2, q3, q4) {
+    const resp = await fetch('/api/pe_formulas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, q1_expr: q1, q2_expr: q2, q3_expr: q3, q4_expr: q4 })
+    });
+    return await resp.json();
+}
 
 async function loadQuarterlyResults() {
     await loadPEAnalysis();
@@ -2256,6 +2358,7 @@ async function loadPEAnalysis(fetchCmp = false) {
         const data = await resp.json();
         if (data.success && data.results) {
             peAnalysisData = data.results;
+            if (peFormulas.length === 0) await loadPeFormulas();
             renderPEAnalysis();
         }
     } catch (e) {
@@ -2269,7 +2372,6 @@ function renderPEAnalysis() {
     if (!tbody) return;
 
     const symbolFilter = (document.getElementById('peSymbolFilter')?.value || '').trim().toLowerCase();
-
     let filtered = peAnalysisData;
     if (symbolFilter) {
         filtered = filtered.filter(r =>
@@ -2285,52 +2387,102 @@ function renderPEAnalysis() {
         document.getElementById('peResultCount').textContent = '';
         return;
     }
-
     emptyMsg.style.display = 'none';
     document.getElementById('peResultCount').textContent = `${filtered.length} stocks`;
 
     const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '';
 
-    tbody.innerHTML = filtered.map(r => {
-        const qtrEps = r.qtr_eps;
-        const fyEps = r.fy_eps;
-        const cmp = r.cmp;
-        const pe = r.pe;
-        let peVal = '';
-        let peClass = '';
-        const effectivePe = pe || (fyEps && fyEps > 0 && cmp && cmp > 0 ? cmp / fyEps : null);
-        if (effectivePe) {
-            peVal = effectivePe.toFixed(2);
-            if (effectivePe < 15) peClass = 'pe-low';
-            else if (effectivePe < 30) peClass = 'pe-mid';
-            else peClass = 'pe-high';
-        }
-        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
-        const epsTitle = r.fy_eps_formula || '';
-        const basisBadge = r.eps_basis === 'S' ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;">S</span>' : '';
+    const activeFormulas = peFormulas.filter(f => peActiveFormulaIds.includes(f.id));
+    if (activeFormulas.length === 0 && peFormulas.length > 0) {
+        const def = peFormulas.find(f => f.is_default);
+        if (def) activeFormulas.push(def);
+    }
+    const rowCount = Math.max(activeFormulas.length, 1);
 
+    let html = '';
+    for (const r of filtered) {
+        const qtrEps = r.qtr_eps;
+        const cmp = r.cmp;
+        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
+        const basisBadge = r.eps_basis === 'S' ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;">S</span>' : '';
         const fy = r.financial_year || '';
         const yearMatch = fy.match(/\d{4}/);
         const yearDisplay = yearMatch ? yearMatch[0] : fy;
-
+        const sym = r.stock_symbol || '';
         const fileLink = r.source_pdf_url
             ? `<a href="${r.source_pdf_url}" target="_blank" rel="noopener" title="${r.source_pdf_url}" style="color:#60a5fa;"><i data-lucide="file-text" style="width:16px;height:16px;"></i></a>`
             : '';
+        const stockCell = `<strong>${sym}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}`;
 
-        return `<tr>
-            <td><strong>${r.stock_symbol || ''}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}</td>
-            <td>${r.quarter || ''}</td>
-            <td>${yearDisplay}</td>
-            <td>${fmt(qtrEps)}${basisBadge}</td>
-            <td title="${epsTitle}">${fmt(fyEps)}</td>
-            <td>${cmp ? '₹' + fmt(cmp) : ''}</td>
-            <td class="${peClass}" style="font-weight:600">${peVal}</td>
-            <td><small>${r.sector || ''}</small></td>
-            <td style="text-align:center">${fileLink}</td>
-            <td>${updated}</td>
-        </tr>`;
-    }).join('');
+        const qe = r.quarters_eps || {};
+        const q = (r.quarter || '').toUpperCase();
+        let cumEpsVal = null, cumLabel = '';
+        if (q === 'Q3') { cumEpsVal = qe['N9']; cumLabel = 'N9'; }
+        else if (q === 'Q2') { cumEpsVal = qe['N6']; cumLabel = 'N6'; }
+        else if (q === 'Q4' || q === 'FY') { cumLabel = 'FY'; }
+        const cumCell = cumEpsVal != null
+            ? `${fmt(cumEpsVal)}<br><small style="color:#888">${cumLabel}</small>`
+            : (cumLabel ? `<small style="color:#555">${cumLabel}</small>` : '');
 
+        for (let fi = 0; fi < rowCount; fi++) {
+            const formula = activeFormulas[fi];
+            const isFirst = fi === 0;
+            const isDefault = formula && formula.is_default;
+
+            let computedEps, computedPe, exprLabel;
+            if (!formula || isDefault) {
+                computedEps = r.fy_eps;
+                computedPe = r.pe || (r.fy_eps && r.fy_eps > 0 && cmp > 0 ? +(cmp / r.fy_eps).toFixed(2) : null);
+                exprLabel = r.fy_eps_formula || '';
+            } else {
+                const expr = getFormulaExprForQuarter(formula, r.quarter);
+                computedEps = evalFormulaExpr(expr, r.quarters_eps || {});
+                computedPe = (computedEps && computedEps > 0 && cmp > 0) ? +(cmp / computedEps).toFixed(2) : null;
+                exprLabel = expr || '';
+            }
+
+            const peVal = computedPe ? computedPe.toFixed(2) : '';
+            const labelClass = isDefault ? 'pe-formula-label-default' : 'pe-formula-label-custom';
+            const formulaTag = formula ? `<span class="pe-formula-label ${labelClass}">${formula.name}</span>` : '';
+            const rowClass = isFirst ? '' : ' class="pe-formula-row"';
+
+            if (rowCount === 1) {
+                html += `<tr>
+                    <td>${stockCell}</td>
+                    <td>${r.quarter || ''}</td>
+                    <td>${yearDisplay}</td>
+                    <td>${fmt(qtrEps)}${basisBadge}</td>
+                    <td>${cumCell}</td>
+                    <td>${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td>${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td><small>${r.sector || ''}</small></td>
+                    <td style="text-align:center">${fileLink}</td>
+                    <td>${updated}</td>
+                </tr>`;
+            } else if (isFirst) {
+                html += `<tr>
+                    <td rowspan="${rowCount}">${stockCell}</td>
+                    <td rowspan="${rowCount}">${r.quarter || ''}</td>
+                    <td rowspan="${rowCount}">${yearDisplay}</td>
+                    <td rowspan="${rowCount}">${fmt(qtrEps)}${basisBadge}</td>
+                    <td rowspan="${rowCount}">${cumCell}</td>
+                    <td>${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td rowspan="${rowCount}">${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td rowspan="${rowCount}"><small>${r.sector || ''}</small></td>
+                    <td rowspan="${rowCount}" style="text-align:center">${fileLink}</td>
+                    <td rowspan="${rowCount}">${updated}</td>
+                </tr>`;
+            } else {
+                html += `<tr${rowClass}>
+                    <td>${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                </tr>`;
+            }
+        }
+    }
+    tbody.innerHTML = html;
     if (typeof refreshIcons === 'function') refreshIcons();
 }
 
@@ -2360,6 +2512,92 @@ function renderPEAnalysis() {
             });
         }
 
+        // Formula modal — single button opens modal
+        const formulaToggle = document.getElementById('peFormulaToggleBtn');
+        const modal = document.getElementById('peFormulaModal');
+        const modalClose = document.getElementById('peFormulaModalClose');
+        const createToggle = document.getElementById('peFormulaCreateToggle');
+        const createPanel = document.getElementById('peFormulaCreatePanel');
+        const modalCancel = document.getElementById('peFormulaModalCancelBtn');
+
+        function openFormulaModal() {
+            renderPeFormulaList();
+            if (createPanel) createPanel.style.display = 'none';
+            modal.style.display = 'flex';
+            if (typeof refreshIcons === 'function') refreshIcons();
+        }
+        function closeFormulaModal() { modal.style.display = 'none'; }
+
+        if (formulaToggle) formulaToggle.addEventListener('click', openFormulaModal);
+        if (modalClose) modalClose.addEventListener('click', closeFormulaModal);
+        if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeFormulaModal(); });
+
+        if (createToggle && createPanel) {
+            createToggle.addEventListener('click', () => {
+                const isOpen = createPanel.style.display !== 'none';
+                createPanel.style.display = isOpen ? 'none' : 'block';
+                if (!isOpen) {
+                    document.getElementById('pfName').value = '';
+                    document.getElementById('pfQ1').value = 'Q1*4';
+                    document.getElementById('pfQ2').value = '(Q1+Q2)*2';
+                    document.getElementById('pfQ3').value = '(Q1+Q2+Q3)*4/3';
+                    document.getElementById('pfQ4').value = 'FY';
+                    const st = document.getElementById('peFormulaModalStatus');
+                    if (st) st.style.display = 'none';
+                }
+            });
+        }
+
+        if (modalCancel && createPanel) {
+            modalCancel.addEventListener('click', () => { createPanel.style.display = 'none'; });
+        }
+
+        // Formula creation form
+        const form = document.getElementById('peFormulaForm');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const saveBtn = document.getElementById('peFormulaModalSaveBtn');
+                const st = document.getElementById('peFormulaModalStatus');
+                const name = document.getElementById('pfName').value.trim();
+                if (!name) return;
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                try {
+                    const result = await createPeFormula(
+                        name,
+                        document.getElementById('pfQ1').value.trim(),
+                        document.getElementById('pfQ2').value.trim(),
+                        document.getElementById('pfQ3').value.trim(),
+                        document.getElementById('pfQ4').value.trim()
+                    );
+                    if (result.success) {
+                        createPanel.style.display = 'none';
+                        await loadPeFormulas();
+                        const newF = peFormulas.find(f => f.name === name);
+                        if (newF && !peActiveFormulaIds.includes(newF.id)) {
+                            peActiveFormulaIds.push(newF.id);
+                            localStorage.setItem('peActiveFormulaIds', JSON.stringify(peActiveFormulaIds));
+                        }
+                        renderPeFormulaList();
+                        renderPEAnalysis();
+                    } else {
+                        st.style.display = 'block';
+                        st.style.background = '#7f1d1d'; st.style.color = '#fca5a5';
+                        st.textContent = result.detail || 'Failed to save';
+                    }
+                } catch (err) {
+                    st.style.display = 'block';
+                    st.style.background = '#7f1d1d'; st.style.color = '#fca5a5';
+                    st.textContent = 'Error: ' + err.message;
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Formula';
+                }
+            });
+        }
+
+        // Upload form
         const uploadForm = document.getElementById('peUploadForm');
         if (uploadForm) {
             uploadForm.addEventListener('submit', async (e) => {

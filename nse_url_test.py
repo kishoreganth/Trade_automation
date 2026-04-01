@@ -868,6 +868,10 @@ async def init_db():
             ("cmp", "REAL"),
             ("pe", "REAL"),
             ("cmp_updated_at", "TEXT"),
+            ("cumulative_eps_basic_standalone", "REAL"),
+            ("cumulative_eps_diluted_standalone", "REAL"),
+            ("cumulative_eps_basic_consolidated", "REAL"),
+            ("cumulative_eps_diluted_consolidated", "REAL"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
@@ -876,7 +880,26 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_symbol ON quarterly_results(stock_symbol)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_quarter_fy ON quarterly_results(quarter, financial_year)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_stock_id ON quarterly_results(stock_id)")
-        
+
+        # Create pe_formulas table for custom FY EPS estimation formulas
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pe_formulas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                q1_expr TEXT NOT NULL DEFAULT 'Q1*4',
+                q2_expr TEXT NOT NULL DEFAULT '(Q1+Q2)*2',
+                q3_expr TEXT NOT NULL DEFAULT '(Q1+Q2+Q3)*4/3',
+                q4_expr TEXT NOT NULL DEFAULT 'FY',
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            INSERT OR IGNORE INTO pe_formulas (name, q1_expr, q2_expr, q3_expr, q4_expr, is_default, created_at, updated_at)
+            VALUES ('Default', 'Q1*4', '(Q1+Q2)*2', '(Q1+Q2+Q3)*4/3', 'FY', 1, datetime('now'), datetime('now'))
+        """)
+
         # Create users table for authentication
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -1797,14 +1820,17 @@ def _parse_period_date(column_header: str) -> datetime:
 
 def _calculate_full_year_eps(periods: List[Dict[str, Any]], eps_key: str = "eps_basic") -> Dict[str, Any]:
     """
-    Calculate full_year_estimated_EPS from extracted quarterly periods.
-    Q1 -> Q1*4 | Q2 -> (Q1+Q2)*2 | Q3 -> (Q1+Q2+Q3)*4/3 | Q4/FY -> annual EPS
+    Calculate full_year_estimated_EPS from extracted periods.
+    Prefers cumulative period entries (nine_month/six_month) when available, falls back to sum of quarters.
+    Q1 -> Q1*4 | Q2 -> N6*2 or (Q1+Q2)*2 | Q3 -> N9*4/3 or (Q1+Q2+Q3)*4/3 | Q4/FY -> annual EPS
     """
     if not periods:
         return {}
 
     quarterly = [p for p in periods if p.get("period_type") == "quarter"]
     annual = [p for p in periods if p.get("period_type") == "annual"]
+    nine_month = [p for p in periods if p.get("period_type") == "nine_month"]
+    six_month = [p for p in periods if p.get("period_type") == "six_month"]
 
     if not quarterly and not annual:
         return {}
@@ -1814,6 +1840,18 @@ def _calculate_full_year_eps(periods: List[Dict[str, Any]], eps_key: str = "eps_
     latest = quarterly[0] if quarterly else None
     current_q = latest.get("quarter", "").upper() if latest else None
     current_fy = latest.get("financial_year", "") if latest else None
+
+    cum_eps = None
+    if current_q == "Q3" and nine_month:
+        nm = [p for p in nine_month if p.get("financial_year") == current_fy]
+        nm.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+        if nm:
+            cum_eps = nm[0].get(eps_key)
+    elif current_q == "Q2" and six_month:
+        sm = [p for p in six_month if p.get("financial_year") == current_fy]
+        sm.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+        if sm:
+            cum_eps = sm[0].get(eps_key)
 
     same_fy = {}
     for p in quarterly:
@@ -1840,20 +1878,28 @@ def _calculate_full_year_eps(periods: List[Dict[str, Any]], eps_key: str = "eps_
             result["formula"] = "Q1*4"
             result["value"] = round(q1 * 4, 4)
     elif current_q == "Q2":
-        q1, q2 = same_fy.get("Q1"), same_fy.get("Q2")
-        if q1 is not None and q2 is not None:
-            result["formula"] = "(Q1+Q2)*2"
-            result["value"] = round((q1 + q2) * 2, 4)
-        elif q2 is not None:
-            result["formula"] = "Q2*4"
-            result["value"] = round(q2 * 4, 4)
+        if cum_eps is not None:
+            result["formula"] = "N6*2"
+            result["value"] = round(cum_eps * 2, 4)
+        else:
+            q1, q2 = same_fy.get("Q1"), same_fy.get("Q2")
+            if q1 is not None and q2 is not None:
+                result["formula"] = "(Q1+Q2)*2"
+                result["value"] = round((q1 + q2) * 2, 4)
+            elif q2 is not None:
+                result["formula"] = "Q2*4"
+                result["value"] = round(q2 * 4, 4)
     elif current_q == "Q3":
-        vals = [same_fy.get(q) for q in ("Q1", "Q2", "Q3")]
-        available = [v for v in vals if v is not None]
-        if available:
-            n = len(available)
-            result["formula"] = f"sum({n}Q)*4/{n}"
-            result["value"] = round(sum(available) * 4 / n, 4)
+        if cum_eps is not None:
+            result["formula"] = "N9*4/3"
+            result["value"] = round(cum_eps * 4 / 3, 4)
+        else:
+            vals = [same_fy.get(q) for q in ("Q1", "Q2", "Q3")]
+            available = [v for v in vals if v is not None]
+            if available:
+                n = len(available)
+                result["formula"] = f"sum({n}Q)*4/{n}"
+                result["value"] = round(sum(available) * 4 / n, 4)
     elif current_q == "FY":
         result["formula"] = "FY"
         result["value"] = fy_eps
@@ -1886,6 +1932,10 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
     eps_diluted_s = standalone_data.get('eps_diluted') if standalone_data else None
     eps_basic_c = consolidated_data.get('eps_basic') if consolidated_data else None
     eps_diluted_c = consolidated_data.get('eps_diluted') if consolidated_data else None
+    cum_eps_basic_s = standalone_data.get('cumulative_eps_basic') if standalone_data else None
+    cum_eps_diluted_s = standalone_data.get('cumulative_eps_diluted') if standalone_data else None
+    cum_eps_basic_c = consolidated_data.get('cumulative_eps_basic') if consolidated_data else None
+    cum_eps_diluted_c = consolidated_data.get('cumulative_eps_diluted') if consolidated_data else None
 
     await db.execute("""
         INSERT INTO quarterly_results
@@ -1894,9 +1944,11 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
          fy_eps_basic_standalone, fy_eps_diluted_standalone,
          fy_eps_basic_consolidated, fy_eps_diluted_consolidated,
          fy_eps_formula_standalone, fy_eps_formula_consolidated,
+         cumulative_eps_basic_standalone, cumulative_eps_diluted_standalone,
+         cumulative_eps_basic_consolidated, cumulative_eps_diluted_consolidated,
          standalone_data, consolidated_data, raw_ai_response,
          source_pdf_url, source_message_id, exchange, units, stock_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(stock_symbol, quarter, financial_year)
         DO UPDATE SET
             company_name = excluded.company_name,
@@ -1911,6 +1963,10 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
             fy_eps_diluted_consolidated = excluded.fy_eps_diluted_consolidated,
             fy_eps_formula_standalone = excluded.fy_eps_formula_standalone,
             fy_eps_formula_consolidated = excluded.fy_eps_formula_consolidated,
+            cumulative_eps_basic_standalone = excluded.cumulative_eps_basic_standalone,
+            cumulative_eps_diluted_standalone = excluded.cumulative_eps_diluted_standalone,
+            cumulative_eps_basic_consolidated = excluded.cumulative_eps_basic_consolidated,
+            cumulative_eps_diluted_consolidated = excluded.cumulative_eps_diluted_consolidated,
             standalone_data = excluded.standalone_data,
             consolidated_data = excluded.consolidated_data,
             raw_ai_response = excluded.raw_ai_response,
@@ -1923,6 +1979,7 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
         eps_basic_s, eps_diluted_s, eps_basic_c, eps_diluted_c,
         fy_eps_basic_s, fy_eps_diluted_s, fy_eps_basic_c, fy_eps_diluted_c,
         fy_eps_formula_s, fy_eps_formula_c,
+        cum_eps_basic_s, cum_eps_diluted_s, cum_eps_basic_c, cum_eps_diluted_c,
         json.dumps(standalone_data) if standalone_data else None,
         json.dumps(consolidated_data) if consolidated_data else None,
         json.dumps(raw_ai_response) if raw_ai_response else None,
@@ -1958,26 +2015,49 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
         logger.info(f"FY EPS for {stock_symbol}: S_basic={fy_basic_s} ({fy_formula_s}), C_basic={fy_basic_c} ({fy_formula_c})")
 
         # Build a lookup: (quarter, financial_year) → {standalone_data, consolidated_data}
+        # Separate cumulative entries (six_month/nine_month) from quarterly/annual
         period_map = {}
+        cum_map_s = {}  # (quarter, fy) → cumulative standalone data
+        cum_map_c = {}  # (quarter, fy) → cumulative consolidated data
         for p in standalone_periods:
             q = p.get('quarter')
             fy = p.get('financial_year')
+            pt = p.get('period_type', 'quarter')
             if not q or not fy:
                 continue
-            key = (q, fy)
-            if key not in period_map:
-                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
-            period_map[key]["standalone"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+            data = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+            if pt in ('six_month', 'nine_month'):
+                cum_map_s[(q, fy)] = data
+            else:
+                key = (q, fy)
+                if key not in period_map:
+                    period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+                period_map[key]["standalone"] = data
 
         for p in consolidated_periods:
             q = p.get('quarter')
             fy = p.get('financial_year')
+            pt = p.get('period_type', 'quarter')
             if not q or not fy:
                 continue
-            key = (q, fy)
-            if key not in period_map:
-                period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
-            period_map[key]["consolidated"] = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+            data = {k: v for k, v in p.items() if k not in ('column_header', 'period_type', 'quarter', 'financial_year')}
+            if pt in ('six_month', 'nine_month'):
+                cum_map_c[(q, fy)] = data
+            else:
+                key = (q, fy)
+                if key not in period_map:
+                    period_map[key] = {"period_ended": p.get('column_header'), "standalone": None, "consolidated": None}
+                period_map[key]["consolidated"] = data
+
+        # Inject cumulative EPS into matching quarterly entries
+        for (q, fy), cum_data in cum_map_s.items():
+            if (q, fy) in period_map and period_map[(q, fy)]["standalone"]:
+                period_map[(q, fy)]["standalone"]["cumulative_eps_basic"] = cum_data.get("eps_basic")
+                period_map[(q, fy)]["standalone"]["cumulative_eps_diluted"] = cum_data.get("eps_diluted")
+        for (q, fy), cum_data in cum_map_c.items():
+            if (q, fy) in period_map and period_map[(q, fy)]["consolidated"]:
+                period_map[(q, fy)]["consolidated"]["cumulative_eps_basic"] = cum_data.get("eps_basic")
+                period_map[(q, fy)]["consolidated"]["cumulative_eps_diluted"] = cum_data.get("eps_diluted")
 
         now_iso = get_ist_now().isoformat()
         stored = []
@@ -2094,10 +2174,11 @@ async def _call_openai_vision_quarterly(encoded_images: list) -> dict:
 The document may have TWO tables: Standalone and Consolidated (check the title of each table).
 
 **TABLE STRUCTURE:**
-Each table has exactly 4 data columns:
-- Column 1, 2, 3: Under "Quarter ended" header (3 quarterly periods)
-- Column 4: Under "Year Ended" header (full year annual data)
-You MUST extract ALL 4 columns. Do not skip the Year Ended column.
+Each table typically has 4-6+ data columns:
+- 3 columns under "Quarter ended" header (individual quarterly periods)
+- 0-2 columns under "Six Month ended" / "Nine Month ended" header (cumulative periods — NOT always present)
+- 1 column under "Year Ended" header (full year annual data)
+You MUST extract ALL columns as separate entries — quarterly, cumulative, AND annual.
 
 **ROW STRUCTURE (top to bottom in each table):**
 Row 1: "Revenue from Operations" — this is the FIRST income row
@@ -2117,6 +2198,11 @@ Then expense rows, then profit rows, then tax, then EPS at bottom.
 - March ending → Q4, FY = same year
 - Year Ended column → period_type = "annual", quarter = "FY"
 
+**period_type mapping for cumulative columns:**
+- "Six Month ended" column → period_type = "six_month", quarter = same as matching quarterly date (Q2)
+- "Nine Month ended" column → period_type = "nine_month", quarter = same as matching quarterly date (Q3)
+- These are FULL entries with ALL rows extracted (revenue, expenses, PAT, EPS, etc.), same schema as quarterly entries.
+
 IMPORTANT: Return ONLY raw JSON. No markdown, no code blocks.
 If a page is NOT a financial results table, IGNORE it completely.
 
@@ -2126,7 +2212,7 @@ If a page is NOT a financial results table, IGNORE it completely.
     "standalone_periods": [
         {
             "column_header": "30.06.2025",
-            "period_type": "quarter",
+            "period_type": "quarter | six_month | nine_month | annual",
             "quarter": "Q1",
             "financial_year": "2026",
             "revenue_from_operations": number_or_null,
@@ -2151,7 +2237,9 @@ If a page is NOT a financial results table, IGNORE it completely.
 }
 
 Rules:
-- MUST be 4 entries per table: 3 quarterly + 1 annual.
+- Extract EVERY data column as a separate entry: quarterly columns + cumulative columns (six_month/nine_month) + annual column.
+- A Q3 PDF typically has: 3 quarterly + 2 nine_month + 1 annual = 6 entries per table.
+- A Q2 PDF typically has: 3 quarterly + 2 six_month + 1 annual = 6 entries per table.
 - null for dash (-) or blank cells. Never use 0 or 0.0 for dashes.
 - Return numbers exactly as printed in the document."""
 
@@ -2165,10 +2253,11 @@ Rules:
         "type": "text",
         "text": "\nSTEP-BY-STEP EXTRACTION:\n"
                "1. Each image = one table (Standalone or Consolidated). Identify which from the title.\n"
-               "2. Locate the 4 data columns: 3 quarterly + 1 annual (Year Ended).\n"
-               "3. For EACH column, go row by row reading the cell at that column position.\n"
-               "4. Return 4 entries per table. Do NOT skip the Year Ended column.\n"
-               "5. VERIFY per column: Total Income ≈ Revenue + Other Income."
+               "2. Locate ALL data columns: quarterly + cumulative (Six/Nine Month ended) + annual (Year Ended).\n"
+               "3. For EACH column (including cumulative), extract ALL rows as a full entry with the correct period_type.\n"
+               "4. Cumulative columns get period_type 'six_month' or 'nine_month', with quarter matching the date.\n"
+               "5. Do NOT skip any column. Do NOT skip the Year Ended column.\n"
+               "6. VERIFY per column: Total Income ≈ Revenue + Other Income."
     })
 
     t0 = time.time()
@@ -3651,6 +3740,85 @@ async def get_pe_analysis(fetch_cmp: bool = False):
             """)
             rows = await cursor.fetchall()
 
+            # Fetch per-quarter EPS + cumulative EPS for all stocks/FYs (for formula variants)
+            quarters_map = {}
+            sym_fy_set = set((r["stock_symbol"], r["financial_year"]) for r in rows)
+            if sym_fy_set:
+                where_parts = " OR ".join(["(stock_symbol = ? AND financial_year = ?)"] * len(sym_fy_set))
+                flat_params = [v for pair in sym_fy_set for v in pair]
+                qtr_cursor = await db.execute(f"""
+                    SELECT stock_symbol, quarter, financial_year,
+                           COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
+                                    eps_diluted_standalone, eps_basic_standalone) AS qtr_eps,
+                           COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
+                                    cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
+                    FROM quarterly_results
+                    WHERE quarter NOT IN ('FY') AND ({where_parts})
+                """, flat_params)
+                for qr in await qtr_cursor.fetchall():
+                    sym = qr["stock_symbol"]
+                    if sym not in quarters_map:
+                        quarters_map[sym] = {}
+                    if qr["qtr_eps"] is not None:
+                        quarters_map[sym][qr["quarter"]] = round(qr["qtr_eps"], 4)
+                    if qr["cum_eps"] is not None:
+                        n_key = {"Q1": "N3", "Q2": "N6", "Q3": "N9"}.get(qr["quarter"])
+                        if n_key:
+                            quarters_map[sym][n_key] = round(qr["cum_eps"], 4)
+
+            # Fetch previous FY EPS + previous cumulative N9 for PFY/PN9/PQ4 formula variables
+            prev_fy_map = {}
+            sym_set = set(r["stock_symbol"] for r in rows)
+            sym_fy_map = {r["stock_symbol"]: r["financial_year"] for r in rows}
+            if sym_set:
+                for sym in sym_set:
+                    current_fy = sym_fy_map.get(sym)
+                    if not current_fy:
+                        continue
+                    try:
+                        prev_fy_str = str(int(current_fy) - 1)
+                    except (ValueError, TypeError):
+                        continue
+                    pfy_cursor = await db.execute("""
+                        SELECT quarter,
+                               COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
+                                        eps_diluted_standalone, eps_basic_standalone) AS eps,
+                               COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
+                                        cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
+                        FROM quarterly_results
+                        WHERE stock_symbol = ? AND financial_year = ?
+                    """, (sym, prev_fy_str))
+                    pfy_data = {}
+                    for pr in await pfy_cursor.fetchall():
+                        if pr["quarter"] == "FY" and pr["eps"] is not None:
+                            pfy_data["PFY"] = round(pr["eps"], 4)
+                        if pr["quarter"] == "Q3" and pr["cum_eps"] is not None:
+                            pfy_data["PN9"] = round(pr["cum_eps"], 4)
+                        if pr["quarter"] == "Q2" and pr["cum_eps"] is not None:
+                            pfy_data["PN6"] = round(pr["cum_eps"], 4)
+                    if pfy_data:
+                        prev_fy_map[sym] = pfy_data
+
+            # Merge prev FY data + compute fallback N values into quarters_map
+            for sym in sym_set:
+                if sym not in quarters_map:
+                    quarters_map[sym] = {}
+                qm = quarters_map[sym]
+                # Fallback: compute N from individual quarters if AI didn't extract cumulative
+                if "N3" not in qm and qm.get("Q1") is not None:
+                    qm["N3"] = round(qm["Q1"], 4)
+                if "N6" not in qm and qm.get("Q1") is not None and qm.get("Q2") is not None:
+                    qm["N6"] = round(qm["Q1"] + qm["Q2"], 4)
+                if "N9" not in qm and qm.get("Q1") is not None and qm.get("Q2") is not None and qm.get("Q3") is not None:
+                    qm["N9"] = round(qm["Q1"] + qm["Q2"] + qm["Q3"], 4)
+                # Add previous FY data
+                pfy = prev_fy_map.get(sym, {})
+                for k, v in pfy.items():
+                    qm[k] = v
+                # Compute PQ4 = PFY - PN9
+                if "PFY" in qm and "PN9" in qm:
+                    qm["PQ4"] = round(qm["PFY"] - qm["PN9"], 4)
+
         stock_data = []
         symbols_needing_cmp = []
         for r in rows:
@@ -3684,6 +3852,7 @@ async def get_pe_analysis(fetch_cmp: bool = False):
                 "cmp_updated_at": r["cmp_updated_at"],
                 "updated_at": r["updated_at"],
                 "source_pdf_url": r["source_pdf_url"],
+                "quarters_eps": quarters_map.get(r["stock_symbol"], {}),
             })
             if fetch_cmp and fy_eps_rounded and fy_eps_rounded > 0:
                 symbols_needing_cmp.append(r["stock_symbol"])
@@ -3749,6 +3918,62 @@ async def get_pe_analysis(fetch_cmp: bool = False):
     except Exception as e:
         logger.error(f"Error in PE analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pe_formulas")
+async def get_pe_formulas():
+    """List all saved PE formulas."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM pe_formulas ORDER BY is_default DESC, name")
+        formulas = [dict(r) for r in await cursor.fetchall()]
+    return {"success": True, "formulas": formulas}
+
+
+@app.post("/api/pe_formulas")
+async def create_pe_formula(body: dict):
+    """Create a new PE formula."""
+    import re
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Formula name is required")
+    expr_pattern = re.compile(r'^[QNPFY\d\s+\-*/().]+$')
+    for key in ("q1_expr", "q2_expr", "q3_expr", "q4_expr"):
+        val = (body.get(key) or "").strip()
+        if not val:
+            raise HTTPException(status_code=400, detail=f"{key} is required")
+        if not expr_pattern.match(val):
+            raise HTTPException(status_code=400, detail=f"Invalid characters in {key}")
+    now_iso = get_ist_now().isoformat()
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO pe_formulas (name, q1_expr, q2_expr, q3_expr, q4_expr, is_default, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+            """, (name, body["q1_expr"].strip(), body["q2_expr"].strip(),
+                  body["q3_expr"].strip(), body["q4_expr"].strip(), now_iso, now_iso))
+            await db.commit()
+        return {"success": True}
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise HTTPException(status_code=400, detail="Formula name already exists")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/pe_formulas/{formula_id}")
+async def delete_pe_formula(formula_id: int):
+    """Delete a custom PE formula (cannot delete the default)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT is_default FROM pe_formulas WHERE id = ?", (formula_id,))
+        formula = await cursor.fetchone()
+        if not formula:
+            raise HTTPException(status_code=404, detail="Formula not found")
+        if formula["is_default"]:
+            raise HTTPException(status_code=400, detail="Cannot delete the default formula")
+        await db.execute("DELETE FROM pe_formulas WHERE id = ?", (formula_id,))
+        await db.commit()
+    return {"success": True}
 
 
 async def process_local_pdf_async_optimized(pdf_path: str):
