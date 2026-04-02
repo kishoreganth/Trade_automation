@@ -3374,14 +3374,7 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
     await ws_manager.connect(websocket)
     try:
-        # Send existing messages to new connection (get all messages, no limit)
-        messages = await get_messages_from_db(limit=0)
-        await websocket.send_json({
-            "type": "messages_list",
-            "messages": messages
-        })
-        
-        # Keep connection alive
+        await websocket.send_json({"type": "connected"})
         while True:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
@@ -3533,13 +3526,94 @@ async def backfill_sectors_endpoint(background_tasks: BackgroundTasks):
 
 
 @app.get("/api/messages")
-async def get_messages(limit: int = 0):
-    """Get all messages"""
+async def get_messages(
+    page: int = 1, per_page: int = 50,
+    search: str = "", option: str = "", exchange: str = "", sector: str = ""
+):
+    """Get paginated messages with server-side filtering."""
     try:
-        messages = await get_messages_from_db(limit)
-        return {"success": True, "messages": messages}
+        async with aiosqlite.connect(DB_PATH) as db:
+            where_clauses = []
+            params = []
+            if search:
+                q = f"%{search}%"
+                where_clauses.append("(symbol LIKE ? OR company_name LIKE ? OR description LIKE ? OR sector LIKE ? OR exchange LIKE ?)")
+                params.extend([q, q, q, q, q])
+            if option:
+                if option == "quarterly_result":
+                    where_clauses.append("(option = ? OR option = ?)")
+                    params.extend(["quarterly_result", "quaterly_result"])
+                else:
+                    where_clauses.append("option = ?")
+                    params.append(option)
+            if exchange:
+                where_clauses.append("exchange = ?")
+                params.append(exchange)
+            if sector:
+                where_clauses.append("sector = ?")
+                params.append(sector)
+
+            where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+            count_cursor = await db.execute(f"SELECT COUNT(*) FROM messages{where_sql}", params)
+            total_filtered = (await count_cursor.fetchone())[0]
+
+            total_pages = max(1, -(-total_filtered // per_page))
+            page = max(1, min(page, total_pages))
+            offset = (page - 1) * per_page
+
+            cursor = await db.execute(
+                f"SELECT * FROM messages{where_sql} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                params + [per_page, offset]
+            )
+            rows = await cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            messages = [dict(zip(columns, row)) for row in rows]
+
+            return {
+                "success": True, "messages": messages,
+                "page": page, "per_page": per_page,
+                "total_filtered": total_filtered, "total_pages": total_pages
+            }
     except Exception as e:
         logger.error(f"Error fetching messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """Lightweight stats for dashboard header cards."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            c1 = await db.execute("SELECT COUNT(*) FROM messages")
+            total = (await c1.fetchone())[0]
+
+            c2 = await db.execute("SELECT COUNT(*) FROM messages WHERE date(timestamp) = date('now')")
+            today = (await c2.fetchone())[0]
+
+            c3 = await db.execute("SELECT COUNT(DISTINCT symbol) FROM messages WHERE symbol IS NOT NULL AND symbol != ''")
+            unique = (await c3.fetchone())[0]
+
+            c4 = await db.execute("SELECT timestamp FROM messages ORDER BY timestamp DESC LIMIT 1")
+            last_row = await c4.fetchone()
+            last_time = last_row[0] if last_row else None
+
+            return {"success": True, "total_messages": total, "today_messages": today, "unique_symbols": unique, "last_message_time": last_time}
+    except Exception as e:
+        logger.error(f"Error fetching stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sectors")
+async def get_sectors():
+    """Distinct sector list from messages."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT DISTINCT sector FROM messages WHERE sector IS NOT NULL AND TRIM(sector) != '' ORDER BY sector")
+            rows = await cursor.fetchall()
+            return {"success": True, "sectors": [r[0] for r in rows]}
+    except Exception as e:
+        logger.error(f"Error fetching sectors: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stocks")

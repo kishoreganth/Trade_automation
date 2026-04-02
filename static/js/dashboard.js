@@ -6,11 +6,17 @@ let quarterlyResults = [];
 let uniqueSymbols = new Set();
 let selectedOption = 'all';
 let selectedNavSection = 'feed'; // feed | analytics | ai_analyzer | place_order
-let readMessages = new Set(); // Track read message IDs
+let readMessages = new Set();
 let wsConnectTimeout = null;
 let pollingInterval = null;
 const WS_CONNECT_TIMEOUT_MS = 5000;
 const POLL_INTERVAL_MS = 30000;
+
+let msgCurrentPage = 1;
+let msgTotalPages = 1;
+let msgTotalFiltered = 0;
+let _searchDebounce = null;
+let _statsInterval = null;
 
 // Check authentication on page load with server-side validation
 async function checkAuth() {
@@ -175,10 +181,10 @@ function connectWebSocket() {
 
     ws.onmessage = function(event) {
         const data = JSON.parse(event.data);
-        if (data.type === 'new_message') {
+        if (data.type === 'connected') {
+            // initial fetch already handled by DOMContentLoaded
+        } else if (data.type === 'new_message') {
             addNewMessage(data.message);
-        } else if (data.type === 'messages_list') {
-            loadMessages(data.messages);
         } else if (data.type === 'quarterly_results') {
             loadQuarterlyResults();
             loadBoardMeetingResults();
@@ -222,45 +228,40 @@ function updateConnectionStatus(status, isConnected) {
 }
 
 function addNewMessage(message) {
-    messages.unshift(message);
-    if (message.symbol) {
-        uniqueSymbols.add(message.symbol);
+    if (msgCurrentPage === 1) {
+        const perPage = parseInt(document.getElementById('limitSelect').value) || 50;
+        messages.unshift(message);
+        if (messages.length > perPage) messages.pop();
+        renderMessageRows(messages);
     }
-    updateStats();
+    fetchStats();
     updateUnreadBadges();
-    if ((message.sector || '').trim()) updateSectorFilterOptions();
-    renderMessages();
 }
 
 function loadMessages(messagesList) {
     messages = messagesList;
-    uniqueSymbols.clear();
-    messagesList.forEach(msg => {
-        if (msg.symbol) uniqueSymbols.add(msg.symbol);
-    });
-    updateStats();
+    renderMessageRows(messages);
     updateUnreadBadges();
-    updateSectorFilterOptions();
-    renderMessages();
 }
 
 function updateSectorFilterOptions() {
     const sectorFilter = document.getElementById('sectorFilter');
     if (!sectorFilter) return;
-    const sectors = new Set();
-    messages.forEach(msg => {
-        const s = (msg.sector || '').trim();
-        if (s) sectors.add(s);
-    });
     const currentValue = sectorFilter.value;
-    sectorFilter.innerHTML = '<option value="">All Sectors</option>';
-    [...sectors].sort().forEach(sector => {
-        const opt = document.createElement('option');
-        opt.value = sector;
-        opt.textContent = sector;
-        sectorFilter.appendChild(opt);
-    });
-    if (sectors.has(currentValue)) sectorFilter.value = currentValue;
+    fetch('/api/sectors')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            sectorFilter.innerHTML = '<option value="">All Sectors</option>';
+            data.sectors.forEach(sector => {
+                const opt = document.createElement('option');
+                opt.value = sector;
+                opt.textContent = sector;
+                sectorFilter.appendChild(opt);
+            });
+            if (data.sectors.includes(currentValue)) sectorFilter.value = currentValue;
+        })
+        .catch(() => {});
 }
 
 function loadBoardMeetingResults() {
@@ -292,109 +293,132 @@ function animateCount(el, target) {
     requestAnimationFrame(step);
 }
 
-function updateStats() {
-    const today = new Date().toDateString();
-    const todayCount = messages.filter(msg => 
-        new Date(msg.timestamp).toDateString() === today
-    ).length;
-    
-    animateCount(document.getElementById('totalMessages'), messages.length);
-    animateCount(document.getElementById('todayMessages'), todayCount);
-    animateCount(document.getElementById('uniqueSymbols'), uniqueSymbols.size);
-    
-    if (messages.length > 0) {
-        const lastTime = new Date(messages[0].timestamp);
-        document.getElementById('lastMessageTime').textContent = 
-            lastTime.toLocaleTimeString();
-    }
-    
-    document.getElementById('lastUpdate').textContent = 
-        `Last update: ${new Date().toLocaleTimeString()}`;
+function updateStats() { fetchStats(); }
+
+function fetchStats() {
+    fetch('/api/stats')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            animateCount(document.getElementById('totalMessages'), data.total_messages);
+            animateCount(document.getElementById('todayMessages'), data.today_messages);
+            animateCount(document.getElementById('uniqueSymbols'), data.unique_symbols);
+            if (data.last_message_time) {
+                document.getElementById('lastMessageTime').textContent =
+                    new Date(data.last_message_time).toLocaleTimeString();
+            }
+            document.getElementById('lastUpdate').textContent =
+                `Last update: ${new Date().toLocaleTimeString()}`;
+        })
+        .catch(() => {});
 }
 
 function renderMessages() {
-    const tbody = document.getElementById('messagesTable');
-    const globalSearch = (document.getElementById('globalSearch') || document.getElementById('symbolFilter')).value.toLowerCase().trim();
-    const limit = parseInt(document.getElementById('limitSelect').value);
-    
-    let filteredMessages = messages;
-    
-    // Global search: symbol, company_name, description, sector, exchange
-    if (globalSearch) {
-        const q = globalSearch;
-        filteredMessages = filteredMessages.filter(msg => {
-            const symbol = (msg.symbol || '').toLowerCase();
-            const company = (msg.company_name || '').toLowerCase();
-            const desc = (msg.description || '').toLowerCase();
-            const sector = (msg.sector || '').toLowerCase();
-            const exchange = (msg.exchange || '').toLowerCase();
-            return symbol.includes(q) || company.includes(q) || desc.includes(q) || sector.includes(q) || exchange.includes(q);
-        });
-    }
-    
-    // Filter by selected option (alias: quaterly_result → quarterly_result for sheet typo)
-    if (selectedOption !== 'all') {
-        filteredMessages = filteredMessages.filter(msg => optionMatches(msg.option, selectedOption));
-    }
-    
-    if (limit > 0) {
-        filteredMessages = filteredMessages.slice(0, limit);
-    }
-    
-    // Filter by exchange
+    fetchMessages(msgCurrentPage);
+}
+
+function fetchMessages(page) {
+    const search = (document.getElementById('globalSearch') || document.getElementById('symbolFilter')).value.trim();
+    const perPage = parseInt(document.getElementById('limitSelect').value) || 50;
     const exchangeFilter = document.getElementById('exchangeFilter');
-    const selectedExchange = exchangeFilter ? exchangeFilter.value : '';
-    if (selectedExchange) {
-        filteredMessages = filteredMessages.filter(msg => 
-            (msg.exchange || 'NSE').trim() === selectedExchange
-        );
-    }
-    
-    // Filter by sector
     const sectorFilter = document.getElementById('sectorFilter');
-    const selectedSector = sectorFilter ? sectorFilter.value : '';
-    if (selectedSector) {
-        filteredMessages = filteredMessages.filter(msg => 
-            (msg.sector || '').trim() === selectedSector
-        );
-    }
-    
+    const exchange = exchangeFilter ? exchangeFilter.value : '';
+    const sector = sectorFilter ? sectorFilter.value : '';
+    const option = (selectedOption && selectedOption !== 'all' && selectedOption !== 'pe_analysis' && selectedOption !== 'stock_value' && selectedOption !== 'ai_analyzer' && selectedOption !== 'place_order' && selectedOption !== 'result_concall') ? selectedOption : '';
+
+    const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
+    if (option) params.set('option', option);
+    if (exchange) params.set('exchange', exchange);
+    if (sector) params.set('sector', sector);
+
+    fetch(`/api/messages?${params}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            messages = data.messages;
+            msgCurrentPage = data.page;
+            msgTotalPages = data.total_pages;
+            msgTotalFiltered = data.total_filtered;
+            renderMessageRows(messages);
+            renderPaginationControls();
+        })
+        .catch(err => console.error('Error fetching messages:', err));
+}
+
+function _esc(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderMessageRows(messagesList) {
+    const tbody = document.getElementById('messagesTable');
     const colspan = 7;
-    
-    if (filteredMessages.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="${colspan}" class="no-messages">
-                    ${globalSearch || selectedOption !== 'all' || selectedExchange || selectedSector ? 'No messages match the filter.' : 'No messages yet. Waiting for corporate announcements...'}
-                </td>
-            </tr>
-        `;
+
+    if (!messagesList || messagesList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="no-messages">No messages match the filter.</td></tr>`;
         return;
     }
-    
-    tbody.innerHTML = filteredMessages.map(msg => {
+
+    tbody.innerHTML = messagesList.map(msg => {
         const time = new Date(msg.timestamp);
-        const fileLink = msg.file_url ? 
-            `<a href="${msg.file_url}" target="_blank" class="file-link">View File</a>` : 
-            '-';
+        const fileLink = msg.file_url ?
+            `<a href="${msg.file_url}" target="_blank" class="file-link">View File</a>` : '-';
         const exchange = (msg.exchange || 'NSE').trim();
-        const exchangeBadge = exchange === 'BSE' ? 
-            '<span class="exchange-badge bse">BSE</span>' : 
+        const exchangeBadge = exchange === 'BSE' ?
+            '<span class="exchange-badge bse">BSE</span>' :
             '<span class="exchange-badge nse">NSE</span>';
-        const sectorCell = `<td>${(msg.sector || '-').trim()}</td>`;
-        
+        const descText = _esc(msg.description || '-');
         return `
             <tr class="new-message">
                 <td class="timestamp">${time.toLocaleString()}</td>
                 <td>${exchangeBadge}</td>
-                <td>${msg.symbol ? `<span class="symbol-badge">${msg.symbol}</span>` : '-'}</td>
-                <td>${msg.company_name || '-'}</td>
-                ${sectorCell}
-                <td class="message-cell" title="${msg.description}">${msg.description || '-'}</td>
+                <td>${msg.symbol ? `<span class="symbol-badge">${_esc(msg.symbol)}</span>` : '-'}</td>
+                <td>${_esc(msg.company_name) || '-'}</td>
+                <td>${_esc((msg.sector || '-').trim())}</td>
+                <td class="message-cell" title="${descText}">${descText}</td>
                 <td>${fileLink}</td>
-            </tr>
-        `;
+            </tr>`;
     }).join('');
+}
+
+function renderPaginationControls() {
+    const wrap = document.getElementById('msgPagination');
+    if (!wrap) return;
+
+    wrap.style.display = msgTotalPages > 0 ? 'flex' : 'none';
+    document.getElementById('msgFirstBtn').disabled = msgCurrentPage <= 1;
+    document.getElementById('msgPrevBtn').disabled = msgCurrentPage <= 1;
+    document.getElementById('msgNextBtn').disabled = msgCurrentPage >= msgTotalPages;
+    document.getElementById('msgLastBtn').disabled = msgCurrentPage >= msgTotalPages;
+    document.getElementById('msgTotalFiltered').textContent = `${msgTotalFiltered.toLocaleString()} messages`;
+    document.getElementById('msgPageInput').max = msgTotalPages;
+    document.getElementById('msgPageInput').placeholder = `${msgCurrentPage}/${msgTotalPages}`;
+
+    const container = document.getElementById('msgPageNumbers');
+    const pages = _buildPageList(msgCurrentPage, msgTotalPages, 7);
+    container.innerHTML = pages.map(p => {
+        if (p === '...') return `<span class="msg-page-ellipsis">...</span>`;
+        const cls = p === msgCurrentPage ? 'msg-page-num active' : 'msg-page-num';
+        return `<button class="${cls}" data-page="${p}">${p}</button>`;
+    }).join('');
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+function _buildPageList(current, total, maxVisible) {
+    if (total <= maxVisible) return Array.from({length: total}, (_, i) => i + 1);
+    const pages = [];
+    const half = Math.floor((maxVisible - 4) / 2);
+    let start = Math.max(2, current - half);
+    let end = Math.min(total - 1, current + half);
+    if (current - half < 2) end = Math.min(total - 1, maxVisible - 2);
+    if (current + half > total - 1) start = Math.max(2, total - maxVisible + 3);
+    pages.push(1);
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < total - 1) pages.push('...');
+    pages.push(total);
+    return pages;
 }
 
 function renderBoardMeetingResults() {
@@ -441,18 +465,8 @@ function renderBoardMeetingResults() {
 }
 
 function refreshMessages() {
-    // Get the current limit setting from the UI
-    const limit = parseInt(document.getElementById('limitSelect').value);
-    const url = limit > 0 ? `/api/messages?limit=${limit}` : '/api/messages?limit=0';
-    
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            loadMessages(data.messages);
-        })
-        .catch(error => {
-            console.error('Error fetching messages:', error);
-        });
+    fetchMessages(msgCurrentPage);
+    fetchStats();
 }
 
 function loadFinancialMetricsFromAPI() {
@@ -588,7 +602,8 @@ function showContentForOption(optionValue) {
         loadLastActions();
     } else {
         messagesContainer.style.display = 'block';
-        renderMessages();
+        msgCurrentPage = 1;
+        fetchMessages(1);
     }
 }
 
@@ -919,21 +934,56 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     
-    // Initialize input event listeners
-    (document.getElementById('globalSearch') || document.getElementById('symbolFilter')).addEventListener('input', renderMessages);
+    // Initialize input event listeners with debounced search
+    const searchEl = document.getElementById('globalSearch') || document.getElementById('symbolFilter');
+    searchEl.addEventListener('input', function() {
+        clearTimeout(_searchDebounce);
+        _searchDebounce = setTimeout(() => { msgCurrentPage = 1; fetchMessages(1); }, 300);
+    });
     const exchangeFilterEl = document.getElementById('exchangeFilter');
-    if (exchangeFilterEl) exchangeFilterEl.addEventListener('change', renderMessages);
+    if (exchangeFilterEl) exchangeFilterEl.addEventListener('change', () => { msgCurrentPage = 1; fetchMessages(1); });
     const sectorFilterEl = document.getElementById('sectorFilter');
-    if (sectorFilterEl) sectorFilterEl.addEventListener('change', renderMessages);
+    if (sectorFilterEl) sectorFilterEl.addEventListener('change', () => { msgCurrentPage = 1; fetchMessages(1); });
     document.getElementById('limitSelect').addEventListener('change', function() {
         if (selectedOption === 'result_concall') {
             renderBoardMeetingResults();
         } else if (selectedOption === 'ai_analyzer') {
             renderAIAnalysisResults();
         } else if (selectedOption !== 'pe_analysis' && selectedOption !== 'stock_value') {
-            renderMessages();
+            msgCurrentPage = 1;
+            fetchMessages(1);
         }
     });
+
+    // Pagination buttons
+    document.getElementById('msgFirstBtn').addEventListener('click', () => fetchMessages(1));
+    document.getElementById('msgPrevBtn').addEventListener('click', () => {
+        if (msgCurrentPage > 1) fetchMessages(msgCurrentPage - 1);
+    });
+    document.getElementById('msgNextBtn').addEventListener('click', () => {
+        if (msgCurrentPage < msgTotalPages) fetchMessages(msgCurrentPage + 1);
+    });
+    document.getElementById('msgLastBtn').addEventListener('click', () => fetchMessages(msgTotalPages));
+    document.getElementById('msgPageNumbers').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-page]');
+        if (btn) fetchMessages(parseInt(btn.dataset.page));
+    });
+    document.getElementById('msgGoBtn').addEventListener('click', () => {
+        const val = parseInt(document.getElementById('msgPageInput').value);
+        if (val >= 1 && val <= msgTotalPages) fetchMessages(val);
+        document.getElementById('msgPageInput').value = '';
+    });
+    document.getElementById('msgPageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('msgGoBtn').click();
+    });
+
+    // Load sectors from server, stats from server
+    updateSectorFilterOptions();
+    fetchStats();
+    _statsInterval = setInterval(fetchStats, 30000);
+
+    // Initial messages fetch
+    fetchMessages(1);
     
     // Rail click handlers
     document.querySelectorAll('.rail-item[data-nav]').forEach(el => {
@@ -2586,14 +2636,110 @@ function renderPEAnalysis() {
     if (typeof refreshIcons === 'function') refreshIcons();
 }
 
+function exportPEAnalysisToExcel() {
+    const symbolFilter = (document.getElementById('peSymbolFilter')?.value || '').trim().toLowerCase();
+    let filtered = peAnalysisData;
+    if (symbolFilter) {
+        filtered = filtered.filter(r =>
+            (r.stock_symbol || '').toLowerCase().includes(symbolFilter) ||
+            (r.company_name || '').toLowerCase().includes(symbolFilter) ||
+            (r.sector || '').toLowerCase().includes(symbolFilter)
+        );
+    }
+    if (peFilterState.year.size > 0) {
+        filtered = filtered.filter(r => { const m = (r.financial_year || '').match(/\d{4}/); return m && peFilterState.year.has(m[0]); });
+    }
+    if (peFilterState.quarter.size > 0) {
+        filtered = filtered.filter(r => peFilterState.quarter.has((r.quarter || '').toUpperCase()));
+    }
+    if (peFilterState.sector.size > 0) {
+        filtered = filtered.filter(r => peFilterState.sector.has(r.sector || ''));
+    }
+    if (!filtered.length) return;
+
+    const activeFormulas = peFormulas.filter(f => peActiveFormulaIds.includes(f.id));
+    if (activeFormulas.length === 0 && peFormulas.length > 0) {
+        const def = peFormulas.find(f => f.is_default);
+        if (def) activeFormulas.push(def);
+    }
+    const rowCount = Math.max(activeFormulas.length, 1);
+
+    const rows = [];
+    const header = ['Stock', 'Company', 'Quarter', 'Year', 'Qtr EPS', 'Cum EPS', 'Formula', 'FY EPS (Est.)', 'FY EPS Formula', 'CMP', 'PE', 'Sector', 'Date'];
+    rows.push(header);
+
+    for (const r of filtered) {
+        const fy = r.financial_year || '';
+        const ym = fy.match(/\d{4}/);
+        const yearDisplay = ym ? ym[0] : fy;
+        const qe = r.quarters_eps || {};
+        const q = (r.quarter || '').toUpperCase();
+        let cumEpsVal = null;
+        if (q === 'Q3') cumEpsVal = qe['N9'];
+        else if (q === 'Q2') cumEpsVal = qe['N6'];
+        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
+
+        for (let fi = 0; fi < rowCount; fi++) {
+            const formula = activeFormulas[fi];
+            const isDefault = formula && formula.is_default;
+            let computedEps, computedPe, exprLabel, formulaName;
+            if (!formula || isDefault) {
+                computedEps = r.fy_eps;
+                computedPe = r.pe || (r.fy_eps && r.fy_eps > 0 && r.cmp > 0 ? +(r.cmp / r.fy_eps).toFixed(2) : null);
+                exprLabel = r.fy_eps_formula || '';
+                formulaName = formula ? formula.name : 'Default';
+            } else {
+                const expr = getFormulaExprForQuarter(formula, r.quarter);
+                computedEps = evalFormulaExpr(expr, r.quarters_eps || {});
+                computedPe = (computedEps && computedEps > 0 && r.cmp > 0) ? +(r.cmp / computedEps).toFixed(2) : null;
+                exprLabel = expr || '';
+                formulaName = formula.name;
+            }
+            rows.push([
+                r.stock_symbol || '',
+                r.company_name || '',
+                r.quarter || '',
+                yearDisplay,
+                r.qtr_eps ?? '',
+                cumEpsVal ?? '',
+                formulaName,
+                computedEps ?? '',
+                exprLabel,
+                r.cmp ?? '',
+                computedPe ?? '',
+                r.sector || '',
+                updated
+            ]);
+        }
+    }
+
+    let csv = '\uFEFF';
+    for (const row of rows) {
+        csv += row.map(v => {
+            const s = String(v ?? '');
+            return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }).join(',') + '\r\n';
+    }
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PE_Analysis_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 (function initPEAnalysisControls() {
     document.addEventListener('DOMContentLoaded', () => {
         peInitMultiselects();
         const filterInput = document.getElementById('peSymbolFilter');
         const refreshBtn = document.getElementById('peRefreshBtn');
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
+        const exportBtn = document.getElementById('peExportBtn');
         if (filterInput) filterInput.addEventListener('input', renderPEAnalysis);
         if (refreshBtn) refreshBtn.addEventListener('click', () => loadPEAnalysis(false));
+        if (exportBtn) exportBtn.addEventListener('click', exportPEAnalysisToExcel);
         if (fetchCmpBtn) fetchCmpBtn.addEventListener('click', async () => {
             fetchCmpBtn.disabled = true;
             fetchCmpBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Fetching...';

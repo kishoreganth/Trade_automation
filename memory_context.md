@@ -4624,3 +4624,39 @@ CLEANUP_CONFIG["cleanup_interval_hours"] = 12  # Run every 12 hours
 - JS: `peFilterState` object (year/quarter/sector Sets), `pePopulateFilterDropdowns()` builds options from `peAnalysisData`, `peToggleFilter()` updates state & re-renders, `peInitMultiselects()` wires click-to-toggle + click-outside-close. `renderPEAnalysis()` applies all 3 filters after symbol filter. Dropdowns re-populate on every `loadPEAnalysis()` call.
 
 **Performance**: Pure client-side filtering, no extra API calls. Filters are additive (AND between categories, OR within a category).
+
+## 2026-04-02 - PE Analysis Export to Excel + Upload auto-CMP + INSERT fix
+
+**Files**: `static/index.html`, `static/js/dashboard.js`, `nse_url_test.py`
+
+**Export button**: Added `peExportBtn` in PE controls bar + `exportPEAnalysisToExcel()` function. Exports current filtered view as CSV (opens in Excel). Handles multi-row formulas — each formula gets its own row with formula name column. Respects all active filters (symbol, year, quarter, sector). BOM prefix for Excel UTF-8 compatibility.
+
+**Upload auto-CMP**: After PDF upload success, now calls `loadPEAnalysis(true)` (was `false`) to auto-fetch CMP from Kotak API and compute PE. Status shows progress: "Fetching CMP & PE..." → "✓ SYMBOL: X period(s) saved, CMP & PE updated."
+
+**INSERT fix**: `nse_url_test.py` `_upsert_quarterly_result` had 30 `?` placeholders for 29 columns. Fixed to 29.
+
+## 2026-04-02 - Server-Side Paginated Messages (Scalability Fix)
+
+**Files**: `nse_url_test.py`, `static/js/dashboard.js`, `static/index.html`, `static/css/styles.css`
+
+**Problem**: WebSocket dumped all 14k+ messages on connect → Chrome `STATUS_BREAKPOINT` crash. All filtering was client-side on full dataset.
+
+**Backend changes** (`nse_url_test.py`):
+- `/api/messages` now accepts `page`, `per_page`, `search`, `option`, `exchange`, `sector` params. SQL WHERE + LIMIT/OFFSET. Returns `{ messages, page, per_page, total_filtered, total_pages }`.
+- New `/api/stats` endpoint: returns `total_messages`, `today_messages`, `unique_symbols`, `last_message_time` via lightweight COUNT queries.
+- New `/api/sectors` endpoint: returns distinct sector list from DB.
+- WebSocket no longer sends bulk `messages_list` on connect — sends only `{"type":"connected"}`. Real-time `new_message` push unchanged.
+
+**Frontend changes** (`dashboard.js`):
+- Removed global `messages` array holding all data. Now holds only current page.
+- `fetchMessages(page)` calls paginated `/api/messages` with current filters.
+- `renderMessageRows()` renders server-returned page. `renderPaginationControls()` shows Prev/Next + page info.
+- Search input debounced (300ms). All filter changes reset to page 1.
+- `fetchStats()` calls `/api/stats` for header cards (total, today, unique, last time). Runs on load + every 30s + on WS `new_message`.
+- `updateSectorFilterOptions()` calls `/api/sectors` instead of scanning in-memory array.
+- "All" option removed from SHOW dropdown (defeats pagination).
+
+**HTML** (`index.html`): Added `#msgPagination` div with Prev/Next buttons + page info below messages table.
+**CSS** (`styles.css`): `.msg-pagination`, `.msg-page-btn`, `.msg-page-info` styles.
+
+**Performance**: Browser only holds 50-200 messages at a time. No Chrome crashes. Server-side SQL filtering is fast on indexed columns.

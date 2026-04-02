@@ -596,6 +596,41 @@ button {
 
 .btn-sm { padding: 6px 10px; font-size: 12px; }
 
+/* Messages pagination */
+.msg-pagination {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 10px 16px; border-top: 1px solid var(--border-color, #2a3042);
+    background: var(--card-bg, #1a1f2e);
+}
+.msg-page-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border-color, #2a3042);
+    background: var(--input-bg, #0f1219); color: #ccc; cursor: pointer;
+    transition: all 0.15s;
+}
+.msg-page-btn:hover:not(:disabled) { border-color: #4f46e5; color: #fff; }
+.msg-page-btn:disabled { opacity: 0.3; cursor: default; }
+.msg-page-numbers { display: flex; gap: 4px; align-items: center; }
+.msg-page-num {
+    min-width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color, #2a3042);
+    background: var(--input-bg, #0f1219); color: #94a3b8; font-size: 13px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.msg-page-num:hover { border-color: #4f46e5; color: #fff; }
+.msg-page-num.active { background: #4f46e5; border-color: #4f46e5; color: #fff; cursor: default; }
+.msg-page-ellipsis { color: #64748b; font-size: 13px; padding: 0 4px; }
+.msg-page-goto { display: flex; gap: 4px; align-items: center; margin-left: 8px; }
+.msg-page-input {
+    width: 60px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color, #2a3042);
+    background: var(--input-bg, #0f1219); color: #fff; font-size: 13px; text-align: center;
+    padding: 0 6px; box-sizing: border-box;
+}
+.msg-page-input:focus { border-color: #4f46e5; outline: none; }
+.msg-page-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.msg-go-btn { font-size: 12px; padding: 0 10px; font-weight: 600; }
+.msg-page-total { font-size: 12px; color: #64748b; margin-left: 8px; }
+
 /* ============================================================================
    TABLES
    ============================================================================ */
