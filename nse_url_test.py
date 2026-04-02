@@ -1948,7 +1948,7 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
          cumulative_eps_basic_consolidated, cumulative_eps_diluted_consolidated,
          standalone_data, consolidated_data, raw_ai_response,
          source_pdf_url, source_message_id, exchange, units, stock_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(stock_symbol, quarter, financial_year)
         DO UPDATE SET
             company_name = excluded.company_name,

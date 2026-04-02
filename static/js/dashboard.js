@@ -2248,6 +2248,92 @@ let peAnalysisData = [];
 let peFormulas = [];
 let peActiveFormulaIds = JSON.parse(localStorage.getItem('peActiveFormulaIds') || '[]');
 
+// PE Multi-select filter state
+const peFilterState = { year: new Set(), quarter: new Set(), sector: new Set() };
+
+function peInitMultiselects() {
+    document.querySelectorAll('.pe-multiselect').forEach(wrap => {
+        const btn = wrap.querySelector('.pe-multiselect-btn');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasOpen = wrap.classList.contains('open');
+            document.querySelectorAll('.pe-multiselect.open').forEach(el => el.classList.remove('open'));
+            if (!wasOpen) wrap.classList.add('open');
+        });
+    });
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.pe-multiselect.open').forEach(el => el.classList.remove('open'));
+    });
+    document.querySelectorAll('.pe-multiselect-dropdown').forEach(dd => {
+        dd.addEventListener('click', e => e.stopPropagation());
+    });
+    const clearBtn = document.getElementById('peClearFiltersBtn');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+        peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear();
+        pePopulateFilterDropdowns();
+        renderPEAnalysis();
+    });
+}
+
+function pePopulateFilterDropdowns() {
+    const years = new Set(), quarters = new Set(), sectors = new Set();
+    for (const r of peAnalysisData) {
+        const fy = r.financial_year || '';
+        const ym = fy.match(/\d{4}/);
+        if (ym) years.add(ym[0]);
+        if (r.quarter) quarters.add(r.quarter.toUpperCase());
+        if (r.sector) sectors.add(r.sector);
+    }
+
+    function buildDropdown(filterId, values, stateKey, showSearch) {
+        const wrap = document.getElementById(filterId);
+        if (!wrap) return;
+        const dd = wrap.querySelector('.pe-multiselect-dropdown');
+        const badge = wrap.querySelector('.pe-ms-badge');
+        const sorted = [...values].sort();
+        let html = '';
+        if (showSearch && sorted.length > 6) {
+            html += `<div class="pe-ms-search"><input type="text" placeholder="Search..." oninput="peFilterDropdownSearch(this)"></div>`;
+        }
+        for (const val of sorted) {
+            const checked = peFilterState[stateKey].has(val);
+            html += `<label class="pe-ms-option${checked ? ' checked' : ''}" data-val="${val}">
+                <input type="checkbox" ${checked ? 'checked' : ''} onchange="peToggleFilter('${stateKey}','${val.replace(/'/g, "\\'")}',this.checked)">
+                <span>${val}</span>
+            </label>`;
+        }
+        dd.innerHTML = html;
+        // clean stale selections
+        for (const v of peFilterState[stateKey]) { if (!values.has(v)) peFilterState[stateKey].delete(v); }
+        const count = peFilterState[stateKey].size;
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
+        badge.textContent = count;
+    }
+
+    buildDropdown('peYearFilter', years, 'year', false);
+    buildDropdown('peQuarterFilter', quarters, 'quarter', false);
+    buildDropdown('peSectorFilter', sectors, 'sector', true);
+
+    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size > 0;
+    const clearBtn = document.getElementById('peClearFiltersBtn');
+    if (clearBtn) clearBtn.style.display = anyActive ? 'flex' : 'none';
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+function peToggleFilter(key, val, checked) {
+    if (checked) peFilterState[key].add(val); else peFilterState[key].delete(val);
+    pePopulateFilterDropdowns();
+    renderPEAnalysis();
+}
+
+function peFilterDropdownSearch(input) {
+    const q = input.value.toLowerCase();
+    const options = input.closest('.pe-multiselect-dropdown').querySelectorAll('.pe-ms-option');
+    options.forEach(opt => {
+        opt.style.display = opt.dataset.val.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+
 function peClassFor(pe) {
     if (!pe) return '';
     if (pe < 15) return 'pe-low';
@@ -2359,6 +2445,7 @@ async function loadPEAnalysis(fetchCmp = false) {
         if (data.success && data.results) {
             peAnalysisData = data.results;
             if (peFormulas.length === 0) await loadPeFormulas();
+            pePopulateFilterDropdowns();
             renderPEAnalysis();
         }
     } catch (e) {
@@ -2379,6 +2466,19 @@ function renderPEAnalysis() {
             (r.company_name || '').toLowerCase().includes(symbolFilter) ||
             (r.sector || '').toLowerCase().includes(symbolFilter)
         );
+    }
+    if (peFilterState.year.size > 0) {
+        filtered = filtered.filter(r => {
+            const fy = r.financial_year || '';
+            const ym = fy.match(/\d{4}/);
+            return ym && peFilterState.year.has(ym[0]);
+        });
+    }
+    if (peFilterState.quarter.size > 0) {
+        filtered = filtered.filter(r => peFilterState.quarter.has((r.quarter || '').toUpperCase()));
+    }
+    if (peFilterState.sector.size > 0) {
+        filtered = filtered.filter(r => peFilterState.sector.has(r.sector || ''));
     }
 
     if (filtered.length === 0) {
@@ -2488,6 +2588,7 @@ function renderPEAnalysis() {
 
 (function initPEAnalysisControls() {
     document.addEventListener('DOMContentLoaded', () => {
+        peInitMultiselects();
         const filterInput = document.getElementById('peSymbolFilter');
         const refreshBtn = document.getElementById('peRefreshBtn');
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
@@ -2631,8 +2732,11 @@ function renderPEAnalysis() {
                     if (data.success) {
                         statusDiv.style.background = '#064e3b';
                         statusDiv.style.color = '#6ee7b7';
-                        statusDiv.textContent = `Saved ${data.periods_stored} period(s) for ${data.stock_symbol}. Refreshing...`;
-                        await loadPEAnalysis(false);
+                        statusDiv.textContent = `Saved ${data.periods_stored} period(s) for ${data.stock_symbol}. Fetching CMP & PE...`;
+                        submitBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Fetching CMP...';
+                        if (typeof refreshIcons === 'function') refreshIcons();
+                        await loadPEAnalysis(true);
+                        statusDiv.textContent = `✓ ${data.stock_symbol}: ${data.periods_stored} period(s) saved, CMP & PE updated.`;
                         symbolInput.value = '';
                         fileInput.value = '';
                     } else {

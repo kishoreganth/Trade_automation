@@ -247,6 +247,22 @@
                                 <i data-lucide="search" class="search-icon"></i>
                                 <input type="text" id="peSymbolFilter" placeholder="Filter by symbol or sector...">
                             </div>
+                            <div class="pe-multiselect" id="peYearFilter">
+                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Year</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+                                <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <div class="pe-multiselect" id="peQuarterFilter">
+                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Quarter</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+                                <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <div class="pe-multiselect" id="peSectorFilter">
+                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Sector</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+                                <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <button id="peClearFiltersBtn" class="btn-refresh btn-sm pe-clear-btn" title="Clear all filters" style="display:none;">
+                                <i data-lucide="x"></i>
+                                <span>Clear</span>
+                            </button>
                             <button id="peRefreshBtn" class="btn-refresh btn-sm">
                                 <i data-lucide="refresh-cw"></i>
                                 <span>Refresh</span>

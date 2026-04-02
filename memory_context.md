@@ -4611,3 +4611,16 @@ CLEANUP_CONFIG["cleanup_interval_hours"] = 12  # Run every 12 hours
 **Performance**: LLOYDSME Q3 FY2026: 58.22 → **53.85** (N9*4/3 from accurate 9-month cumulative)
 
 **Also fixed**: `test_pymupdf_speed.py` INSERT 30→29 placeholders.
+
+## 2026-04-02 - PE Analysis Multi-Select Filters (Year, Quarter, Sector)
+
+**Files**: `static/index.html`, `static/js/dashboard.js`, `static/css/styles.css`
+
+**Change**: Added dynamic multi-select dropdown filters for Year, Quarter, and Sector on the PE Analysis page (Analytics → PE Analysis). Filters are populated from the loaded data. Includes a "Clear" button to reset all filters at once. Sector dropdown has a search box when >6 options.
+
+**Implementation**:
+- HTML: 3 `pe-multiselect` wrappers + `peClearFiltersBtn` in `.pe-controls` bar
+- CSS: `.pe-multiselect`, `.pe-multiselect-dropdown`, `.pe-ms-option` etc. with animation + dark theme
+- JS: `peFilterState` object (year/quarter/sector Sets), `pePopulateFilterDropdowns()` builds options from `peAnalysisData`, `peToggleFilter()` updates state & re-renders, `peInitMultiselects()` wires click-to-toggle + click-outside-close. `renderPEAnalysis()` applies all 3 filters after symbol filter. Dropdowns re-populate on every `loadPEAnalysis()` call.
+
+**Performance**: Pure client-side filtering, no extra API calls. Filters are additive (AND between categories, OR within a category).
