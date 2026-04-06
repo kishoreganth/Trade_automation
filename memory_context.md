@@ -4660,3 +4660,59 @@ CLEANUP_CONFIG["cleanup_interval_hours"] = 12  # Run every 12 hours
 **CSS** (`styles.css`): `.msg-pagination`, `.msg-page-btn`, `.msg-page-info` styles.
 
 **Performance**: Browser only holds 50-200 messages at a time. No Chrome crashes. Server-side SQL filtering is fast on indexed columns.
+
+## 2026-04-04 - Copy Trading Dashboard (New Separate Project)
+
+**Location**: `copy_trading/` — standalone sub-project within Automation_TRADE
+
+**Purpose**: Copy trading application to manage multiple broker accounts and place the same order across all accounts simultaneously.
+
+**Structure**:
+```
+copy_trading/
+├── app.py                  # FastAPI backend (port 5100)
+├── static/
+│   ├── index.html          # Dashboard (3 views: Dashboard, Users, Place Order)
+│   ├── login.html          # Login page (teal gradient theme)
+│   ├── css/styles.css      # Teal/emerald theme (--accent: #0d9488)
+│   └── js/app.js           # Frontend SPA logic
+├── data/                   # SQLite DB storage
+├── Dockerfile              # Separate Docker image
+├── docker-compose.yml      # Port 5100, separate container
+├── requirements.txt        # Minimal deps (fastapi, aiosqlite, uvicorn, pydantic)
+└── .env.example
+```
+
+**Tech Stack**: FastAPI + aiosqlite + vanilla HTML/CSS/JS (same pattern as main project)
+
+**Database** (`copy_trading.db` — separate from main `messages.db`):
+- `auth_users` — dashboard login (default: admin/admin123)
+- `sessions` — session tokens with expiry
+- `trading_accounts` — broker account CRUD (name, broker, client_id, API keys, TOTP, MPIN)
+- `orders` — individual orders per account
+- `order_batches` — batch tracking for copy orders
+
+**Frontend**:
+- Top bar: "CopyTrade | Copy Trading Dashboard" (dark teal #134e4a)
+- Sidebar: Dashboard, Users, Place Order (teal accent active state)
+- Dashboard: stat cards (active accounts, today orders, successful, total) + recent orders table
+- Users: CRUD table with Add/Edit/Delete modals for trading accounts
+- Place Order: form with symbol/exchange/qty + multi-account checkbox selector + confirmation modal + batch history
+
+**APIs**: `/api/login`, `/api/logout`, `/api/accounts` (CRUD), `/api/orders/place`, `/api/orders`, `/api/orders/batches`, `/api/stats`
+
+**Docker**: Separate container `copy-trading-app` on port 5100 (vs main app on 5000)
+
+---
+
+## NSE CM Neo Sheet Update Fix (2026-04-06)
+
+**Problem**: `fetch_nse_cm_data_background()` called `worksheet.clear()` before writing data. If the gspread write failed (e.g. 403 permission error on 2026-03-11), the sheet was left **empty**.
+
+**Fix**: Removed `clear()` + batch write pattern. Now uses `worksheet.resize()` to match new data size, then `worksheet.update('A1', data)` to overwrite in-place. No window where sheet is empty.
+
+**Also**: Invalidates `_nse_token_cache` after successful write so next token lookup reads fresh data.
+
+**Endpoint**: `GET {base_url}/script-details/1.0/masterscrip/file-paths` → finds `nse_cm-v1.csv` URL → downloads → filters `pGroup='EQ'` → writes to gid `1765483913`.
+
+**Trigger**: Runs as background task after successful TOTP auth (`/api/verify_totp`).

@@ -1,0 +1,77 @@
+{
+  "info": {
+    "name": "Kotak Neo - Scrip Master",
+    "_postman_id": "scrip-master-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://e22.kotaksecurities.com"
+    },
+    {
+      "key": "accessToken",
+      "value": "6288b97c-a4f6-4130-a817-8cb9f96ce71f"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Scrip Master File Paths",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "*/*"
+          },
+          {
+            "key": "Authorization",
+            "value": "{{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/script-details/1.0/masterscrip/file-paths",
+          "host": ["{{baseUrl}}"],
+          "path": ["script-details", "1.0", "masterscrip", "file-paths"]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var jsonData = pm.response.json();",
+              "    var filePaths = jsonData.data.filesPaths;",
+              "    var nseCmUrl = filePaths.find(f => f.includes('nse_cm-v1.csv'));",
+              "    if (nseCmUrl) {",
+              "        pm.collectionVariables.set('nseCmCsvUrl', nseCmUrl);",
+              "        console.log('nse_cm CSV URL:', nseCmUrl);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Download nse_cm-v1.csv",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "*/*"
+          }
+        ],
+        "url": {
+          "raw": "{{nseCmCsvUrl}}",
+          "host": ["{{nseCmCsvUrl}}"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

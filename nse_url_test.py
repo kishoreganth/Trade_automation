@@ -4416,27 +4416,26 @@ async def fetch_nse_cm_data_background():
                 logger.error("Background: Worksheet not found")
                 return
             
-            # Expand sheet if needed
-            if worksheet.row_count < len(df) + 1:
-                rows_to_add = (len(df) + 1) - worksheet.row_count
-                worksheet.add_rows(rows_to_add)
-                logger.info(f"Background: Expanded sheet by {rows_to_add} rows")
-            
-            # Prepare data
+            # Prepare data before touching the sheet
             data = [df.columns.tolist()] + df.values.tolist()
             data = [['' if (isinstance(cell, float) and np.isnan(cell)) else cell for cell in row] for row in data]
-            
-            # Clear and write
-            worksheet.clear()
-            
-            # Write in batches
-            batch_size = 5000
-            for batch_num in range(0, len(data), batch_size):
-                batch_data = data[batch_num:min(batch_num + batch_size, len(data))]
-                worksheet.update(f'A{batch_num + 1}', batch_data)
-                logger.info(f"Background: Batch written (rows {batch_num + 1}-{batch_num + len(batch_data)})")
-            
-            logger.info(f"✅ Background: NSE CM data written successfully to Google Sheet")
+            new_row_count = len(data)
+            logger.info(f"Background: Prepared {new_row_count} rows (1 header + {new_row_count - 1} data)")
+
+            # Resize sheet to fit new data (expand or shrink)
+            old_row_count = worksheet.row_count
+            col_count = max(worksheet.col_count, len(data[0]))
+            if old_row_count != new_row_count or worksheet.col_count != col_count:
+                worksheet.resize(rows=new_row_count, cols=col_count)
+                logger.info(f"Background: Resized sheet {old_row_count}→{new_row_count} rows, {col_count} cols")
+
+            # Overwrite all data in one batch (safe: no clear() before write)
+            worksheet.update(f'A1', data)
+            logger.info(f"✅ Background: NSE CM data written successfully ({new_row_count - 1} EQ stocks)")
+
+            # Invalidate in-memory token cache so next read picks up fresh data
+            global _nse_token_cache
+            _nse_token_cache = {}
             
     except Exception as e:
         logger.error(f"❌ Background: NSE CM data fetch failed: {e}")
