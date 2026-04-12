@@ -598,6 +598,84 @@ async def _fetch_nse_token_map() -> Dict[str, int]:
         logger.error(f"Error fetching nse_cm_neo token map: {e}")
     return _nse_token_cache
 
+
+async def _check_session_valid() -> bool:
+    """Quick check if kotak_session.json exists and is not expired."""
+    session_file = "kotak_session.json"
+    if not os.path.exists(session_file):
+        return False
+    try:
+        async with aiofiles.open(session_file, 'r') as f:
+            sess = json.loads(await f.read())
+        exp = parse_datetime_ist(sess.get("expires_at", ""))
+        return exp is not None and get_ist_now() < exp
+    except Exception:
+        return False
+
+
+async def _auto_fetch_cmp_for_stock(symbol: str, fy_eps: float) -> Dict:
+    """Auto-fetch CMP for a single stock after extraction. Returns {cmp, pe, error}."""
+    result = {"cmp": None, "pe": None, "error": None}
+    if not fy_eps or fy_eps <= 0:
+        result["error"] = "FY EPS not positive — cannot compute PE"
+        return result
+
+    if not await _check_session_valid():
+        result["error"] = "No active session — verify TOTP to auto-fetch CMP"
+        return result
+
+    try:
+        token_map = await _fetch_nse_token_map()
+        token = token_map.get(symbol)
+        if not token:
+            result["error"] = f"No instrument token for {symbol}"
+            return result
+
+        from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
+        sym_str = f"nse_cm|{token}"
+        raw = await get_quotes_with_rate_limit([sym_str], requests_per_minute=190)
+        flattened = await flatten_quote_result_list(raw)
+
+        cmp = None
+        for q in flattened:
+            if q.get("error"):
+                continue
+            close_price = q.get("ohlc", {}).get("close")
+            if close_price:
+                cmp_raw = float(close_price)
+                cmp = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
+                break
+
+        if not cmp:
+            result["error"] = f"CMP not available from API for {symbol}"
+            return result
+
+        pe = round(cmp / fy_eps, 2)
+        now_iso = get_ist_now().isoformat()
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
+                   WHERE id = (
+                       SELECT id FROM quarterly_results
+                       WHERE stock_symbol = ? AND quarter != 'FY'
+                       ORDER BY financial_year DESC, quarter DESC LIMIT 1
+                   )""",
+                (cmp, pe, now_iso, symbol)
+            )
+            await db.commit()
+
+        result["cmp"] = round(cmp, 2)
+        result["pe"] = pe
+        logger.info(f"Auto CMP for {symbol}: ₹{cmp:.2f} | PE: {pe}")
+        return result
+
+    except Exception as e:
+        logger.warning(f"Auto CMP fetch failed for {symbol}: {e}")
+        result["error"] = str(e)
+        return result
+
+
 # Default admin: change DEFAULT_ADMIN_PASSWORD and deploy – existing server admin will be updated on startup
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "Arixjhifi@007"  # Change this; server admin password will sync on next deploy
@@ -2080,16 +2158,29 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
 
         logger.info(f"Stored {len(stored)} quarterly results for {stock_symbol}")
 
+        # Auto-fetch CMP + compute PE (best EPS: consolidated diluted > basic > standalone)
+        best_fy_eps = fy_diluted_c or fy_basic_c or fy_diluted_s or fy_basic_s
+        cmp_result = {"cmp": None, "pe": None, "error": None}
+        if best_fy_eps and best_fy_eps > 0:
+            cmp_result = await _auto_fetch_cmp_for_stock(stock_symbol, best_fy_eps)
+
         await ws_manager.broadcast_message({
             "type": "quarterly_results",
-            "data": {"stock_symbol": stock_symbol, "results": stored, "total": len(stored)}
+            "data": {
+                "stock_symbol": stock_symbol,
+                "results": stored,
+                "total": len(stored),
+                "cmp": cmp_result.get("cmp"),
+                "pe": cmp_result.get("pe"),
+                "cmp_hint": cmp_result.get("error"),
+            }
         })
 
-        return stored
+        return {"stored": stored, "cmp_result": cmp_result}
 
     except Exception as e:
         logger.error(f"Error processing quarterly results for {stock_symbol}: {e}")
-        return []
+        return {"stored": [], "cmp_result": {"error": str(e)}}
 
 
 _FINANCIAL_KEYWORDS = ['revenue', 'expense', 'tax', 'profit', 'earning',
@@ -3767,8 +3858,9 @@ async def get_quarterly_results(symbol: str = None, financial_year: str = None, 
 
 
 @app.get("/api/pe_analysis")
-async def get_pe_analysis(fetch_cmp: bool = False):
-    """PE Analysis: one row per stock (latest non-FY quarter), consolidated-first FY EPS, optional live CMP + PE."""
+async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
+    """PE Analysis: one row per stock (latest non-FY quarter), consolidated-first FY EPS, optional live CMP + PE.
+    symbols: comma-separated stock symbols to fetch CMP for (empty = all with valid EPS)."""
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
@@ -3933,52 +4025,80 @@ async def get_pe_analysis(fetch_cmp: bool = False):
 
         # Fetch live CMP from Kotak API using nse_cm_neo sheet tokens
         cmp_map = {}
-        if fetch_cmp and symbols_needing_cmp:
-            try:
-                token_map = await _fetch_nse_token_map()
-                tokens_to_fetch = []
-                token_to_symbol = {}
-                for sym in symbols_needing_cmp:
-                    token = token_map.get(sym)
-                    if token:
-                        sym_str = f"nse_cm|{token}"
-                        tokens_to_fetch.append(sym_str)
-                        token_to_symbol[str(token)] = sym
+        cmp_error = None
+        if fetch_cmp and not symbols_needing_cmp:
+            cmp_error = "No stocks with valid FY EPS to fetch CMP for"
+        elif fetch_cmp and symbols_needing_cmp:
+            # Pre-check: validate session before hitting Kotak API
+            session_file = "kotak_session.json"
+            session_valid = False
+            if not os.path.exists(session_file):
+                cmp_error = "No active session — please verify TOTP first"
+            else:
+                try:
+                    async with aiofiles.open(session_file, 'r') as f:
+                        sess = json.loads(await f.read())
+                    exp = parse_datetime_ist(sess.get("expires_at", ""))
+                    if not exp or get_ist_now() >= exp:
+                        cmp_error = "Session expired — please verify TOTP again"
+                    else:
+                        session_valid = True
+                except Exception:
+                    cmp_error = "Invalid session — please verify TOTP"
 
-                if tokens_to_fetch:
-                    from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
-                    batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
-                    raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
-                    flattened = await flatten_quote_result_list(raw_results)
-                    for q in flattened:
-                        if q.get("error"):
-                            continue
-                        close_price = q.get("ohlc", {}).get("close")
-                        token_val = str(q.get("exchange_token", ""))
-                        if close_price and token_val in token_to_symbol:
-                            cmp_raw = float(close_price)
-                            cmp_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
-                    logger.info(f"PE Analysis: fetched CMP for {len(cmp_map)}/{len(tokens_to_fetch)} stocks")
+            if session_valid:
+                # Filter to only requested symbols (from frontend view) if provided
+                requested_set = set(s.strip() for s in symbols.split(",") if s.strip()) if symbols else None
+                if requested_set:
+                    symbols_needing_cmp = [s for s in symbols_needing_cmp if s in requested_set]
 
-                    # Store CMP + PE in DB using subquery (ORDER BY+LIMIT in UPDATE not supported in standard SQLite)
-                    if cmp_map:
-                        now_iso = get_ist_now().isoformat()
-                        async with aiosqlite.connect(DB_PATH) as db:
-                            for sym, cmp_val in cmp_map.items():
-                                eps_for_sym = next((s["fy_eps"] for s in stock_data if s["stock_symbol"] == sym), None)
-                                pe_computed = round(cmp_val / eps_for_sym, 2) if eps_for_sym and eps_for_sym > 0 else None
-                                await db.execute(
-                                    """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
-                                       WHERE id = (
-                                           SELECT id FROM quarterly_results
-                                           WHERE stock_symbol = ? AND quarter != 'FY'
-                                           ORDER BY financial_year DESC, quarter DESC LIMIT 1
-                                       )""",
-                                    (cmp_val, pe_computed, now_iso, sym)
-                                )
-                            await db.commit()
-            except Exception as e:
-                logger.warning(f"CMP fetch failed: {e}")
+                try:
+                    token_map = await _fetch_nse_token_map()
+                    tokens_to_fetch = []
+                    token_to_symbol = {}
+                    for sym in symbols_needing_cmp:
+                        token = token_map.get(sym)
+                        if token:
+                            sym_str = f"nse_cm|{token}"
+                            tokens_to_fetch.append(sym_str)
+                            token_to_symbol[str(token)] = sym
+
+                    if tokens_to_fetch:
+                        from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
+                        batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
+                        raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
+                        flattened = await flatten_quote_result_list(raw_results)
+                        for q in flattened:
+                            if q.get("error"):
+                                continue
+                            close_price = q.get("ohlc", {}).get("close")
+                            token_val = str(q.get("exchange_token", ""))
+                            if close_price and token_val in token_to_symbol:
+                                cmp_raw = float(close_price)
+                                cmp_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
+                        logger.info(f"PE Analysis: fetched CMP for {len(cmp_map)}/{len(tokens_to_fetch)} stocks")
+
+                        if cmp_map:
+                            now_iso = get_ist_now().isoformat()
+                            async with aiosqlite.connect(DB_PATH) as db:
+                                for sym, cmp_val in cmp_map.items():
+                                    eps_for_sym = next((s["fy_eps"] for s in stock_data if s["stock_symbol"] == sym), None)
+                                    pe_computed = round(cmp_val / eps_for_sym, 2) if eps_for_sym and eps_for_sym > 0 else None
+                                    await db.execute(
+                                        """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
+                                           WHERE id = (
+                                               SELECT id FROM quarterly_results
+                                               WHERE stock_symbol = ? AND quarter != 'FY'
+                                               ORDER BY financial_year DESC, quarter DESC LIMIT 1
+                                           )""",
+                                        (cmp_val, pe_computed, now_iso, sym)
+                                    )
+                                await db.commit()
+                    elif not tokens_to_fetch and symbols_needing_cmp:
+                        cmp_error = f"No instrument tokens found for {len(symbols_needing_cmp)} symbols"
+                except Exception as e:
+                    logger.warning(f"CMP fetch failed: {e}")
+                    cmp_error = f"CMP fetch failed: {str(e)}"
 
         # Merge live CMP into results + compute PE
         for item in stock_data:
@@ -3988,7 +4108,12 @@ async def get_pe_analysis(fetch_cmp: bool = False):
                 if item["fy_eps"] and item["fy_eps"] > 0:
                     item["pe"] = round(live_cmp / item["fy_eps"], 2)
 
-        return {"success": True, "results": stock_data, "total": len(stock_data)}
+        resp = {"success": True, "results": stock_data, "total": len(stock_data)}
+        if cmp_error:
+            resp["cmp_error"] = cmp_error
+        if fetch_cmp and cmp_map:
+            resp["cmp_fetched"] = len(cmp_map)
+        return resp
     except Exception as e:
         logger.error(f"Error in PE analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -4188,20 +4313,28 @@ async def upload_quarterly_pdf(file: UploadFile = File(...), stock_symbol: str =
             raise HTTPException(status_code=422, detail="No financial pages detected in PDF")
 
         ai_response = await _call_openai_vision_quarterly(encoded_images)
-        stored = await process_quarterly_results(ai_response, stock_symbol, exchange=exchange)
+        result = await process_quarterly_results(ai_response, stock_symbol, exchange=exchange)
+        stored = result.get("stored", [])
+        cmp_result = result.get("cmp_result", {})
 
         try:
             await aiofiles.os.remove(temp_file_path)
         except Exception:
             pass
 
-        return {
+        resp = {
             "success": True,
             "stock_symbol": stock_symbol,
             "filename": file.filename,
-            "periods_stored": len(stored) if stored else 0,
-            "quarterly_results": ai_response
+            "periods_stored": len(stored),
+            "quarterly_results": ai_response,
         }
+        if cmp_result.get("cmp"):
+            resp["cmp"] = cmp_result["cmp"]
+            resp["pe"] = cmp_result["pe"]
+        if cmp_result.get("error"):
+            resp["cmp_hint"] = cmp_result["error"]
+        return resp
 
     except HTTPException:
         raise

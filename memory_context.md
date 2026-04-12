@@ -5,6 +5,182 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-04-12: PE Analysis — Auto CMP Fetch After Extraction
+
+**Problem**: CMP/PE was never auto-computed after quarterly extraction. User had to manually click Fetch CMP. No error feedback when TOTP session was missing.
+
+**Backend** (`nse_url_test.py`):
+- `_check_session_valid()` — quick check if `kotak_session.json` exists + not expired.
+- `_auto_fetch_cmp_for_stock(symbol, fy_eps)` — single-stock CMP fetch via Kotak API. Session check → token lookup → API call → compute PE → store in DB. Returns `{cmp, pe, error}`.
+- `process_quarterly_results()` now auto-fetches CMP after DB store. Uses best FY EPS (consolidated diluted > basic > standalone). Returns `{stored, cmp_result}` dict instead of plain list.
+- WS broadcast includes `cmp`, `pe`, `cmp_hint` fields for real-time UI updates.
+- `/api/upload_quarterly_pdf` response includes `cmp`, `pe`, `cmp_hint` from auto-fetch result.
+- Both auto-extraction (from messages) and manual upload trigger auto-CMP. If session invalid, `cmp_hint` carries the reason.
+
+**Frontend** (`dashboard.js`):
+- Upload form: shows amber hint bar when `cmp_hint` present + toast notification. No longer calls `loadPEAnalysis(true)` (redundant) — calls `loadPEAnalysis(false)` to refresh data only.
+- Cache bumped to `v=20260412d`.
+
+**Reference**: `test_pymupdf_speed.py` is the CLI prototype with full pipeline (extract → store → CMP → PE). Production `nse_url_test.py` now mirrors this via `_auto_fetch_cmp_for_stock()`.
+
+---
+
+### 2026-04-12: PE Analysis — Exchange Filter (NSE/BSE) + Default NSE
+
+**Feature**: Added Exchange multiselect filter to PE Analysis page, matching existing Year/Quarter/Sector pattern. Defaults to NSE selected on first load.
+
+**Frontend** (`dashboard.js`, `index.html`):
+- Added `exchange` to `peFilterState` set. `_peExchangeInitialized` flag ensures **BSE** is pre-selected only once on first data load.
+- `pePopulateFilterDropdowns()` collects exchanges from data + builds `peExchangeFilter` dropdown.
+- Exchange filter applied in `renderPEAnalysis()`, `_getVisiblePESymbols()`, and `exportPEAnalysisToExcel()`.
+- Clear Filters button resets exchange too + resets `_peExchangeInitialized` so next populate re-defaults to NSE.
+- HTML: `#peExchangeFilter` div added after Sector filter.
+- Cache bumped to `v=20260412c`.
+
+---
+
+### 2026-04-12: PE Analysis — Fetch CMP Session Guard + Scalable View-Based Fetch
+
+**Problem**: Fetch CMP silently failed when no TOTP session existed. No user feedback. Also fetched CMP for ALL stocks regardless of current view/filters.
+
+**Backend** (`nse_url_test.py` — `/api/pe_analysis`):
+- Pre-checks `kotak_session.json` existence + expiry before hitting Kotak Quote API.
+- Returns `cmp_error` field with reason: "No active session", "Session expired", "Invalid session", "No instrument tokens", or generic fetch failure.
+- New `symbols` query param (comma-separated) — when provided, only fetches CMP for those symbols instead of all. Falls back to all if empty.
+- Rate limiting unchanged (190 req/min, batches of 190 tokens per API call).
+
+**Frontend** (`dashboard.js`):
+- `loadPEAnalysis(true)` now sends `&symbols=` param with only the currently **visible/filtered** stock symbols via `_getVisiblePESymbols()`.
+- `_getVisiblePESymbols()` mirrors exact filter logic (symbol search, year, quarter, sector multiselects) to determine what user sees.
+- On `cmp_error`: shows `showNotificationToast(msg, 'warning')` prompting user to verify TOTP.
+- On success: shows toast with count of stocks updated.
+- On network failure: shows error toast.
+
+**Performance**: If user views 50 filtered stocks, only 50 CMP calls instead of all 200+. Reduces API calls proportionally to view size. Rate limit still enforced server-side.
+
+---
+
+### 2026-04-12: Copy Trading — Global Trade Management Hub (Phase 1)
+
+**Feature**: Unified trade management page replacing per-account Order Book. All positions/holdings/orders aggregated across accounts. Close, Stop Loss, Target actions operate globally. Real-time LTP via SSE.
+
+**Backend** (`copy_trading/app.py`):
+- **Bug fix**: `_build_kotak_order` now properly sends `tp` (trigger price) for SL/SL-M orders. Added `trigger_price` param, `SL-M` support, flexible exchange mapping.
+- **New helper**: `_modify_kotak_order()` — POST `{baseUrl}/quick/order/vr/modify` with `no` (order number) field.
+- **New helper**: `_get_all_active_kotak_sessions(db)` — returns all Kotak accounts with valid sessions.
+- **New helper**: `_extract_data_array(data)` — normalizes Kotak API response shapes to arrays.
+- `GET /api/trades/positions` — Fetches positions from ALL active accounts via `asyncio.gather`, aggregates by `trdSym + product`. Calculates weighted avg price from `buyAmt/flBuyQty`. Returns per-account breakdown.
+- `GET /api/trades/holdings` — Fetches holdings from ALL active accounts, aggregates by symbol. Maps new v2 holdings response fields (`averagePrice`, `closingPrice`, `mktValue`, `unrealisedGainLoss`, `sellableQuantity`, `instrumentToken`).
+- `GET /api/trades/orderbook?status=` — Unified order book from ALL accounts. Supports status filtering (all/open/executed/rejected/cancelled). Returns flat list with account attribution.
+- `POST /api/trades/close` — Closes position across all accounts: fetches each account's position, places opposite MKT order for net qty.
+- `POST /api/trades/stoploss` — Places SL/SL-M order across all accounts with position. Uses fixed `_build_kotak_order` for trigger price.
+- `POST /api/trades/target` — Places limit order at target price across all accounts with position.
+- `POST /api/trades/cancel-all` — Cancels all open orders for a symbol across all accounts.
+- `GET /api/trades/ltp-stream` — SSE (Server-Sent Events) endpoint. Polls Kotak quotes API every 5s for symbols with open positions using batch multi-symbol query (`/script-details/1.0/quotes/neosymbol/{queries}/ltp`). Auth via query param `token=` since EventSource doesn't support headers.
+- Pydantic models: `TradeCloseRequest`, `TradeStopLossRequest`, `TradeTargetRequest`, `TradeModifyRequest`.
+- Added `StreamingResponse` import.
+
+**Frontend** (`app.js`, `index.html`, `styles.css`):
+- **Nav**: "Order Book" → "Trades" (`data-nav="trades"`, icon: `bar-chart-3`).
+- **Trades page** with 3 sub-tabs: Positions | Holdings | Order History.
+- **Positions tab**: Aggregated table (symbol, product, type, qty, avg price, CMP, P&L, P&L%, accounts badge, actions). Expandable rows show per-account breakdown. Live CMP/P&L updates via EventSource SSE — `updateLTPCells()` patches DOM cells by `data-ltp-sym` attribute without re-render. Flash animation on price change.
+- **Holdings tab**: Aggregated table with P&L, market value, sellable qty. Expandable per-account rows.
+- **Order History tab**: Unified orders from all accounts. Filter pills (All/Open/Executed/Rejected/Cancelled). Status badges with color coding.
+- **Close Position modal**: Confirm dialog, calls `POST /api/trades/close`.
+- **Stop Loss modal**: Trigger price + limit price inputs, SL/SL-M type selector. Pre-fills 5% below avg for BUY positions.
+- **Target modal**: Target price input. Pre-fills 5% above avg for BUY positions.
+- **Dashboard**: Added filter pills (All/Placed/Failed) to Recent Orders table. `_allDashOrders` cache + `filterDashboardOrders()`.
+- CSS: `.trades-live-badge`, `.filter-pills`, `.expand-row`, `.sub-row`, `.pnl-positive/.pnl-negative`, `.trade-action-btn` variants, `.accounts-badge`, `.ltp-flash` animation, `.order-status-badge` variants.
+- Cache version bumped to `v=12`.
+
+**Performance**: All broker API calls use `asyncio.gather` for parallel execution. SSE uses single batch quote call for all active symbols (1 HTTP request per 5s regardless of symbol count). DOM updates are surgical (cell-level, no full re-render).
+
+**Phase 2 (planned)**: Kotak WebSocket HSM for true real-time LTP + HSI for order feed streaming.
+
+---
+
+### 2026-04-11: Copy Trading — Per-Account Funds Display (Inline Bar)
+
+**Feature**: Shows available cash / total funds as a progress bar under each account name on the Users page.
+
+**Backend** (`copy_trading/app.py`):
+- DB: Added `fund_avl_cash`, `fund_margin_used`, `fund_order_margin`, `fund_updated_at` columns to `trading_accounts` (ALTER migration).
+- `_fetch_kotak_limits(sid, token, base_url)` — POST `{baseUrl}/quick/user/limits` with `jData={"exch":"ALL","seg":"ALL","prod":"ALL"}`.
+- `_store_account_funds(db, account_id, limits)` — parses `avlCash`, `totMrgnUsd`, `ordMrgn` → stores in DB.
+- Wired into: TOTP auth (after scrip master), order placement (after batch completes), manual refresh.
+- `POST /api/accounts/refresh-funds` — fetches limits for all authenticated accounts, updates DB.
+- `GET /api/accounts` — now includes `fund_avl_cash`, `fund_margin_used`, `fund_order_margin`, `fund_updated_at`.
+
+**Frontend** (`app.js`, `index.html`, `styles.css`):
+- `fundBarHTML(a)` — renders progress bar: green >50%, amber 20-50%, red <20%. Shows `Available / Total (X% free)`.
+- "Refresh Funds" button in Users section header → calls `POST /api/accounts/refresh-funds`.
+- Bar appears under account name in table — no extra column needed.
+
+**When funds update**: On TOTP auth (once/day), after every order placement, on manual "Refresh Funds" click.
+
+---
+
+### 2026-04-10: Copy Trading — Made Fully Standalone (Independent Project)
+
+**Problem**: `copy_trading/` depended on parent `Automation_TRADE/neo_login/` via `sys.path` hack. Could not deploy independently on a separate server.
+
+**Changes**:
+- Created `copy_trading/neo_login/` with 4 local files: `__init__.py`, `get_access_token.py`, `get_token_totp.py`, `get_final_session.py` — clean standalone copies of Kotak v2 auth clients.
+- Removed `sys.path.insert(0, PARENT_DIR)` and `import sys` from `app.py`.
+- Changed imports to local: `from neo_login import KotakAccessTokenClient, KotakTOTPClient, KotakFinalSessionClient`.
+- Removed `_sync_session_to_main_app()`, `MAIN_APP_SESSION_FILE`, `MAIN_APP_UCC` — no parent-project coupling.
+- Updated `.env.example` — only `CT_DB_PATH` (all broker creds are per-account in DB).
+- Added `.dockerignore` for clean Docker builds.
+- Updated `README.md` with full standalone instructions + new API endpoints.
+
+**Result**: `copy_trading/` can be copied to any server and runs with zero dependencies on `Automation_TRADE/`.
+
+---
+
+### 2026-04-10: API v2 Audit + Copy Trading Enhancements
+
+**Audit**: Compared Kotak Neo v2 Postman collection + Migration Guide against both main app and copy_trading. All endpoints, headers, URLs are v2-compliant. No API mismatches found.
+
+**Session Conflict Fix** (`copy_trading/app.py`):
+- Added `_sync_session_to_main_app()` — when copy_trading authenticates a UCC that matches main app's `.env` UCC, writes session to `kotak_session.json` so main app stays in sync. One-directional sync (copy_trading → main app).
+- `MAIN_APP_SESSION_FILE` + `MAIN_APP_UCC` constants from parent dir / `.env`.
+
+**Cancel Order** (`copy_trading/app.py`, `app.js`, `index.html`):
+- `_cancel_kotak_order()` — POST `{baseUrl}/quick/order/cancel` with `jData={"on": orderNo, "am": "NO"}`.
+- `POST /api/orders/{order_id}/cancel` — looks up broker_order_id, calls Kotak cancel, updates DB status to `cancelled`.
+- Frontend: cancel button (x-circle icon) on placed orders with broker_order_id. Confirm dialog → reload dashboard.
+
+**Order Book / Positions / Holdings** (`copy_trading/app.py`, `app.js`, `index.html`, `styles.css`):
+- `_fetch_kotak_data()` — generic helper for `GET/POST` to Kotak with Sid+Auth headers.
+- `GET /api/broker/order-book/{account_id}` — live orders from `{baseUrl}/quick/user/orders`.
+- `GET /api/broker/positions/{account_id}` — live positions from `{baseUrl}/quick/user/positions`.
+- `GET /api/broker/holdings/{account_id}` — live holdings from `{baseUrl}/portfolio/v1/holdings`.
+- New sidebar nav "Order Book" → account selector dropdown + tabs (Orders/Positions/Holdings).
+- Renders Kotak response fields (`nOrdNo`, `ts`, `tt`, `qt`, `pr`, `ordSt`, etc.) in tables with P&L coloring.
+
+**Missing Dependencies Fixed** (`copy_trading/requirements.txt`):
+- Added `aiohttp>=3.9.0` and `pandas>=2.2.0` (were used but not listed).
+
+**Dead Code Cleanup** (`place_order.py`):
+- Removed broken `get_order_data_from_quote_ohlc()` (referenced `row` instead of `item`, was never called).
+
+**Files Changed**: `copy_trading/app.py`, `copy_trading/static/js/app.js`, `copy_trading/static/index.html`, `copy_trading/static/css/styles.css`, `copy_trading/requirements.txt`, `place_order.py`.
+
+---
+
+### 2026-04-10: Copy Trading Auth — Aligned with Main App (place_order.py)
+
+**Problem**: Orders returning HTTP 401. Investigated using Postman screenshots (consumer_key approach) but confirmed main app (`place_order.py`, `neo_main_login.py`) uses NEO_ACCESS_TOKEN UUID and works fine.
+
+**Root cause**: Likely session conflict — Kotak allows only ONE active session per account. Authenticating from main app invalidates copy_trading's stored session.
+
+**Fix**: Ensured copy_trading auth + order headers match main app exactly:
+- Auth: `NEO_ACCESS_TOKEN` UUID → TOTP → MPIN (3-step via `KotakAccessTokenClient` + `KotakTOTPClient` + `KotakFinalSessionClient`)
+- Order headers: `Sid` + `Auth` + `Content-Type` only (no `neo-fin-key`, no `Authorization`)
+- Added detailed logging for auth scope tracking (`kType: View/Trade`)
+
+---
+
 ### 2026-04-01: N-column cumulative EPS (N3/N6/N9) — extract + fallback + formula vars
 
 **What**: AI extracts `cumulative_eps_basic` / `cumulative_eps_diluted` from Three/Six/Nine Month ended columns; DB stores; API enriches `quarters_eps` with N3/N6/N9 (DB first, else Q1+Q2+Q3), PFY/PN9/PN6 from prior FY, PQ4=PFY−PN9; frontend `evalFormulaExpr` supports N3/N6/N9/PFY/PN9/PN6/PQ4.
@@ -4703,6 +4879,50 @@ copy_trading/
 
 **Docker**: Separate container `copy-trading-app` on port 5100 (vs main app on 5000)
 
+**2026-04-05 — Kotak Neo account form**: Add/Edit modal only asks Account Name + UCC + Neo access token + mobile + MPIN (matches `.env` UCC / NEO_ACCESS_TOKEN / number / MPIN). `access_token` column persisted; API masks token/MPIN on GET; PUT skips empty secrets. Removed consumer key/secret/TOTP/notes from UI.
+
+**2026-04-05 — Multi-broker account form**: Broker dropdown: Kotak Neo | Motilal Oswal. Kotak: UCC + Neo token + mobile + MPIN → `client_id`, `access_token`, `mobile_number`, `mpin`. Motilal: Client ID + API key + secret + mobile → `client_id`, `consumer_key`, `consumer_secret`, `mobile_number`. GET masks `consumer_key`/`consumer_secret`/`access_token`/MPIN. Table shows friendly broker names.
+
+**2026-04-09 — Per-Account TOTP Auth + Real Kotak Order Placement**
+
+**DB**: Added `session_sid`, `session_base_url`, `session_expires_at` columns to `trading_accounts`. Added `broker_response` column to `orders`.
+
+**Backend** (`app.py`):
+- Imports `neo_login/` from parent project via `sys.path` (get_access_token, get_token_totp, get_final_session)
+- `_kotak_neo_authenticate(access_token, mobile, ucc, totp, mpin)` — full 3-step Kotak auth: access token → TOTP login → MPIN validation. Returns `{sid, token, base_url, expires_at}`.
+- `POST /api/accounts/{id}/auth` — takes `{totp_code}`, loads account credentials from DB, runs auth, stores session per-account in DB.
+- `GET /api/accounts/{id}/session` — checks session validity.
+- `_get_broker_session_status()` — returns `active`/`needs_auth`/`ready` per account. Kotak = check `session_expires_at`. Motilal = `ready` if API keys present.
+- `_place_kotak_order(sid, token, base_url, order_data)` — POST to Kotak `/quick/order/rule/ms/place` with per-account session headers.
+- `_build_kotak_order()` — builds Kotak order dict from symbol/exchange/qty/price/type.
+- `POST /api/orders/place` — fires orders to ALL selected accounts in parallel via `asyncio.gather()`. Records broker_order_id and broker_response per order.
+- Accounts list API now returns `session_status` per account.
+
+**Frontend** (`app.js`, `index.html`, `styles.css`):
+- Users table: new "Session" column (green chip = active with expiry, amber = needs TOTP, blue = ready for MO).
+- Users table: new "TOTP Auth" column with inline 6-digit input + "Auth" button for Kotak Neo accounts. Shows "✓ Authenticated" when session active.
+- `submitTOTP(accountId)` — calls `/api/accounts/{id}/auth`, shows success/error inline, reloads table.
+- Place Order: account checkboxes now show green/amber dot. Unauthenticated accounts are **disabled** (can't select). Only authenticated accounts can receive orders.
+- CSS: `.session-chip`, `.totp-inline`, `.totp-mini-input`, `.totp-auth-btn`, `.session-dot` styles.
+
+**Flow**: Users tab → enter TOTP per Kotak account (daily) → sessions stored in DB → Place Order fires all accounts in parallel (<1s).
+
+**2026-04-09 — Auto LTP Fetch on Symbol Input**
+
+- `GET /api/quote/{symbol}` — looks up symbol in NSE token map (from Google Sheet `nse_cm_neo` gid=427874302, cached in-memory), uses any active Kotak session to call `/script-details/1.0/quotes/neosymbol/{encoded}/all`, returns LTP/open/high/low.
+- Frontend: symbol input debounced (500ms) → auto-fetches LTP → shows LTP bar (₹ value + O/H/L) above qty/price fields → auto-fills "Buying Price" input with LTP.
+- "Price" label renamed to "Buying Price". User sees current market price and can adjust before placing.
+
+**2026-04-09 — Scrip Master from Kotak API (replaces Google Sheet)**
+
+- New `scrip_master` DB table: `symbol`, `exchange_token`, `symbol_name`, `exchange`, `p_group`, `isin`, `updated_at`. Unique index on `symbol`.
+- `_download_scrip_master(base_url, access_token)` → calls `GET {baseUrl}/script-details/1.0/masterscrip/file-paths` → finds `nse_cm-v1.csv` URL → downloads CSV → filters `pGroup=EQ` → inserts into `scrip_master` table. Clears in-memory cache.
+- **Auto-trigger**: On first TOTP auth of the day, if `scrip_master` is empty, auto-downloads. Auth response includes count.
+- `POST /api/scrip-master/refresh` — manual refresh endpoint.
+- `GET /api/scrip-master/status` — returns count + last updated.
+- `_get_scrip_token_map()` — reads from `scrip_master` DB table (cached in-memory). Used by `/api/quote/{symbol}`.
+- Removed: Google Sheet `nse_cm_neo` dependency. No more `sheet_id` / `NSE_CM_NEO_GID`.
+
 ---
 
 ## NSE CM Neo Sheet Update Fix (2026-04-06)
@@ -4716,3 +4936,56 @@ copy_trading/
 **Endpoint**: `GET {base_url}/script-details/1.0/masterscrip/file-paths` → finds `nse_cm-v1.csv` URL → downloads → filters `pGroup='EQ'` → writes to gid `1765483913`.
 
 **Trigger**: Runs as background task after successful TOTP auth (`/api/verify_totp`).
+
+---
+
+## 2026-04-12 — Fund Display via check-margin (copy_trading)
+
+**Problem**: `/quick/user/limits` endpoint returned v2 fields (`Category`, `CollateralValue`, `NotionalCash`...) that didn't match expected `avlCash`/`totMrgnUsd`. Fund bar never showed.
+
+**Fix**: Switched to `POST {baseUrl}/quick/user/check-margin` endpoint which returns the correct fields:
+```json
+{"avlCash":"50000.000000","totMrgnUsd":"12500.000000","ordMrgn":"12500.000000","mrgnUsd":"0","avlMrgn":"0","insufFund":"0","stat":"Ok","stCode":200}
+```
+
+**Backend (`app.py`)**:
+- `_get_any_scrip_token()` — picks a real token from scrip_master (tries RELIANCE/TCS/INFY first, falls back to first available). Required because check-margin validates the symbol token.
+- `_fetch_kotak_funds(sid, token, base_url)` — POST to `{baseUrl}/quick/user/check-margin` with real symbol `{brkName:KOTAK, brnchId:ONLINE, exSeg:nse_cm, prc:0, prcTp:MKT, prod:CNC, qty:1, tok:<real_token>, trnsTp:B}`. Header includes `neo-fin-key: neotradeapi`.
+- `_is_funds_ok(data)` — checks `stat == "Ok"` or `avlCash` present.
+- `_store_account_funds(db, id, data)` — stores `avlCash` (available), `mrgnUsd` (margin already blocked), `ordMrgn` (ref only). Note: `totMrgnUsd` is NOT current usage — it's "total margin IF the dummy order is placed". `mrgnUsd` = actual margin already used.
+- All 3 call sites updated: TOTP auth, refresh-funds, post-order.
+- Removed old `_fetch_kotak_limits`, `_is_limits_ok`, `_parse_kotak_funds`.
+
+**Frontend (`app.js` + `styles.css`)**:
+- `fundBarHTML()` — shows rich fund display: green progress bar, "₹X free" / "₹Y used" / "Total: ₹Z" / "N% deployed". Shows cached data even without active session.
+- New CSS: `.fund-info`, `.fund-row`, `.fund-avl` (green), `.fund-used`, `.fund-total`, `.fund-pct`, `.fund-time`.
+
+**DB columns**: `fund_avl_cash`, `fund_margin_used`, `fund_order_margin`, `fund_updated_at` on `trading_accounts`.
+
+---
+
+## 2026-04-12 — Portfolio % Based Order Quantity (copy_trading)
+
+**Problem**: Fixed quantity input sent the same qty to all accounts. No way to allocate based on each account's available funds.
+
+**Solution**: Replaced "Quantity" with "Portfolio %" input. System fetches CMP (LTP) and live funds per account, calculates qty = floor(avlCash * pct / 100 / LTP) per account.
+
+**Backend (`app.py`)**:
+- `FetchFundsRequest` model + `POST /api/accounts/fetch-funds-for-order` — accepts `{account_ids:[]}`, fetches live funds via `_fetch_kotak_funds` in parallel (`asyncio.gather`), returns `{accounts:[{id, fund_avl_cash}]}`. Also stores to DB.
+- `OrderCreate` model: `quantity` now `Optional[int]`, added `quantities: Optional[dict]` for per-account qty map `{"account_id": qty}`.
+- `place_orders()`: resolves qty per account from `quantities[str(acc_id)]` first, falls back to `quantity`. Builds `_build_kotak_order` per account with its own qty. Stores correct qty in `orders` table. Returns `quantity` in each result.
+
+**Frontend (`index.html`)**:
+- `orderQty` input replaced with `orderPct` (Portfolio %, 1-100, default 10).
+
+**Frontend (`app.js`)**:
+- `_orderAccounts`, `_currentLTP`, `_liveFunds` state vars.
+- `loadOrderPage()` stores accounts + initial DB funds into `_liveFunds`.
+- `_renderOrderAccounts()` renders each account with funds badge (`.order-acc-funds`) + calculated qty badge (`.order-acc-qty`).
+- `recalcAccountQtys()` — triggered on pct/symbol/checkbox change — computes `floor(funds * pct/100 / ltp)` per checked account.
+- `fetchLiveFundsForChecked()` — calls new endpoint for selected accounts, updates `_liveFunds`, re-renders.
+- `fetchLTP()` now fires quote + live funds fetch in parallel (`Promise.all`), stores `_currentLTP`, triggers recalc.
+- Form submit builds `quantities` map (per-account), shows breakdown in confirm modal (name, funds, qty per account). Blocks submit if all qty=0.
+
+**Frontend (`styles.css`)**:
+- `.order-acc-funds`, `.order-acc-funds-na`, `.order-acc-qty`, `.order-acc-qty-ok` (green), `.order-acc-qty-zero` (red).

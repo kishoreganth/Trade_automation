@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="/static/css/styles.css?v=20260402c">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260412c">
 </head>
 <body>
     <div class="app-shell">
@@ -268,6 +268,10 @@
                             </div>
                             <div class="pe-multiselect" id="peSectorFilter">
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Sector</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+                                <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <div class="pe-multiselect" id="peExchangeFilter">
+                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Exchange</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
                                 <div class="pe-multiselect-dropdown"></div>
                             </div>
                             <button id="peClearFiltersBtn" class="btn-refresh btn-sm pe-clear-btn" title="Clear all filters" style="display:none;">
@@ -677,7 +681,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260402c"></script>
+    <script src="/static/js/dashboard.js?v=20260412d"></script>
     <script>
         lucide.createIcons();
     </script>

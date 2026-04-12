@@ -2299,7 +2299,8 @@ let peFormulas = [];
 let peActiveFormulaIds = JSON.parse(localStorage.getItem('peActiveFormulaIds') || '[]');
 
 // PE Multi-select filter state
-const peFilterState = { year: new Set(), quarter: new Set(), sector: new Set() };
+const peFilterState = { year: new Set(), quarter: new Set(), sector: new Set(), exchange: new Set() };
+let _peExchangeInitialized = false;
 
 function peInitMultiselects() {
     document.querySelectorAll('.pe-multiselect').forEach(wrap => {
@@ -2319,20 +2320,28 @@ function peInitMultiselects() {
     });
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.addEventListener('click', () => {
-        peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear();
+        peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear(); peFilterState.exchange.clear();
+        _peExchangeInitialized = false;
         pePopulateFilterDropdowns();
         renderPEAnalysis();
     });
 }
 
 function pePopulateFilterDropdowns() {
-    const years = new Set(), quarters = new Set(), sectors = new Set();
+    const years = new Set(), quarters = new Set(), sectors = new Set(), exchanges = new Set();
     for (const r of peAnalysisData) {
         const fy = r.financial_year || '';
         const ym = fy.match(/\d{4}/);
         if (ym) years.add(ym[0]);
         if (r.quarter) quarters.add(r.quarter.toUpperCase());
         if (r.sector) sectors.add(r.sector);
+        if (r.exchange) exchanges.add(r.exchange);
+    }
+
+    // Default: pre-select BSE on first load
+    if (!_peExchangeInitialized && exchanges.has('BSE')) {
+        peFilterState.exchange.add('BSE');
+        _peExchangeInitialized = true;
     }
 
     function buildDropdown(filterId, values, stateKey, showSearch) {
@@ -2353,7 +2362,6 @@ function pePopulateFilterDropdowns() {
             </label>`;
         }
         dd.innerHTML = html;
-        // clean stale selections
         for (const v of peFilterState[stateKey]) { if (!values.has(v)) peFilterState[stateKey].delete(v); }
         const count = peFilterState[stateKey].size;
         badge.style.display = count > 0 ? 'inline-block' : 'none';
@@ -2363,8 +2371,9 @@ function pePopulateFilterDropdowns() {
     buildDropdown('peYearFilter', years, 'year', false);
     buildDropdown('peQuarterFilter', quarters, 'quarter', false);
     buildDropdown('peSectorFilter', sectors, 'sector', true);
+    buildDropdown('peExchangeFilter', exchanges, 'exchange', false);
 
-    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size > 0;
+    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size + peFilterState.exchange.size > 0;
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.style.display = anyActive ? 'flex' : 'none';
     if (typeof refreshIcons === 'function') refreshIcons();
@@ -2490,7 +2499,12 @@ async function loadQuarterlyResults() {
 
 async function loadPEAnalysis(fetchCmp = false) {
     try {
-        const resp = await fetch(`/api/pe_analysis?fetch_cmp=${fetchCmp}`);
+        let url = `/api/pe_analysis?fetch_cmp=${fetchCmp}`;
+        if (fetchCmp && peAnalysisData.length > 0) {
+            const visible = _getVisiblePESymbols();
+            if (visible.length > 0) url += `&symbols=${encodeURIComponent(visible.join(','))}`;
+        }
+        const resp = await fetch(url);
         const data = await resp.json();
         if (data.success && data.results) {
             peAnalysisData = data.results;
@@ -2498,9 +2512,42 @@ async function loadPEAnalysis(fetchCmp = false) {
             pePopulateFilterDropdowns();
             renderPEAnalysis();
         }
+        if (fetchCmp) {
+            if (data.cmp_error) {
+                showNotificationToast(data.cmp_error, 'warning');
+            } else if (data.cmp_fetched) {
+                showNotificationToast(`CMP updated for ${data.cmp_fetched} stocks`, 'success');
+            }
+        }
     } catch (e) {
         console.error('Error loading PE analysis:', e);
+        showNotificationToast('Failed to load PE analysis', 'error');
     }
+}
+
+function _getVisiblePESymbols() {
+    let filtered = peAnalysisData;
+    const symbolFilter = (document.getElementById('peSymbolFilter')?.value || '').trim().toLowerCase();
+    if (symbolFilter) {
+        filtered = filtered.filter(r =>
+            (r.stock_symbol || '').toLowerCase().includes(symbolFilter) ||
+            (r.company_name || '').toLowerCase().includes(symbolFilter) ||
+            (r.sector || '').toLowerCase().includes(symbolFilter)
+        );
+    }
+    if (peFilterState.year.size > 0) {
+        filtered = filtered.filter(r => { const m = (r.financial_year || '').match(/\d{4}/); return m && peFilterState.year.has(m[0]); });
+    }
+    if (peFilterState.quarter.size > 0) {
+        filtered = filtered.filter(r => peFilterState.quarter.has((r.quarter || '').toUpperCase()));
+    }
+    if (peFilterState.sector.size > 0) {
+        filtered = filtered.filter(r => peFilterState.sector.has(r.sector || ''));
+    }
+    if (peFilterState.exchange.size > 0) {
+        filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
+    }
+    return filtered.map(r => r.stock_symbol);
 }
 
 function renderPEAnalysis() {
@@ -2529,6 +2576,9 @@ function renderPEAnalysis() {
     }
     if (peFilterState.sector.size > 0) {
         filtered = filtered.filter(r => peFilterState.sector.has(r.sector || ''));
+    }
+    if (peFilterState.exchange.size > 0) {
+        filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
     }
 
     if (filtered.length === 0) {
@@ -2654,6 +2704,9 @@ function exportPEAnalysisToExcel() {
     }
     if (peFilterState.sector.size > 0) {
         filtered = filtered.filter(r => peFilterState.sector.has(r.sector || ''));
+    }
+    if (peFilterState.exchange.size > 0) {
+        filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
     }
     if (!filtered.length) return;
 
@@ -2878,11 +2931,14 @@ function exportPEAnalysisToExcel() {
                     if (data.success) {
                         statusDiv.style.background = '#064e3b';
                         statusDiv.style.color = '#6ee7b7';
-                        statusDiv.textContent = `Saved ${data.periods_stored} period(s) for ${data.stock_symbol}. Fetching CMP & PE...`;
-                        submitBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Fetching CMP...';
-                        if (typeof refreshIcons === 'function') refreshIcons();
-                        await loadPEAnalysis(true);
-                        statusDiv.textContent = `✓ ${data.stock_symbol}: ${data.periods_stored} period(s) saved, CMP & PE updated.`;
+                        statusDiv.textContent = `✓ ${data.stock_symbol}: ${data.periods_stored} period(s) saved. CMP & PE auto-fetched.`;
+                        if (data.cmp_hint) {
+                            statusDiv.style.background = '#78350f';
+                            statusDiv.style.color = '#fcd34d';
+                            statusDiv.textContent = `✓ ${data.stock_symbol}: ${data.periods_stored} period(s) saved. ⚠ ${data.cmp_hint}`;
+                            showNotificationToast(data.cmp_hint, 'warning');
+                        }
+                        await loadPEAnalysis(false);
                         symbolInput.value = '';
                         fileInput.value = '';
                     } else {
