@@ -28,6 +28,9 @@
             </div>
             <div class="top-bar-right">
                 <span id="lastUpdate" class="last-update-text">Last update: Never</span>
+                <button class="btn-icon-only" id="fetchScripMasterBtn" onclick="fetchScripMaster()" title="Refresh Scrip Master (NSE + BSE)">
+                    <i data-lucide="database"></i>
+                </button>
                 <button class="btn-icon-only" onclick="logout()" title="Logout">
                     <i data-lucide="log-out"></i>
                 </button>
@@ -332,6 +335,7 @@
                                 <thead>
                                     <tr>
                                         <th>Stock</th>
+                                        <th>Exch</th>
                                         <th>Quarter</th>
                                         <th>Year</th>
                                         <th>Qtr EPS</th>
@@ -340,8 +344,10 @@
                                         <th>CMP (&#8377;)</th>
                                         <th>PE</th>
                                         <th>Sector</th>
+                                        <th>Value</th>
                                         <th>File</th>
                                         <th>Date</th>
+                                        <th style="width:36px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="peAnalysisBody"></tbody>

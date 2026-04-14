@@ -4989,3 +4989,59 @@ copy_trading/
 
 **Frontend (`styles.css`)**:
 - `.order-acc-funds`, `.order-acc-funds-na`, `.order-acc-qty`, `.order-acc-qty-ok` (green), `.order-acc-qty-zero` (red).
+
+---
+
+## 2026-04-14 — PE Analysis BSE Stock Cell Layout
+
+**Change**: For BSE exchange stocks in PE Analysis table, stock cell now shows **Company Name** (bold, top) with symbol number below in small grey text. NSE stocks remain unchanged (symbol bold on top, company name below). Modified `stockCell` construction in `renderPEAnalysis()` in `dashboard.js` line ~2615.
+
+---
+
+## 2026-04-14 — BSE CMP Fetch Support + Scrip Master Button
+
+**Problem**: CMP/PE only worked for NSE stocks. BSE stocks had no CMP because only `nse_cm-v1.csv` was downloaded and only `nse_cm|{token}` quote format was used.
+
+**Solution**: Added BSE scrip master download + BSE quote fetching + manual refresh button.
+
+**Backend (`nse_url_test.py`)**:
+- `BSE_CM_NEO_GID = "895275415"`, `_bse_token_cache` — BSE constants/cache.
+- `_fetch_bse_token_map()` — reads `bse_cm_neo` Google Sheet tab, maps `pSymbolName`/`pTrdSymbol` → `pSymbol` (exchange token). Cached in-memory.
+- `_download_and_write_scrip_masters()` — refactored core: downloads both `nse_cm-v1.csv` and `bse_cm-v1.csv` from Kotak master scrip API, filters equity groups, writes to respective Google Sheet tabs (`nse_cm_neo` GID 1765483913, `bse_cm_neo` GID 895275415). Clears both caches.
+- `_write_df_to_gsheet()` — helper to write DataFrame to a sheet tab by GID.
+- `fetch_cm_data_background()` — replaces `fetch_nse_cm_data_background()`, calls `_download_and_write_scrip_masters()`.
+- `POST /api/refresh_scrip_master` — manual endpoint to trigger scrip master refresh, returns `{nse_count, bse_count}`.
+- `get_pe_analysis()` Fetch CMP — splits stocks by `exchange` field: NSE stocks use `_fetch_nse_token_map()` + `nse_cm|{token}`, BSE stocks use `_fetch_bse_token_map()` + `bse_cm|{token}`. Parallel fetch via `asyncio.gather`.
+- `_auto_fetch_cmp_for_stock()` — new `exchange` param, routes to correct token map/prefix.
+- TOTP verify triggers `fetch_cm_data_background` (both NSE+BSE).
+
+**Frontend (`index.html`)**:
+- "Fetch Scrip Master" button (database icon) in `top-bar-right`, before logout button.
+
+**Frontend (`dashboard.js`)**:
+- `fetchScripMaster()` — calls `POST /api/refresh_scrip_master`, shows spin animation on button, displays notification toast with counts.
+
+**Google Sheets**: NSE tab GID `1765483913`, BSE tab GID `895275415` in spreadsheet `1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM`.
+
+---
+
+## 2026-04-14 — PE Analysis Inline Row Editing
+
+**Feature**: Every row in PE Analysis table has a pencil icon (last column). Clicking it makes editable columns turn into inline inputs/dropdowns. Save (check) persists to DB, Cancel (x) reverts.
+
+**Editable columns**: Quarter (dropdown), Year (number), Qtr EPS (number), FY EPS (number), CMP (number), Sector (dropdown from stocks table). PE auto-computes on save. Stock name, Cum EPS, File, Date are NOT editable.
+
+**Backend (`nse_url_test.py`)**:
+- `PEEditRequest` Pydantic model with `quarter`, `financial_year`, `qtr_eps`, `fy_eps`, `cmp`, `sector`, `eps_basis`, `old_quarter`, `old_financial_year`.
+- `PUT /api/pe_analysis/{stock_symbol}` — updates `quarterly_results` row matched by symbol + old_quarter + old_financial_year. Writes EPS to correct basis column (C=consolidated, S=standalone). Auto-computes `pe = cmp / fy_eps`. Updates `stocks.sector` if changed.
+- `GET /api/pe_sectors` — returns distinct sectors from `stocks` table for dropdown.
+
+**Frontend (`index.html`)**: Added empty `<th>` for actions column.
+
+**Frontend (`dashboard.js`)**:
+- `renderPEAnalysis()` — each row gets `data-pe-sym/q/fy/basis` attributes, class-tagged cells (`pe-col-quarter`, `pe-col-year`, etc.), and edit button `<td>`.
+- `peStartEdit(sym, quarter, fy)` — replaces cell content with inputs/selects, loads sector dropdown via `_loadPeSectors()` (cached).
+- `peSaveEdit(sym, oldQ, oldFy, basis)` — reads inputs, calls `PUT /api/pe_analysis/{sym}`, updates in-memory data, re-renders.
+- `peCancelEdit()` — calls `renderPEAnalysis()` to restore.
+
+**CSS (`styles.css`)**: `.pe-edit-btn`, `.pe-save-btn`, `.pe-cancel-btn`, `.pe-edit-input`, `.pe-edit-select`, `.pe-editing` styles.

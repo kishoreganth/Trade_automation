@@ -561,9 +561,11 @@ DB_PATH = os.getenv('DB_PATH', 'messages.db')
 STOCKS_SYNC_POLICY = os.getenv("STOCKS_SYNC_POLICY", "always")
 STOCKS_SYNC_THRESHOLD = int(os.getenv("STOCKS_SYNC_THRESHOLD", "1000"))
 
-# NSE scrip master from Google Sheet (nse_cm_neo tab) for exchange token lookup
+# Scrip master from Google Sheet for exchange token lookup
 NSE_CM_NEO_GID = "1765483913"
+BSE_CM_NEO_GID = "895275415"
 _nse_token_cache: Dict[str, int] = {}
+_bse_token_cache: Dict[str, int] = {}
 
 
 async def _fetch_nse_token_map() -> Dict[str, int]:
@@ -599,6 +601,44 @@ async def _fetch_nse_token_map() -> Dict[str, int]:
     return _nse_token_cache
 
 
+async def _fetch_bse_token_map() -> Dict[str, int]:
+    """Fetch bse_cm_neo sheet → {SYMBOL: exchange_token}. Cached in-memory after first call."""
+    global _bse_token_cache
+    if _bse_token_cache:
+        return _bse_token_cache
+    sheet_id = os.getenv("sheet_id", "1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM")
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={BSE_CM_NEO_GID}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning(f"Failed to fetch bse_cm_neo sheet: HTTP {resp.status}")
+                    return {}
+                csv_text = await resp.text()
+        import io
+        df = pd.read_csv(io.StringIO(csv_text))
+        df.columns = [c.strip() for c in df.columns]
+        for _, row in df.iterrows():
+            sym_name = str(row.get("pSymbolName", "")).strip()
+            trd_sym = str(row.get("pTrdSymbol", "")).strip()
+            token = row.get("pSymbol")
+            if not sym_name or pd.isna(token):
+                continue
+            clean_sym = sym_name.split("-")[0].strip().upper()
+            clean_trd = trd_sym.split("-")[0].strip().upper() if trd_sym else ""
+            try:
+                tok_int = int(float(token))
+                _bse_token_cache[clean_sym] = tok_int
+                if clean_trd and clean_trd != clean_sym:
+                    _bse_token_cache[clean_trd] = tok_int
+            except (ValueError, TypeError):
+                continue
+        logger.info(f"Loaded {len(_bse_token_cache)} BSE symbol→token mappings from bse_cm_neo sheet")
+    except Exception as e:
+        logger.error(f"Error fetching bse_cm_neo token map: {e}")
+    return _bse_token_cache
+
+
 async def _check_session_valid() -> bool:
     """Quick check if kotak_session.json exists and is not expired."""
     session_file = "kotak_session.json"
@@ -613,7 +653,7 @@ async def _check_session_valid() -> bool:
         return False
 
 
-async def _auto_fetch_cmp_for_stock(symbol: str, fy_eps: float) -> Dict:
+async def _auto_fetch_cmp_for_stock(symbol: str, fy_eps: float, exchange: str = "NSE") -> Dict:
     """Auto-fetch CMP for a single stock after extraction. Returns {cmp, pe, error}."""
     result = {"cmp": None, "pe": None, "error": None}
     if not fy_eps or fy_eps <= 0:
@@ -625,14 +665,19 @@ async def _auto_fetch_cmp_for_stock(symbol: str, fy_eps: float) -> Dict:
         return result
 
     try:
-        token_map = await _fetch_nse_token_map()
-        token = token_map.get(symbol)
-        if not token:
-            result["error"] = f"No instrument token for {symbol}"
-            return result
+        is_bse = exchange.upper() == "BSE"
+        if is_bse:
+            token = symbol
+        else:
+            token_map = await _fetch_nse_token_map()
+            token = token_map.get(symbol)
+            if not token:
+                result["error"] = f"No instrument token for {symbol} (NSE)"
+                return result
 
         from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
-        sym_str = f"nse_cm|{token}"
+        prefix = "bse_cm" if is_bse else "nse_cm"
+        sym_str = f"{prefix}|{token}"
         raw = await get_quotes_with_rate_limit([sym_str], requests_per_minute=190)
         flattened = await flatten_quote_result_list(raw)
 
@@ -950,6 +995,7 @@ async def init_db():
             ("cumulative_eps_diluted_standalone", "REAL"),
             ("cumulative_eps_basic_consolidated", "REAL"),
             ("cumulative_eps_diluted_consolidated", "REAL"),
+            ("valuation", "TEXT"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
@@ -2162,7 +2208,7 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
         best_fy_eps = fy_diluted_c or fy_basic_c or fy_diluted_s or fy_basic_s
         cmp_result = {"cmp": None, "pe": None, "error": None}
         if best_fy_eps and best_fy_eps > 0:
-            cmp_result = await _auto_fetch_cmp_for_stock(stock_symbol, best_fy_eps)
+            cmp_result = await _auto_fetch_cmp_for_stock(stock_symbol, best_fy_eps, exchange=exchange)
 
         await ws_manager.broadcast_message({
             "type": "quarterly_results",
@@ -3890,6 +3936,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qr.pe AS stored_pe,
                     qr.cmp_updated_at,
                     qr.source_pdf_url,
+                    qr.valuation,
                     s.sector,
                     s.exchange
                 FROM quarterly_results qr
@@ -3987,6 +4034,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
 
         stock_data = []
         symbols_needing_cmp = []
+        sym_exchange_map = {}
         for r in rows:
             qtr_eps = r["qtr_eps"]
             fy_eps = r["fy_eps"]
@@ -4018,18 +4066,19 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                 "cmp_updated_at": r["cmp_updated_at"],
                 "updated_at": r["updated_at"],
                 "source_pdf_url": r["source_pdf_url"],
+                "valuation": r["valuation"],
                 "quarters_eps": quarters_map.get(r["stock_symbol"], {}),
             })
-            if fetch_cmp and fy_eps_rounded and fy_eps_rounded > 0:
+            if fetch_cmp:
                 symbols_needing_cmp.append(r["stock_symbol"])
+                sym_exchange_map[r["stock_symbol"]] = r["exchange"] or "NSE"
 
-        # Fetch live CMP from Kotak API using nse_cm_neo sheet tokens
+        # Fetch live CMP from Kotak API — route NSE vs BSE
         cmp_map = {}
         cmp_error = None
         if fetch_cmp and not symbols_needing_cmp:
             cmp_error = "No stocks with valid FY EPS to fetch CMP for"
         elif fetch_cmp and symbols_needing_cmp:
-            # Pre-check: validate session before hitting Kotak API
             session_file = "kotak_session.json"
             session_valid = False
             if not os.path.exists(session_file):
@@ -4047,55 +4096,97 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     cmp_error = "Invalid session — please verify TOTP"
 
             if session_valid:
-                # Filter to only requested symbols (from frontend view) if provided
                 requested_set = set(s.strip() for s in symbols.split(",") if s.strip()) if symbols else None
                 if requested_set:
                     symbols_needing_cmp = [s for s in symbols_needing_cmp if s in requested_set]
 
-                try:
-                    token_map = await _fetch_nse_token_map()
+                nse_syms = [s for s in symbols_needing_cmp if sym_exchange_map.get(s, "NSE").upper() == "NSE"]
+                bse_syms = [s for s in symbols_needing_cmp if sym_exchange_map.get(s, "NSE").upper() == "BSE"]
+
+                async def _fetch_cmp_nse(syms):
+                    """Fetch CMP for NSE symbols via token map lookup."""
+                    result_map = {}
+                    if not syms:
+                        return result_map
+                    tmap = await _fetch_nse_token_map()
                     tokens_to_fetch = []
                     token_to_symbol = {}
-                    for sym in symbols_needing_cmp:
-                        token = token_map.get(sym)
+                    for sym in syms:
+                        token = tmap.get(sym)
                         if token:
-                            sym_str = f"nse_cm|{token}"
-                            tokens_to_fetch.append(sym_str)
+                            tokens_to_fetch.append(f"nse_cm|{token}")
                             token_to_symbol[str(token)] = sym
+                    if not tokens_to_fetch:
+                        return result_map
+                    from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
+                    batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
+                    raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
+                    flattened = await flatten_quote_result_list(raw_results)
+                    for q in flattened:
+                        if q.get("error"):
+                            continue
+                        close_price = q.get("ohlc", {}).get("close")
+                        token_val = str(q.get("exchange_token", ""))
+                        if close_price and token_val in token_to_symbol:
+                            cmp_raw = float(close_price)
+                            result_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
+                    logger.info(f"PE Analysis (nse_cm): fetched CMP for {len(result_map)}/{len(tokens_to_fetch)} stocks")
+                    return result_map
 
-                    if tokens_to_fetch:
-                        from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
-                        batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
-                        raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
-                        flattened = await flatten_quote_result_list(raw_results)
-                        for q in flattened:
-                            if q.get("error"):
-                                continue
-                            close_price = q.get("ohlc", {}).get("close")
-                            token_val = str(q.get("exchange_token", ""))
-                            if close_price and token_val in token_to_symbol:
-                                cmp_raw = float(close_price)
-                                cmp_map[token_to_symbol[token_val]] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
-                        logger.info(f"PE Analysis: fetched CMP for {len(cmp_map)}/{len(tokens_to_fetch)} stocks")
+                async def _fetch_cmp_bse(syms):
+                    """Fetch CMP for BSE symbols — symbol IS the token (scrip code)."""
+                    result_map = {}
+                    if not syms:
+                        return result_map
+                    tokens_to_fetch = []
+                    token_to_symbol = {}
+                    for sym in syms:
+                        tokens_to_fetch.append(f"bse_cm|{sym}")
+                        token_to_symbol[sym] = sym
+                    from get_quote import get_quotes_with_rate_limit, flatten_quote_result_list
+                    batches = [",".join(tokens_to_fetch[i:i+190]) for i in range(0, len(tokens_to_fetch), 190)]
+                    raw_results = await get_quotes_with_rate_limit(batches, requests_per_minute=190)
+                    flattened = await flatten_quote_result_list(raw_results)
+                    for q in flattened:
+                        if q.get("error"):
+                            continue
+                        close_price = q.get("ohlc", {}).get("close")
+                        ex_token = str(q.get("exchange_token", ""))
+                        matched_sym = token_to_symbol.get(ex_token)
+                        if close_price and matched_sym:
+                            cmp_raw = float(close_price)
+                            result_map[matched_sym] = cmp_raw / 100 if cmp_raw > 100000 else cmp_raw
+                    logger.info(f"PE Analysis (bse_cm): fetched CMP for {len(result_map)}/{len(tokens_to_fetch)} stocks")
+                    return result_map
 
-                        if cmp_map:
-                            now_iso = get_ist_now().isoformat()
-                            async with aiosqlite.connect(DB_PATH) as db:
-                                for sym, cmp_val in cmp_map.items():
-                                    eps_for_sym = next((s["fy_eps"] for s in stock_data if s["stock_symbol"] == sym), None)
-                                    pe_computed = round(cmp_val / eps_for_sym, 2) if eps_for_sym and eps_for_sym > 0 else None
-                                    await db.execute(
-                                        """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
-                                           WHERE id = (
-                                               SELECT id FROM quarterly_results
-                                               WHERE stock_symbol = ? AND quarter != 'FY'
-                                               ORDER BY financial_year DESC, quarter DESC LIMIT 1
-                                           )""",
-                                        (cmp_val, pe_computed, now_iso, sym)
-                                    )
-                                await db.commit()
-                    elif not tokens_to_fetch and symbols_needing_cmp:
-                        cmp_error = f"No instrument tokens found for {len(symbols_needing_cmp)} symbols"
+                try:
+                    nse_map, bse_map = await asyncio.gather(
+                        _fetch_cmp_nse(nse_syms),
+                        _fetch_cmp_bse(bse_syms),
+                    )
+                    cmp_map.update(nse_map)
+                    cmp_map.update(bse_map)
+
+                    if cmp_map:
+                        now_iso = get_ist_now().isoformat()
+                        async with aiosqlite.connect(DB_PATH) as db:
+                            for sym, cmp_val in cmp_map.items():
+                                eps_for_sym = next((s["fy_eps"] for s in stock_data if s["stock_symbol"] == sym), None)
+                                pe_computed = round(cmp_val / eps_for_sym, 2) if eps_for_sym and eps_for_sym > 0 else None
+                                await db.execute(
+                                    """UPDATE quarterly_results SET cmp = ?, pe = ?, cmp_updated_at = ?
+                                       WHERE id = (
+                                           SELECT id FROM quarterly_results
+                                           WHERE stock_symbol = ? AND quarter != 'FY'
+                                           ORDER BY financial_year DESC, quarter DESC LIMIT 1
+                                       )""",
+                                    (cmp_val, pe_computed, now_iso, sym)
+                                )
+                            await db.commit()
+
+                    no_token_count = len(symbols_needing_cmp) - len(cmp_map)
+                    if no_token_count > 0 and not cmp_map:
+                        cmp_error = f"No instrument tokens found for {no_token_count} symbols"
                 except Exception as e:
                     logger.warning(f"CMP fetch failed: {e}")
                     cmp_error = f"CMP fetch failed: {str(e)}"
@@ -4116,6 +4207,159 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
         return resp
     except Exception as e:
         logger.error(f"Error in PE analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PEEditRequest(BaseModel):
+    quarter: str = None
+    financial_year: str = None
+    qtr_eps: float = None
+    fy_eps: float = None
+    cmp: float = None
+    sector: str = None
+    exchange: str = None
+    valuation: str = None
+    eps_basis: str = None
+    old_quarter: str = None
+    old_financial_year: str = None
+
+
+@app.put("/api/pe_analysis/{stock_symbol}")
+async def update_pe_analysis_row(stock_symbol: str, body: PEEditRequest):
+    """Update editable fields of a PE Analysis row."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            match_q = body.old_quarter or body.quarter
+            match_fy = body.old_financial_year or body.financial_year
+            if not match_q or not match_fy:
+                raise HTTPException(status_code=400, detail="quarter and financial_year required")
+
+            sets = []
+            params = []
+            now_iso = get_ist_now().isoformat()
+
+            if body.quarter is not None:
+                sets.append("quarter = ?")
+                params.append(body.quarter)
+            if body.financial_year is not None:
+                sets.append("financial_year = ?")
+                params.append(body.financial_year)
+
+            basis = (body.eps_basis or "C").upper()
+            if body.qtr_eps is not None:
+                if basis == "S":
+                    sets.append("eps_diluted_standalone = ?")
+                else:
+                    sets.append("eps_diluted_consolidated = ?")
+                params.append(body.qtr_eps)
+
+            if body.fy_eps is not None:
+                if basis == "S":
+                    sets.append("fy_eps_diluted_standalone = ?")
+                else:
+                    sets.append("fy_eps_diluted_consolidated = ?")
+                params.append(body.fy_eps)
+
+            if body.cmp is not None:
+                sets.append("cmp = ?")
+                params.append(body.cmp)
+
+            if body.valuation is not None:
+                sets.append("valuation = ?")
+                params.append(body.valuation if body.valuation else None)
+
+            pe_val = None
+            cmp_for_pe = body.cmp
+            fy_for_pe = body.fy_eps
+            if cmp_for_pe and fy_for_pe and fy_for_pe > 0:
+                pe_val = round(cmp_for_pe / fy_for_pe, 2)
+                sets.append("pe = ?")
+                params.append(pe_val)
+            elif body.cmp is not None or body.fy_eps is not None:
+                # Fetch missing value from DB to recompute
+                row = await db.execute(
+                    "SELECT cmp, COALESCE(fy_eps_diluted_consolidated, fy_eps_basic_consolidated, fy_eps_diluted_standalone, fy_eps_basic_standalone) as fy FROM quarterly_results WHERE stock_symbol = ? AND quarter = ? AND financial_year = ?",
+                    (stock_symbol, match_q, match_fy)
+                )
+                existing = await row.fetchone()
+                if existing:
+                    c = body.cmp if body.cmp is not None else (existing[0] or 0)
+                    f = body.fy_eps if body.fy_eps is not None else (existing[1] or 0)
+                    if c and f and f > 0:
+                        pe_val = round(c / f, 2)
+                        sets.append("pe = ?")
+                        params.append(pe_val)
+
+            if sets:
+                sets.append("updated_at = ?")
+                params.append(now_iso)
+                params.extend([stock_symbol, match_q, match_fy])
+                await db.execute(
+                    f"UPDATE quarterly_results SET {', '.join(sets)} WHERE stock_symbol = ? AND quarter = ? AND financial_year = ?",
+                    params
+                )
+
+            if body.exchange is not None:
+                sets_qr = []
+                sets_qr.append(("exchange", body.exchange))
+                await db.execute(
+                    "UPDATE quarterly_results SET exchange = ?, updated_at = ? WHERE stock_symbol = ? AND quarter = ? AND financial_year = ?",
+                    (body.exchange, now_iso, stock_symbol, match_q, match_fy)
+                )
+                await db.execute(
+                    "UPDATE stocks SET exchange = ?, updated_at = ? WHERE symbol = ?",
+                    (body.exchange, now_iso, stock_symbol)
+                )
+
+            if body.sector is not None:
+                await db.execute(
+                    "UPDATE stocks SET sector = ?, updated_at = ? WHERE symbol = ?",
+                    (body.sector, now_iso, stock_symbol)
+                )
+
+            await db.commit()
+
+        return {"success": True, "stock_symbol": stock_symbol, "pe": pe_val}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating PE row for {stock_symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/pe_analysis/{stock_symbol}")
+async def delete_pe_analysis_row(stock_symbol: str, quarter: str = "", financial_year: str = ""):
+    """Delete a quarterly_results row by stock_symbol + quarter + financial_year."""
+    if not quarter or not financial_year:
+        raise HTTPException(status_code=400, detail="quarter and financial_year required")
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                "DELETE FROM quarterly_results WHERE stock_symbol = ? AND quarter = ? AND financial_year = ?",
+                (stock_symbol, quarter, financial_year)
+            )
+            await db.commit()
+            if cursor.rowcount == 0:
+                return {"success": False, "detail": "Row not found"}
+            logger.info(f"Deleted PE row: {stock_symbol} {quarter} {financial_year}")
+            return {"success": True, "deleted": 1}
+    except Exception as e:
+        logger.error(f"Error deleting PE row {stock_symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pe_sectors")
+async def get_pe_sectors():
+    """Distinct sector list from stocks table for PE edit dropdown."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                "SELECT DISTINCT sector FROM stocks WHERE sector IS NOT NULL AND TRIM(sector) != '' ORDER BY sector"
+            )
+            rows = await cursor.fetchall()
+            return {"success": True, "sectors": [r[0] for r in rows]}
+    except Exception as e:
+        logger.error(f"Error fetching PE sectors: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -4459,127 +4703,141 @@ async def get_session_status():
             "message": "Error checking session"
         }
 
-async def fetch_nse_cm_data_background():
-    """
-    Background task to fetch NSE CM data and write to Google Sheet
-    Runs after successful TOTP authentication
-    """
+def _write_df_to_gsheet(spreadsheet, gid: str, df, label: str) -> int:
+    """Write a DataFrame to a Google Sheet tab identified by gid. Returns row count written."""
+    import numpy as np
+    worksheet = None
+    for sheet in spreadsheet.worksheets():
+        if str(sheet.id) == gid:
+            worksheet = sheet
+            break
+    if not worksheet:
+        logger.error(f"Scrip master: worksheet gid={gid} not found for {label}")
+        return 0
+    data = [df.columns.tolist()] + df.values.tolist()
+    data = [['' if (isinstance(cell, float) and np.isnan(cell)) else cell for cell in row] for row in data]
+    new_row_count = len(data)
+    old_row_count = worksheet.row_count
+    col_count = max(worksheet.col_count, len(data[0]))
+    if old_row_count != new_row_count or worksheet.col_count != col_count:
+        worksheet.resize(rows=new_row_count, cols=col_count)
+    worksheet.update('A1', data)
+    logger.info(f"Scrip master: {label} written ({new_row_count - 1} rows) to gid={gid}")
+    return new_row_count - 1
+
+
+async def _download_and_write_scrip_masters(return_counts: bool = False):
+    """Download NSE + BSE CM scrip master CSVs from Kotak API and write to Google Sheets.
+    Returns {nse_count, bse_count, error} if return_counts=True, else None."""
+    global _nse_token_cache, _bse_token_cache
+    result = {"nse_count": 0, "bse_count": 0, "error": None}
     try:
-        logger.info("🔄 Background: Starting NSE CM data fetch...")
-        
-        # Load session data
         session_file = "kotak_session.json"
         if not os.path.exists(session_file):
-            logger.error("Background: Session file not found")
-            return
-        
+            result["error"] = "Session file not found"
+            logger.error(f"Scrip master: {result['error']}")
+            return result if return_counts else None
+
         async with aiofiles.open(session_file, 'r') as f:
             content = await f.read()
             session_data = json.loads(content)
-        
+
         base_url = session_data.get('base_url')
         access_token = session_data.get('access_token')
         if not base_url or not access_token:
-            logger.error("Background: base_url or access_token not found")
-            return
+            result["error"] = "base_url or access_token not found in session"
+            logger.error(f"Scrip master: {result['error']}")
+            return result if return_counts else None
+
         url = f"{base_url}/script-details/1.0/masterscrip/file-paths"
         headers = {'accept': '*/*', 'Authorization': access_token}
-        
-        async with httpx.AsyncClient(verify=False, timeout=30, follow_redirects=True) as client:
+
+        async with httpx.AsyncClient(verify=False, timeout=60, follow_redirects=True) as client:
             response = await client.get(url, headers=headers)
-            
             if response.status_code != 200:
-                logger.error(f"Background: Failed to fetch file paths")
-                return
-            
-            data = response.json()
-            file_paths = data.get('data', {}).get('filesPaths', [])
-            
-            # Find nse_cm-v1.csv
+                result["error"] = f"Failed to fetch file paths: HTTP {response.status_code}"
+                logger.error(f"Scrip master: {result['error']}")
+                return result if return_counts else None
+
+            file_paths = response.json().get('data', {}).get('filesPaths', [])
+
             nse_cm_url = None
+            bse_cm_url = None
             for path in file_paths:
                 if 'nse_cm-v1.csv' in path:
                     nse_cm_url = path
-                    break
-            
-            if not nse_cm_url:
-                logger.error("Background: nse_cm-v1.csv not found")
-                return
-            
-            # Download CSV
-            logger.info(f"Background: Downloading {nse_cm_url}")
-            csv_response = await client.get(nse_cm_url)
-            
-            if csv_response.status_code != 200:
-                logger.error("Background: Failed to download CSV")
-                return
-            
-            # Load DataFrame
-            df = pd.read_csv(io.StringIO(csv_response.text))
-            logger.info(f"Background: Loaded {len(df)} rows, {len(df.columns)} columns")
-            
-            # Filter only EQ (Equity) stocks from pGroup column
-            if 'pGroup' in df.columns:
-                original_count = len(df)
-                df = df[df['pGroup'] == 'EQ'].copy()
-                filtered_count = len(df)
-                logger.info(f"Background: Filtered pGroup='EQ' → {filtered_count} rows (removed {original_count - filtered_count} non-EQ stocks)")
-            else:
-                logger.warning("Background: pGroup column not found, writing all data")
-            
-            # Write to Google Sheet
+                if 'bse_cm-v1.csv' in path:
+                    bse_cm_url = path
+
             import gspread
             from oauth2client.service_account import ServiceAccountCredentials
-            import numpy as np
-            
             scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
             creds = ServiceAccountCredentials.from_json_keyfile_name('google_sheets_credentials.json', scope)
             gsheet_client = gspread.authorize(creds)
-            
             spreadsheet = gsheet_client.open_by_key("1zftmphSqQfm0TWsUuaMl0J9mAsvQcafgmZ5U7DAXnzM")
-            
-            # Find worksheet by gid
-            worksheet = None
-            for sheet in spreadsheet.worksheets():
-                if str(sheet.id) == "1765483913":
-                    worksheet = sheet
-                    break
-            
-            if not worksheet:
-                logger.error("Background: Worksheet not found")
-                return
-            
-            # Prepare data before touching the sheet
-            data = [df.columns.tolist()] + df.values.tolist()
-            data = [['' if (isinstance(cell, float) and np.isnan(cell)) else cell for cell in row] for row in data]
-            new_row_count = len(data)
-            logger.info(f"Background: Prepared {new_row_count} rows (1 header + {new_row_count - 1} data)")
 
-            # Resize sheet to fit new data (expand or shrink)
-            old_row_count = worksheet.row_count
-            col_count = max(worksheet.col_count, len(data[0]))
-            if old_row_count != new_row_count or worksheet.col_count != col_count:
-                worksheet.resize(rows=new_row_count, cols=col_count)
-                logger.info(f"Background: Resized sheet {old_row_count}→{new_row_count} rows, {col_count} cols")
+            # --- NSE CM ---
+            if nse_cm_url:
+                logger.info(f"Scrip master: Downloading NSE CM from {nse_cm_url}")
+                csv_resp = await client.get(nse_cm_url)
+                if csv_resp.status_code == 200:
+                    df_nse = pd.read_csv(io.StringIO(csv_resp.text))
+                    if 'pGroup' in df_nse.columns:
+                        df_nse = df_nse[df_nse['pGroup'] == 'EQ'].copy()
+                    result["nse_count"] = _write_df_to_gsheet(spreadsheet, NSE_CM_NEO_GID, df_nse, "NSE CM")
+                else:
+                    logger.error(f"Scrip master: NSE CM download failed HTTP {csv_resp.status_code}")
+            else:
+                logger.warning("Scrip master: nse_cm-v1.csv not found in file paths")
 
-            # Overwrite all data in one batch (safe: no clear() before write)
-            worksheet.update(f'A1', data)
-            logger.info(f"✅ Background: NSE CM data written successfully ({new_row_count - 1} EQ stocks)")
+            # --- BSE CM ---
+            if bse_cm_url:
+                logger.info(f"Scrip master: Downloading BSE CM from {bse_cm_url}")
+                csv_resp = await client.get(bse_cm_url)
+                if csv_resp.status_code == 200:
+                    df_bse = pd.read_csv(io.StringIO(csv_resp.text))
+                    if 'pGroup' in df_bse.columns:
+                        orig = len(df_bse)
+                        df_bse = df_bse[df_bse['pGroup'].isin(['A', 'B', 'T', 'M', 'MT', 'EQ'])].copy()
+                        logger.info(f"Scrip master: BSE CM filtered {orig}→{len(df_bse)} tradeable group rows")
+                    result["bse_count"] = _write_df_to_gsheet(spreadsheet, BSE_CM_NEO_GID, df_bse, "BSE CM")
+                else:
+                    logger.error(f"Scrip master: BSE CM download failed HTTP {csv_resp.status_code}")
+            else:
+                logger.warning("Scrip master: bse_cm-v1.csv not found in file paths")
 
-            # Invalidate in-memory token cache so next read picks up fresh data
-            global _nse_token_cache
             _nse_token_cache = {}
-            
+            _bse_token_cache = {}
+            logger.info(f"Scrip master: Done. NSE={result['nse_count']}, BSE={result['bse_count']}")
+
     except Exception as e:
-        logger.error(f"❌ Background: NSE CM data fetch failed: {e}")
-        try:
-            if hasattr(e, 'resp') and getattr(e, 'resp', None):
-                logger.error(f"   HTTP status: {getattr(e.resp, 'status', 'N/A')}")
-            if hasattr(e, 'content') and getattr(e, 'content', None):
-                logger.error(f"   Response: {str(e.content)[:500]}")
-        except Exception:
-            pass
+        result["error"] = str(e)
+        logger.error(f"Scrip master fetch failed: {e}")
         logger.exception("   Traceback:")
+
+    return result if return_counts else None
+
+
+async def fetch_cm_data_background():
+    """Background task to fetch NSE + BSE CM data and write to Google Sheets."""
+    await _download_and_write_scrip_masters(return_counts=False)
+
+
+@app.post("/api/refresh_scrip_master")
+async def refresh_scrip_master():
+    """Manually trigger download of NSE + BSE CM scrip master files and write to Google Sheets."""
+    if not await _check_session_valid():
+        return {"success": False, "error": "No active session — please verify TOTP first"}
+    result = await _download_and_write_scrip_masters(return_counts=True)
+    if result.get("error"):
+        return {"success": False, "error": result["error"]}
+    return {
+        "success": True,
+        "nse_count": result["nse_count"],
+        "bse_count": result["bse_count"],
+        "message": f"Scrip master refreshed: NSE={result['nse_count']}, BSE={result['bse_count']}",
+    }
+
 
 @app.post("/api/verify_totp")
 async def verify_totp(request: TOTPRequest, background_tasks: BackgroundTasks):
@@ -4601,9 +4859,9 @@ async def verify_totp(request: TOTPRequest, background_tasks: BackgroundTasks):
         if session_data:
             logger.info("Neo authentication successful")
             
-            # Trigger NSE CM data fetch in background after successful auth
-            background_tasks.add_task(fetch_nse_cm_data_background)
-            logger.info("🚀 Triggered NSE CM data fetch in background")
+            # Trigger NSE + BSE CM scrip master fetch in background after successful auth
+            background_tasks.add_task(fetch_cm_data_background)
+            logger.info("Triggered NSE + BSE CM scrip master fetch in background")
             
             return {
                 "success": True,

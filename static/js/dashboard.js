@@ -1688,6 +1688,34 @@ async function logout() {
     }
 }
 
+// Fetch Scrip Master (NSE + BSE)
+async function fetchScripMaster() {
+    const btn = document.getElementById('fetchScripMasterBtn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    const icon = btn.querySelector('[data-lucide]');
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+    try {
+        const resp = await fetch('/api/refresh_scrip_master', {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        const data = await resp.json();
+        if (data.success) {
+            showNotificationToast(`Scrip master refreshed — NSE: ${data.nse_count}, BSE: ${data.bse_count}`, 'success');
+        } else {
+            showNotificationToast(data.error || 'Failed to refresh scrip master', 'error');
+        }
+    } catch (e) {
+        console.error('Scrip master fetch error:', e);
+        showNotificationToast('Scrip master fetch failed', 'error');
+    } finally {
+        btn.disabled = false;
+        if (icon) icon.style.animation = '';
+    }
+}
+
 // ============================================================================
 // SCHEDULED TASK & NOTIFICATION SYSTEM
 // ============================================================================
@@ -2604,7 +2632,7 @@ function renderPEAnalysis() {
         const qtrEps = r.qtr_eps;
         const cmp = r.cmp;
         const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
-        const basisBadge = r.eps_basis === 'S' ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;">S</span>' : '';
+        const basisBadge = (r.eps_basis === 'S' && qtrEps != null && qtrEps !== '') ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Standalone only — no consolidated EPS available">S</span>' : '';
         const fy = r.financial_year || '';
         const yearMatch = fy.match(/\d{4}/);
         const yearDisplay = yearMatch ? yearMatch[0] : fy;
@@ -2612,7 +2640,9 @@ function renderPEAnalysis() {
         const fileLink = r.source_pdf_url
             ? `<a href="${r.source_pdf_url}" target="_blank" rel="noopener" title="${r.source_pdf_url}" style="color:#60a5fa;"><i data-lucide="file-text" style="width:16px;height:16px;"></i></a>`
             : '';
-        const stockCell = `<strong>${sym}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}`;
+        const stockCell = (r.exchange === 'BSE' && r.company_name)
+            ? `<strong>${r.company_name}</strong><br><small style="color:#888">${sym}</small>`
+            : `<strong>${sym}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}`;
 
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
@@ -2646,33 +2676,46 @@ function renderPEAnalysis() {
             const formulaTag = formula ? `<span class="pe-formula-label ${labelClass}">${formula.name}</span>` : '';
             const rowClass = isFirst ? '' : ' class="pe-formula-row"';
 
+            const editBtn = `<td rowspan="${rowCount}" style="text-align:center"><button class="pe-edit-btn" onclick="peStartEdit('${sym}','${r.quarter}','${fy}')" title="Edit"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button></td>`;
+            const exchBadge = (r.exchange || 'NSE').toUpperCase() === 'BSE'
+                ? '<span class="pe-exch-badge pe-exch-bse">BSE</span>'
+                : '<span class="pe-exch-badge pe-exch-nse">NSE</span>';
+            const valBadge = r.valuation === 'EXPENSIVE' ? '<span class="pe-val-badge pe-val-expensive">EXPENSIVE</span>'
+                : r.valuation === 'CHEAP' ? '<span class="pe-val-badge pe-val-cheap">CHEAP</span>' : '';
+
             if (rowCount === 1) {
-                html += `<tr>
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
                     <td>${stockCell}</td>
-                    <td>${r.quarter || ''}</td>
-                    <td>${yearDisplay}</td>
-                    <td>${fmt(qtrEps)}${basisBadge}</td>
+                    <td class="pe-col-exch">${exchBadge}</td>
+                    <td class="pe-col-quarter">${r.quarter || ''}</td>
+                    <td class="pe-col-year">${yearDisplay}</td>
+                    <td class="pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
                     <td>${cumCell}</td>
-                    <td>${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td>${cmp ? '₹' + fmt(cmp) : ''}</td>
-                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
-                    <td><small>${r.sector || ''}</small></td>
+                    <td class="pe-col-fyeps">${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td class="pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td class="pe-col-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td class="pe-col-sector"><small>${r.sector || ''}</small></td>
+                    <td>${valBadge}</td>
                     <td style="text-align:center">${fileLink}</td>
                     <td>${updated}</td>
+                    ${editBtn}
                 </tr>`;
             } else if (isFirst) {
-                html += `<tr>
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
                     <td rowspan="${rowCount}">${stockCell}</td>
-                    <td rowspan="${rowCount}">${r.quarter || ''}</td>
-                    <td rowspan="${rowCount}">${yearDisplay}</td>
-                    <td rowspan="${rowCount}">${fmt(qtrEps)}${basisBadge}</td>
+                    <td rowspan="${rowCount}" class="pe-col-exch">${exchBadge}</td>
+                    <td rowspan="${rowCount}" class="pe-col-quarter">${r.quarter || ''}</td>
+                    <td rowspan="${rowCount}" class="pe-col-year">${yearDisplay}</td>
+                    <td rowspan="${rowCount}" class="pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
                     <td rowspan="${rowCount}">${cumCell}</td>
                     <td>${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td rowspan="${rowCount}">${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td rowspan="${rowCount}" class="pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
                     <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
-                    <td rowspan="${rowCount}"><small>${r.sector || ''}</small></td>
+                    <td rowspan="${rowCount}" class="pe-col-sector"><small>${r.sector || ''}</small></td>
+                    <td rowspan="${rowCount}">${valBadge}</td>
                     <td rowspan="${rowCount}" style="text-align:center">${fileLink}</td>
                     <td rowspan="${rowCount}">${updated}</td>
+                    ${editBtn}
                 </tr>`;
             } else {
                 html += `<tr${rowClass}>
@@ -2684,6 +2727,212 @@ function renderPEAnalysis() {
     }
     tbody.innerHTML = html;
     if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+// PE Inline Edit
+let _peSectorsList = null;
+
+async function _loadPeSectors() {
+    if (_peSectorsList) return _peSectorsList;
+    try {
+        const resp = await fetch('/api/pe_sectors', { headers: getAuthHeaders() });
+        const data = await resp.json();
+        if (data.success) _peSectorsList = data.sectors || [];
+    } catch (e) { _peSectorsList = []; }
+    return _peSectorsList || [];
+}
+
+function _yearOptions(selected) {
+    const cur = new Date().getFullYear();
+    let opts = '';
+    for (let y = cur + 2; y >= 2018; y--) opts += `<option value="${y}"${String(y) === String(selected) ? ' selected' : ''}>${y}</option>`;
+    return opts;
+}
+
+function peStartEdit(sym, quarter, fy) {
+    peCancelEdit();
+    const row = document.querySelector(`tr[data-pe-sym="${sym}"][data-pe-q="${quarter}"][data-pe-fy="${fy}"]`);
+    if (!row) return;
+    row.classList.add('pe-editing');
+
+    const r = peAnalysisData.find(d => d.stock_symbol === sym && d.quarter === quarter && d.financial_year === fy);
+    if (!r) return;
+
+    const basis = r.eps_basis || 'C';
+    const curExch = (r.exchange || 'NSE').toUpperCase();
+    const yearMatch = (fy || '').match(/\d{4}/);
+    const yearVal = yearMatch ? yearMatch[0] : fy;
+
+    const colCount = row.closest('table').querySelector('thead tr').children.length;
+    const panelRow = document.createElement('tr');
+    panelRow.className = 'pe-panel-row';
+    panelRow.id = 'peEditPanel';
+
+    const exchOpts = ['NSE','BSE'].map(e => `<option value="${e}"${e === curExch ? ' selected' : ''}>${e}</option>`).join('');
+    const qtrOpts = ['Q1','Q2','Q3','Q4','FY'].map(q => `<option value="${q}"${q === quarter ? ' selected' : ''}>${q}</option>`).join('');
+    const sectorPlaceholder = `<select class="pe-panel-input" data-field="sector"><option>Loading...</option></select>`;
+
+    panelRow.innerHTML = `<td colspan="${colCount}">
+        <div class="pe-panel">
+            <div class="pe-panel-header">
+                <span class="pe-panel-title"><i data-lucide="pencil" style="width:14px;height:14px;"></i> Edit — <strong>${r.company_name || sym}</strong></span>
+                <div class="pe-panel-actions">
+                    <button class="pe-action-pill pe-action-save" onclick="peSaveEdit('${sym}','${quarter}','${fy}','${basis}')">
+                        <i data-lucide="check" style="width:14px;height:14px;"></i> Save
+                    </button>
+                    <button class="pe-action-pill pe-action-delete" onclick="peDeleteRow('${sym}','${quarter}','${fy}')">
+                        <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
+                    </button>
+                    <button class="pe-action-pill pe-action-cancel" onclick="peCancelEdit()">
+                        <i data-lucide="x" style="width:14px;height:14px;"></i> Cancel
+                    </button>
+                </div>
+            </div>
+            <div class="pe-panel-fields">
+                <div class="pe-panel-field">
+                    <label>Exchange</label>
+                    <select class="pe-panel-input" data-field="exchange">${exchOpts}</select>
+                </div>
+                <div class="pe-panel-field">
+                    <label>Quarter</label>
+                    <select class="pe-panel-input" data-field="quarter">${qtrOpts}</select>
+                </div>
+                <div class="pe-panel-field">
+                    <label>Year</label>
+                    <select class="pe-panel-input" data-field="year">${_yearOptions(yearVal)}</select>
+                </div>
+                <div class="pe-panel-field">
+                    <label>Qtr EPS</label>
+                    <input type="number" step="0.01" class="pe-panel-input" data-field="qtr_eps" value="${r.qtr_eps != null ? r.qtr_eps : ''}" placeholder="—">
+                </div>
+                <div class="pe-panel-field">
+                    <label>CMP</label>
+                    <input type="number" step="0.01" class="pe-panel-input" data-field="cmp" value="${r.cmp != null ? r.cmp : ''}" placeholder="—">
+                </div>
+                <div class="pe-panel-field">
+                    <label>Sector</label>
+                    ${sectorPlaceholder}
+                </div>
+                <div class="pe-panel-field">
+                    <label>Value</label>
+                    <select class="pe-panel-input" data-field="valuation">
+                        <option value=""${!r.valuation ? ' selected' : ''}>—</option>
+                        <option value="CHEAP"${r.valuation === 'CHEAP' ? ' selected' : ''}>CHEAP</option>
+                        <option value="EXPENSIVE"${r.valuation === 'EXPENSIVE' ? ' selected' : ''}>EXPENSIVE</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </td>`;
+
+    // Find last sub-row for this stock (for multi-formula rows)
+    let insertAfter = row;
+    let next = row.nextElementSibling;
+    while (next && next.classList.contains('pe-formula-row')) {
+        insertAfter = next;
+        next = next.nextElementSibling;
+    }
+    insertAfter.parentNode.insertBefore(panelRow, insertAfter.nextSibling);
+
+    _loadPeSectors().then(sectors => {
+        const sel = panelRow.querySelector('[data-field="sector"]');
+        if (sel) sel.innerHTML = ['', ...sectors].map(s => `<option value="${s}"${s === (r.sector || '') ? ' selected' : ''}>${s || '—'}</option>`).join('');
+    });
+
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
+    const panel = document.getElementById('peEditPanel');
+    if (!panel) return;
+
+    const getVal = (field) => {
+        const el = panel.querySelector(`[data-field="${field}"]`);
+        return el ? el.value : null;
+    };
+
+    const newQuarter = getVal('quarter');
+    const newYear = getVal('year');
+    const qtrEps = getVal('qtr_eps');
+    const fyEps = getVal('fy_eps');
+    const cmpVal = getVal('cmp');
+    const sector = getVal('sector');
+    const exchange = getVal('exchange');
+
+    const body = {
+        old_quarter: oldQuarter,
+        old_financial_year: oldFy,
+        eps_basis: basis
+    };
+    if (newQuarter && newQuarter !== oldQuarter) body.quarter = newQuarter;
+    if (newYear) {
+        const newFy = `FY${parseInt(newYear) - 1}-${newYear.slice(-2)}`;
+        if (newFy !== oldFy) body.financial_year = newFy;
+    }
+    if (qtrEps !== '' && qtrEps !== null) body.qtr_eps = parseFloat(qtrEps);
+    if (fyEps !== '' && fyEps !== null) body.fy_eps = parseFloat(fyEps);
+    if (cmpVal !== '' && cmpVal !== null) body.cmp = parseFloat(cmpVal);
+    if (sector !== null) body.sector = sector;
+    if (exchange !== null) body.exchange = exchange;
+    const valuation = getVal('valuation');
+    if (valuation !== null) body.valuation = valuation;
+
+    try {
+        const resp = await fetch(`/api/pe_analysis/${encodeURIComponent(sym)}`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const r = peAnalysisData.find(d => d.stock_symbol === sym && d.quarter === oldQuarter && d.financial_year === oldFy);
+            if (r) {
+                if (body.quarter) r.quarter = body.quarter;
+                if (body.financial_year) r.financial_year = body.financial_year;
+                if (body.qtr_eps !== undefined) r.qtr_eps = body.qtr_eps;
+                if (body.fy_eps !== undefined) r.fy_eps = body.fy_eps;
+                if (body.cmp !== undefined) r.cmp = body.cmp;
+                if (data.pe !== undefined && data.pe !== null) r.pe = data.pe;
+                if (body.sector !== undefined) r.sector = body.sector;
+                if (body.exchange) r.exchange = body.exchange;
+                if (body.valuation !== undefined) r.valuation = body.valuation;
+            }
+            renderPEAnalysis();
+            showNotificationToast('Row saved', 'success');
+        } else {
+            showNotificationToast(data.detail || 'Save failed', 'error');
+        }
+    } catch (e) {
+        console.error('PE save error:', e);
+        showNotificationToast('Save failed', 'error');
+    }
+}
+
+function peCancelEdit() {
+    const panel = document.getElementById('peEditPanel');
+    if (panel) panel.remove();
+    document.querySelectorAll('.pe-editing').forEach(el => el.classList.remove('pe-editing'));
+}
+
+async function peDeleteRow(sym, quarter, fy) {
+    if (!confirm(`Delete ${sym} ${quarter} ${fy} from PE Analysis? This cannot be undone.`)) return;
+    try {
+        const resp = await fetch(`/api/pe_analysis/${encodeURIComponent(sym)}?quarter=${encodeURIComponent(quarter)}&financial_year=${encodeURIComponent(fy)}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const data = await resp.json();
+        if (data.success) {
+            peAnalysisData = peAnalysisData.filter(d => !(d.stock_symbol === sym && d.quarter === quarter && d.financial_year === fy));
+            renderPEAnalysis();
+            showNotificationToast(`Deleted ${sym} ${quarter}`, 'success');
+        } else {
+            showNotificationToast(data.detail || 'Delete failed', 'error');
+        }
+    } catch (e) {
+        console.error('PE delete error:', e);
+        showNotificationToast('Delete failed', 'error');
+    }
 }
 
 function exportPEAnalysisToExcel() {
