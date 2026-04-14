@@ -13,18 +13,25 @@ messages.db
 # Persistent data directory for Docker
 data/
 
-# Generated folders
+# Generated folders (runtime data — PDFs, images, uploads)
 files/
 images/
+images_concall/
+images_test/
 downloads/
+downloads_concall/
+downloads_test/
 temp_uploads/
 
 # Exclude log files
 app.log
 *.log
 
-# Exclude cookies file
+# Exclude cookies and runtime state files
 cookies.txt
+config.json
+last_actions.json
+financial_extraction_pymupdf_output.json
 
 # Exclude documentation and context files
 memory_context.md
@@ -53,7 +60,12 @@ __pycache__/
 *.pyd
 .Python
 
+# Dev tools (Postman collections, API docs)
+postman/
+kotak_neo_new_api_postman_collection.json
+
 # Python virtual environment
+.venv/
 env/
 venv/
 ENV/

@@ -865,7 +865,7 @@ tbody tr:hover {
     border-radius: 9px; padding: 0 5px;
 }
 .pe-multiselect-dropdown {
-    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 9999;
     min-width: 180px; max-height: 260px; overflow-y: auto;
     background: var(--card-bg, #1a1f2e); border: 1px solid var(--border-color, #2a3042);
     border-radius: 10px; padding: 6px 0;
@@ -874,6 +874,10 @@ tbody tr:hover {
 }
 @keyframes peDropIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .pe-multiselect.open .pe-multiselect-dropdown { display: block; }
+#peColumnsToggle .pe-multiselect-dropdown {
+    left: auto; right: 0; position: fixed;
+    top: auto; max-height: 70vh;
+}
 .pe-ms-option {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 14px; font-size: 12px; color: #ccc; cursor: pointer;
@@ -926,11 +930,14 @@ tbody tr:hover {
     background: linear-gradient(135deg, rgba(30,32,48,0.98), rgba(24,26,40,0.98));
     border: 1px solid rgba(99,102,241,0.2); border-top: 2px solid #6366f1;
     border-radius: 0 0 8px 8px; padding: 14px 20px 16px; margin: 0 8px 8px;
+    display: flex; flex-direction: column;
 }
 .pe-panel-header {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);
+    order: 2;
 }
+.pe-panel-fields { order: 1; }
 .pe-panel-title {
     font-size: 0.85rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;
 }
@@ -943,7 +950,8 @@ tbody tr:hover {
 }
 .pe-action-pill:active { transform: scale(0.96); }
 .pe-action-save { background: rgba(16,185,129,0.18); color: #34d399; }
-.pe-action-save:hover { background: rgba(16,185,129,0.35); color: #6ee7b7; }
+.pe-action-save:hover:not(:disabled) { background: rgba(16,185,129,0.35); color: #6ee7b7; }
+.pe-save-disabled { opacity: 0.35; cursor: not-allowed; }
 .pe-action-delete { background: rgba(239,68,68,0.12); color: #f87171; }
 .pe-action-delete:hover { background: rgba(239,68,68,0.28); color: #fca5a5; }
 .pe-action-cancel { background: rgba(148,163,184,0.1); color: #94a3b8; }

@@ -2322,13 +2322,107 @@ function setupScheduleEditor(config) {
 // ============================================
 // PE Analysis — Quarterly Results + Formula System
 // ============================================
+
+function _fyEndingYear(fy) {
+    if (!fy) return null;
+    const m = fy.match(/(\d{4})\s*-\s*(\d{2,4})/);
+    if (m) {
+        const startYr = parseInt(m[1]);
+        const endPart = m[2];
+        return endPart.length === 2 ? String(startYr + 1) : endPart;
+    }
+    const single = fy.match(/\d{4}/);
+    return single ? single[0] : null;
+}
+
 let peAnalysisData = [];
 let peFormulas = [];
 let peActiveFormulaIds = JSON.parse(localStorage.getItem('peActiveFormulaIds') || '[]');
 
 // PE Multi-select filter state
 const peFilterState = { year: new Set(), quarter: new Set(), sector: new Set(), exchange: new Set() };
-let _peExchangeInitialized = false;
+let _peFiltersInitialized = false;
+
+function _updatePETitle() {
+    const el = document.getElementById('peAnalysisTitle');
+    if (!el) return;
+    const qtrs = [...peFilterState.quarter].sort().join(', ');
+    const yrs = [...peFilterState.year].sort().map(y => 'FY' + String(y).slice(-2)).join(', ');
+    let sub = '';
+    if (qtrs) sub += qtrs + ' ';
+    if (yrs) sub += yrs + ' ';
+    sub += sub ? 'Results' : 'Quarterly Results';
+    el.innerHTML = `PE Analysis &mdash; ${sub}`;
+}
+
+// PE Column Visibility
+const PE_COLUMNS = [
+    { key: 'exch', label: 'Exchange' },
+    { key: 'quarter', label: 'Quarter' },
+    { key: 'year', label: 'Year' },
+    { key: 'qtreps', label: 'Qtr EPS' },
+    { key: 'cumeps', label: 'Cum. EPS' },
+    { key: 'fyeps', label: 'FY EPS (Est.)' },
+    { key: 'cmp', label: 'CMP' },
+    { key: 'pe', label: 'PE' },
+    { key: 'sector', label: 'Sector' },
+    { key: 'value', label: 'Value' },
+    { key: 'file', label: 'File' },
+    { key: 'date', label: 'Date' },
+];
+let _peVisibleCols = null;
+
+function _peLoadColVisibility() {
+    try {
+        const saved = localStorage.getItem('peVisibleColumns');
+        if (saved) return new Set(JSON.parse(saved));
+    } catch (e) {}
+    return new Set(PE_COLUMNS.map(c => c.key));
+}
+
+function _peSaveColVisibility() {
+    localStorage.setItem('peVisibleColumns', JSON.stringify([..._peVisibleCols]));
+}
+
+function peApplyColumnVisibility() {
+    if (!_peVisibleCols) _peVisibleCols = _peLoadColVisibility();
+    let css = '';
+    for (const col of PE_COLUMNS) {
+        if (!_peVisibleCols.has(col.key)) {
+            css += `.pvc-${col.key} { display: none !important; }\n`;
+        }
+    }
+    let styleEl = document.getElementById('peColVisStyle');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'peColVisStyle';
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = css;
+}
+
+function peInitColumnsToggle() {
+    if (!_peVisibleCols) _peVisibleCols = _peLoadColVisibility();
+    const dd = document.getElementById('peColumnsDropdown');
+    if (!dd) return;
+    let html = '';
+    for (const col of PE_COLUMNS) {
+        const checked = _peVisibleCols.has(col.key);
+        html += `<label class="pe-ms-option${checked ? ' checked' : ''}">
+            <input type="checkbox" ${checked ? 'checked' : ''} onchange="peToggleColumn('${col.key}', this.checked)">
+            <span>${col.label}</span>
+        </label>`;
+    }
+    dd.innerHTML = html;
+}
+
+function peToggleColumn(key, visible) {
+    if (!_peVisibleCols) _peVisibleCols = _peLoadColVisibility();
+    if (visible) _peVisibleCols.add(key); else _peVisibleCols.delete(key);
+    _peSaveColVisibility();
+    peApplyColumnVisibility();
+    peInitColumnsToggle();
+}
 
 function peInitMultiselects() {
     document.querySelectorAll('.pe-multiselect').forEach(wrap => {
@@ -2349,9 +2443,10 @@ function peInitMultiselects() {
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.addEventListener('click', () => {
         peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear(); peFilterState.exchange.clear();
-        _peExchangeInitialized = false;
+        _peFiltersInitialized = true;
         pePopulateFilterDropdowns();
         renderPEAnalysis();
+        _updatePETitle();
     });
 }
 
@@ -2359,20 +2454,22 @@ function pePopulateFilterDropdowns() {
     const years = new Set(), quarters = new Set(), sectors = new Set(), exchanges = new Set();
     for (const r of peAnalysisData) {
         const fy = r.financial_year || '';
-        const ym = fy.match(/\d{4}/);
-        if (ym) years.add(ym[0]);
+        const ym = _fyEndingYear(fy);
+        if (ym) years.add(ym);
         if (r.quarter) quarters.add(r.quarter.toUpperCase());
         if (r.sector) sectors.add(r.sector);
         if (r.exchange) exchanges.add(r.exchange);
     }
 
-    // Default: pre-select BSE on first load
-    if (!_peExchangeInitialized && exchanges.has('BSE')) {
-        peFilterState.exchange.add('BSE');
-        _peExchangeInitialized = true;
+    if (!_peFiltersInitialized) {
+        if (exchanges.has('BSE')) peFilterState.exchange.add('BSE');
+        const curEndYear = String(new Date().getFullYear());
+        if (years.has(curEndYear)) peFilterState.year.add(curEndYear);
+        if (quarters.has('Q4')) peFilterState.quarter.add('Q4');
+        _peFiltersInitialized = true;
     }
 
-    function buildDropdown(filterId, values, stateKey, showSearch) {
+    function buildDropdown(filterId, values, stateKey, showSearch, labelFn) {
         const wrap = document.getElementById(filterId);
         if (!wrap) return;
         const dd = wrap.querySelector('.pe-multiselect-dropdown');
@@ -2384,9 +2481,10 @@ function pePopulateFilterDropdowns() {
         }
         for (const val of sorted) {
             const checked = peFilterState[stateKey].has(val);
+            const display = labelFn ? labelFn(val) : val;
             html += `<label class="pe-ms-option${checked ? ' checked' : ''}" data-val="${val}">
                 <input type="checkbox" ${checked ? 'checked' : ''} onchange="peToggleFilter('${stateKey}','${val.replace(/'/g, "\\'")}',this.checked)">
-                <span>${val}</span>
+                <span>${display}</span>
             </label>`;
         }
         dd.innerHTML = html;
@@ -2396,7 +2494,7 @@ function pePopulateFilterDropdowns() {
         badge.textContent = count;
     }
 
-    buildDropdown('peYearFilter', years, 'year', false);
+    buildDropdown('peYearFilter', years, 'year', false, y => 'FY' + String(y).slice(-2));
     buildDropdown('peQuarterFilter', quarters, 'quarter', false);
     buildDropdown('peSectorFilter', sectors, 'sector', true);
     buildDropdown('peExchangeFilter', exchanges, 'exchange', false);
@@ -2411,6 +2509,7 @@ function peToggleFilter(key, val, checked) {
     if (checked) peFilterState[key].add(val); else peFilterState[key].delete(val);
     pePopulateFilterDropdowns();
     renderPEAnalysis();
+    _updatePETitle();
 }
 
 function peFilterDropdownSearch(input) {
@@ -2539,6 +2638,7 @@ async function loadPEAnalysis(fetchCmp = false) {
             if (peFormulas.length === 0) await loadPeFormulas();
             pePopulateFilterDropdowns();
             renderPEAnalysis();
+            _updatePETitle();
         }
         if (fetchCmp) {
             if (data.cmp_error) {
@@ -2564,7 +2664,7 @@ function _getVisiblePESymbols() {
         );
     }
     if (peFilterState.year.size > 0) {
-        filtered = filtered.filter(r => { const m = (r.financial_year || '').match(/\d{4}/); return m && peFilterState.year.has(m[0]); });
+        filtered = filtered.filter(r => { const m = _fyEndingYear(r.financial_year); return m && peFilterState.year.has(m); });
     }
     if (peFilterState.quarter.size > 0) {
         filtered = filtered.filter(r => peFilterState.quarter.has((r.quarter || '').toUpperCase()));
@@ -2594,9 +2694,8 @@ function renderPEAnalysis() {
     }
     if (peFilterState.year.size > 0) {
         filtered = filtered.filter(r => {
-            const fy = r.financial_year || '';
-            const ym = fy.match(/\d{4}/);
-            return ym && peFilterState.year.has(ym[0]);
+            const ym = _fyEndingYear(r.financial_year);
+            return ym && peFilterState.year.has(ym);
         });
     }
     if (peFilterState.quarter.size > 0) {
@@ -2634,8 +2733,8 @@ function renderPEAnalysis() {
         const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
         const basisBadge = (r.eps_basis === 'S' && qtrEps != null && qtrEps !== '') ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Standalone only — no consolidated EPS available">S</span>' : '';
         const fy = r.financial_year || '';
-        const yearMatch = fy.match(/\d{4}/);
-        const yearDisplay = yearMatch ? yearMatch[0] : fy;
+        const yearVal = _fyEndingYear(fy) || fy;
+        const yearDisplay = yearVal && yearVal.length === 4 ? 'FY' + yearVal.slice(-2) : fy;
         const sym = r.stock_symbol || '';
         const fileLink = r.source_pdf_url
             ? `<a href="${r.source_pdf_url}" target="_blank" rel="noopener" title="${r.source_pdf_url}" style="color:#60a5fa;"><i data-lucide="file-text" style="width:16px;height:16px;"></i></a>`
@@ -2647,9 +2746,10 @@ function renderPEAnalysis() {
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
         let cumEpsVal = null, cumLabel = '';
-        if (q === 'Q3') { cumEpsVal = qe['N9']; cumLabel = 'N9'; }
+        if (q === 'Q4' || q === 'FY') { cumEpsVal = qe['N12'] || qe['NFY']; cumLabel = 'N12'; }
+        else if (q === 'Q3') { cumEpsVal = qe['N9']; cumLabel = 'N9'; }
         else if (q === 'Q2') { cumEpsVal = qe['N6']; cumLabel = 'N6'; }
-        else if (q === 'Q4' || q === 'FY') { cumLabel = 'FY'; }
+        else if (q === 'Q1') { cumEpsVal = qe['N3']; cumLabel = 'N3'; }
         const cumCell = cumEpsVal != null
             ? `${fmt(cumEpsVal)}<br><small style="color:#888">${cumLabel}</small>`
             : (cumLabel ? `<small style="color:#555">${cumLabel}</small>` : '');
@@ -2676,7 +2776,7 @@ function renderPEAnalysis() {
             const formulaTag = formula ? `<span class="pe-formula-label ${labelClass}">${formula.name}</span>` : '';
             const rowClass = isFirst ? '' : ' class="pe-formula-row"';
 
-            const editBtn = `<td rowspan="${rowCount}" style="text-align:center"><button class="pe-edit-btn" onclick="peStartEdit('${sym}','${r.quarter}','${fy}')" title="Edit"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button></td>`;
+            const editBtnInner = `<button class="pe-edit-btn" onclick="peStartEdit('${sym}','${r.quarter}','${fy}')" title="Edit"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>`;
             const exchBadge = (r.exchange || 'NSE').toUpperCase() === 'BSE'
                 ? '<span class="pe-exch-badge pe-exch-bse">BSE</span>'
                 : '<span class="pe-exch-badge pe-exch-nse">NSE</span>';
@@ -2685,42 +2785,42 @@ function renderPEAnalysis() {
 
             if (rowCount === 1) {
                 html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
-                    <td>${stockCell}</td>
-                    <td class="pe-col-exch">${exchBadge}</td>
-                    <td class="pe-col-quarter">${r.quarter || ''}</td>
-                    <td class="pe-col-year">${yearDisplay}</td>
-                    <td class="pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
-                    <td>${cumCell}</td>
-                    <td class="pe-col-fyeps">${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td class="pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
-                    <td class="pe-col-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
-                    <td class="pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td>${valBadge}</td>
-                    <td style="text-align:center">${fileLink}</td>
-                    <td>${updated}</td>
-                    ${editBtn}
+                    <td class="pvc-stock">${stockCell}</td>
+                    <td class="pvc-exch pe-col-exch">${exchBadge}</td>
+                    <td class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
+                    <td class="pvc-year pe-col-year">${yearDisplay}</td>
+                    <td class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
+                    <td class="pvc-cumeps">${cumCell}</td>
+                    <td class="pvc-fyeps pe-col-fyeps">${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td class="pvc-pe pe-col-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
+                    <td class="pvc-value">${valBadge}</td>
+                    <td class="pvc-file" style="text-align:center">${fileLink}</td>
+                    <td class="pvc-date">${updated}</td>
+                    <td class="pvc-edit" style="text-align:center">${editBtnInner}</td>
                 </tr>`;
             } else if (isFirst) {
                 html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
-                    <td rowspan="${rowCount}">${stockCell}</td>
-                    <td rowspan="${rowCount}" class="pe-col-exch">${exchBadge}</td>
-                    <td rowspan="${rowCount}" class="pe-col-quarter">${r.quarter || ''}</td>
-                    <td rowspan="${rowCount}" class="pe-col-year">${yearDisplay}</td>
-                    <td rowspan="${rowCount}" class="pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
-                    <td rowspan="${rowCount}">${cumCell}</td>
-                    <td>${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td rowspan="${rowCount}" class="pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
-                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
-                    <td rowspan="${rowCount}" class="pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td rowspan="${rowCount}">${valBadge}</td>
-                    <td rowspan="${rowCount}" style="text-align:center">${fileLink}</td>
-                    <td rowspan="${rowCount}">${updated}</td>
-                    ${editBtn}
+                    <td rowspan="${rowCount}" class="pvc-stock">${stockCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-exch pe-col-exch">${exchBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
+                    <td rowspan="${rowCount}" class="pvc-year pe-col-year">${yearDisplay}</td>
+                    <td rowspan="${rowCount}" class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-cumeps">${cumCell}</td>
+                    <td class="pvc-fyeps">${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td rowspan="${rowCount}" class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
+                    <td class="pvc-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td rowspan="${rowCount}" class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
+                    <td rowspan="${rowCount}" class="pvc-value">${valBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-file" style="text-align:center">${fileLink}</td>
+                    <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
+                    <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${editBtnInner}</td>
                 </tr>`;
             } else {
                 html += `<tr${rowClass}>
-                    <td>${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td class="${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td class="pvc-fyeps">${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
+                    <td class="pvc-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
                 </tr>`;
             }
         }
@@ -2731,6 +2831,20 @@ function renderPEAnalysis() {
 
 // PE Inline Edit
 let _peSectorsList = null;
+
+function _peCheckDirty() {
+    const btn = document.getElementById('pePanelSaveBtn');
+    if (!btn) return;
+    const panel = document.getElementById('peEditPanel');
+    if (!panel) return;
+    let dirty = false;
+    panel.querySelectorAll('.pe-panel-input').forEach(el => {
+        const orig = el.getAttribute('data-orig');
+        if (orig !== null && el.value !== orig) dirty = true;
+    });
+    btn.disabled = !dirty;
+    btn.classList.toggle('pe-save-disabled', !dirty);
+}
 
 async function _loadPeSectors() {
     if (_peSectorsList) return _peSectorsList;
@@ -2745,7 +2859,7 @@ async function _loadPeSectors() {
 function _yearOptions(selected) {
     const cur = new Date().getFullYear();
     let opts = '';
-    for (let y = cur + 2; y >= 2018; y--) opts += `<option value="${y}"${String(y) === String(selected) ? ' selected' : ''}>${y}</option>`;
+    for (let y = cur + 2; y >= 2018; y--) opts += `<option value="${y}"${String(y) === String(selected) ? ' selected' : ''}>FY${String(y).slice(-2)}</option>`;
     return opts;
 }
 
@@ -2760,8 +2874,7 @@ function peStartEdit(sym, quarter, fy) {
 
     const basis = r.eps_basis || 'C';
     const curExch = (r.exchange || 'NSE').toUpperCase();
-    const yearMatch = (fy || '').match(/\d{4}/);
-    const yearVal = yearMatch ? yearMatch[0] : fy;
+    const yearVal = _fyEndingYear(fy) || fy;
 
     const colCount = row.closest('table').querySelector('thead tr').children.length;
     const panelRow = document.createElement('tr');
@@ -2770,14 +2883,15 @@ function peStartEdit(sym, quarter, fy) {
 
     const exchOpts = ['NSE','BSE'].map(e => `<option value="${e}"${e === curExch ? ' selected' : ''}>${e}</option>`).join('');
     const qtrOpts = ['Q1','Q2','Q3','Q4','FY'].map(q => `<option value="${q}"${q === quarter ? ' selected' : ''}>${q}</option>`).join('');
-    const sectorPlaceholder = `<select class="pe-panel-input" data-field="sector"><option>Loading...</option></select>`;
+    const sectorOrig = r.sector || '';
+    const sectorPlaceholder = `<select class="pe-panel-input" data-field="sector" data-orig="${sectorOrig}"><option>Loading...</option></select>`;
 
     panelRow.innerHTML = `<td colspan="${colCount}">
         <div class="pe-panel">
             <div class="pe-panel-header">
                 <span class="pe-panel-title"><i data-lucide="pencil" style="width:14px;height:14px;"></i> Edit — <strong>${r.company_name || sym}</strong></span>
                 <div class="pe-panel-actions">
-                    <button class="pe-action-pill pe-action-save" onclick="peSaveEdit('${sym}','${quarter}','${fy}','${basis}')">
+                    <button class="pe-action-pill pe-action-save pe-save-disabled" id="pePanelSaveBtn" onclick="peSaveEdit('${sym}','${quarter}','${fy}','${basis}')" disabled>
                         <i data-lucide="check" style="width:14px;height:14px;"></i> Save
                     </button>
                     <button class="pe-action-pill pe-action-delete" onclick="peDeleteRow('${sym}','${quarter}','${fy}')">
@@ -2791,23 +2905,23 @@ function peStartEdit(sym, quarter, fy) {
             <div class="pe-panel-fields">
                 <div class="pe-panel-field">
                     <label>Exchange</label>
-                    <select class="pe-panel-input" data-field="exchange">${exchOpts}</select>
+                    <select class="pe-panel-input" data-field="exchange" data-orig="${curExch}">${exchOpts}</select>
                 </div>
                 <div class="pe-panel-field">
                     <label>Quarter</label>
-                    <select class="pe-panel-input" data-field="quarter">${qtrOpts}</select>
+                    <select class="pe-panel-input" data-field="quarter" data-orig="${quarter}">${qtrOpts}</select>
                 </div>
                 <div class="pe-panel-field">
                     <label>Year</label>
-                    <select class="pe-panel-input" data-field="year">${_yearOptions(yearVal)}</select>
+                    <select class="pe-panel-input" data-field="year" data-orig="${yearVal}">${_yearOptions(yearVal)}</select>
                 </div>
                 <div class="pe-panel-field">
                     <label>Qtr EPS</label>
-                    <input type="number" step="0.01" class="pe-panel-input" data-field="qtr_eps" value="${r.qtr_eps != null ? r.qtr_eps : ''}" placeholder="—">
+                    <input type="number" step="0.01" class="pe-panel-input" data-field="qtr_eps" value="${r.qtr_eps != null ? r.qtr_eps : ''}" data-orig="${r.qtr_eps != null ? r.qtr_eps : ''}" placeholder="—">
                 </div>
                 <div class="pe-panel-field">
                     <label>CMP</label>
-                    <input type="number" step="0.01" class="pe-panel-input" data-field="cmp" value="${r.cmp != null ? r.cmp : ''}" placeholder="—">
+                    <input type="number" step="0.01" class="pe-panel-input" data-field="cmp" value="${r.cmp != null ? r.cmp : ''}" data-orig="${r.cmp != null ? r.cmp : ''}" placeholder="—">
                 </div>
                 <div class="pe-panel-field">
                     <label>Sector</label>
@@ -2815,7 +2929,7 @@ function peStartEdit(sym, quarter, fy) {
                 </div>
                 <div class="pe-panel-field">
                     <label>Value</label>
-                    <select class="pe-panel-input" data-field="valuation">
+                    <select class="pe-panel-input" data-field="valuation" data-orig="${r.valuation || ''}">
                         <option value=""${!r.valuation ? ' selected' : ''}>—</option>
                         <option value="CHEAP"${r.valuation === 'CHEAP' ? ' selected' : ''}>CHEAP</option>
                         <option value="EXPENSIVE"${r.valuation === 'EXPENSIVE' ? ' selected' : ''}>EXPENSIVE</option>
@@ -2836,7 +2950,14 @@ function peStartEdit(sym, quarter, fy) {
 
     _loadPeSectors().then(sectors => {
         const sel = panelRow.querySelector('[data-field="sector"]');
-        if (sel) sel.innerHTML = ['', ...sectors].map(s => `<option value="${s}"${s === (r.sector || '') ? ' selected' : ''}>${s || '—'}</option>`).join('');
+        if (sel) {
+            sel.innerHTML = ['', ...sectors].map(s => `<option value="${s}"${s === (r.sector || '') ? ' selected' : ''}>${s || '—'}</option>`).join('');
+            sel.addEventListener('change', _peCheckDirty);
+        }
+    });
+
+    panelRow.querySelectorAll('.pe-panel-input').forEach(el => {
+        el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', _peCheckDirty);
     });
 
     if (typeof refreshIcons === 'function') refreshIcons();
@@ -2946,7 +3067,7 @@ function exportPEAnalysisToExcel() {
         );
     }
     if (peFilterState.year.size > 0) {
-        filtered = filtered.filter(r => { const m = (r.financial_year || '').match(/\d{4}/); return m && peFilterState.year.has(m[0]); });
+        filtered = filtered.filter(r => { const m = _fyEndingYear(r.financial_year); return m && peFilterState.year.has(m); });
     }
     if (peFilterState.quarter.size > 0) {
         filtered = filtered.filter(r => peFilterState.quarter.has((r.quarter || '').toUpperCase()));
@@ -2972,8 +3093,8 @@ function exportPEAnalysisToExcel() {
 
     for (const r of filtered) {
         const fy = r.financial_year || '';
-        const ym = fy.match(/\d{4}/);
-        const yearDisplay = ym ? ym[0] : fy;
+        const ym = _fyEndingYear(fy);
+        const yearDisplay = ym ? 'FY' + ym.slice(-2) : fy;
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
         let cumEpsVal = null;
@@ -3035,6 +3156,8 @@ function exportPEAnalysisToExcel() {
 (function initPEAnalysisControls() {
     document.addEventListener('DOMContentLoaded', () => {
         peInitMultiselects();
+        peApplyColumnVisibility();
+        peInitColumnsToggle();
         const filterInput = document.getElementById('peSymbolFilter');
         const refreshBtn = document.getElementById('peRefreshBtn');
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');

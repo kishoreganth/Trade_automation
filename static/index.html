@@ -254,7 +254,7 @@
                     <div class="analytics-view" id="peAnalysisView" style="display: none;">
                         <div class="section-header">
                             <i data-lucide="line-chart"></i>
-                            <h3>PE Analysis &mdash; Quarterly Results</h3>
+                            <h3 id="peAnalysisTitle">PE Analysis &mdash; Quarterly Results</h3>
                         </div>
                         <div class="pe-controls">
                             <div class="search-input-wrap search-input-sm">
@@ -303,6 +303,13 @@
                                 <i data-lucide="sigma"></i>
                                 <span>Formulas</span>
                             </button>
+                            <div class="pe-multiselect" id="peColumnsToggle">
+                                <button class="pe-multiselect-btn" type="button">
+                                    <i data-lucide="columns-3" style="width:14px;height:14px;"></i>
+                                    <span>Columns</span>
+                                </button>
+                                <div class="pe-multiselect-dropdown" id="peColumnsDropdown"></div>
+                            </div>
                         </div>
                         <div id="peUploadPanel" style="display:none; margin-bottom:1rem; padding:1rem; border:1px solid var(--border-color, #2a3042); border-radius:8px; background:var(--card-bg, #1a1f2e);">
                             <form id="peUploadForm" style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
@@ -334,20 +341,20 @@
                             <table class="data-table" id="peAnalysisTable">
                                 <thead>
                                     <tr>
-                                        <th>Stock</th>
-                                        <th>Exch</th>
-                                        <th>Quarter</th>
-                                        <th>Year</th>
-                                        <th>Qtr EPS</th>
-                                        <th>Cum. EPS</th>
-                                        <th>FY EPS (Est.)</th>
-                                        <th>CMP (&#8377;)</th>
-                                        <th>PE</th>
-                                        <th>Sector</th>
-                                        <th>Value</th>
-                                        <th>File</th>
-                                        <th>Date</th>
-                                        <th style="width:36px"></th>
+                                        <th class="pvc-stock">Stock</th>
+                                        <th class="pvc-exch">Exch</th>
+                                        <th class="pvc-quarter">Quarter</th>
+                                        <th class="pvc-year">Year</th>
+                                        <th class="pvc-qtreps">Qtr EPS</th>
+                                        <th class="pvc-cumeps">Cum. EPS</th>
+                                        <th class="pvc-fyeps">FY EPS (Est.)</th>
+                                        <th class="pvc-cmp">CMP (&#8377;)</th>
+                                        <th class="pvc-pe">PE</th>
+                                        <th class="pvc-sector">Sector</th>
+                                        <th class="pvc-value">Value</th>
+                                        <th class="pvc-file">File</th>
+                                        <th class="pvc-date">Date</th>
+                                        <th class="pvc-edit" style="width:36px"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="peAnalysisBody"></tbody>

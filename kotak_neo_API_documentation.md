@@ -1750,4 +1750,4 @@ Notes :
 Headers:
 Post-login APIs (Orders/Reports/Portfolio/etc.) use Auth (session token) + Sid (session sid).
 neo-fin-key: neotradeapi is required except for Quotes and Scripmaster (per your instruction).
-Bodies for Orders and some Reports are application/x-www-form-urlencoded with a jData parameter containing JSON (exactly as in your collection).
+Bodies for Orders and some Reports are application/x-www-form-urlencoded with a jData parameter containing JSON (exactly as in your collection).    
