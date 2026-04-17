@@ -1545,6 +1545,11 @@ async def run_scheduled_fetch_quotes():
                         # Broadcast completion
                         logger.info(f"✅ Scheduled fetch quotes completed - {total_symbols} stocks processed")
                         scheduled_fetch_logger.info(f"COMPLETED - {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')} IST - {total_symbols} stocks processed")
+
+                        # Update last_quotes timestamp server-side
+                        actions = load_last_actions()
+                        actions["last_quotes"] = get_ist_now().isoformat()
+                        save_last_actions(actions)
                         await ws_manager.broadcast_message({
                             "type": "scheduled_task",
                             "status": "completed",
@@ -5038,7 +5043,12 @@ async def execute_orders(background_tasks: BackgroundTasks):
                 }
                 
                 logger.info(f"[Job {job_id}] PLACE ORDER completed successfully")
-                
+
+                # Update last_order timestamp server-side (so UI reflects it even for auto/scheduled runs)
+                actions = load_last_actions()
+                actions["last_order"] = get_ist_now().isoformat()
+                save_last_actions(actions)
+
                 # Broadcast completion to all WebSocket clients
                 await ws_manager.broadcast_message({
                     "type": "job_completed",
