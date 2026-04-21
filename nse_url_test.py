@@ -1674,10 +1674,13 @@ async def load_group_keywords_async():
                 # Split by comma and strip each keyword
                 keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
                 
-                # Store both keywords and option in the dictionary
+                option_val = option_str.strip() if option_str else ""
+                if option_val == "quaterly_result":
+                    option_val = "quarterly_result"
+                
                 group_id_keywords[group_id] = {
                     'keywords': keywords,
-                    'option': option_str.strip() if option_str else ""
+                    'option': option_val
                 }
             
             print("these are the group id, keywords and options - ", group_id_keywords)
@@ -1753,8 +1756,8 @@ async def search_csv(all_keywords):
                 if row_id in seen_rows:
                     continue
                 
-                # Check if any of the keywords exists in any cell of the row
-                if any(any(kw in str(cell).lower() for kw in all_keywords) for cell in row):
+                # Check if any of the keywords exists in any cell of the row (case-insensitive)
+                if any(any(kw.lower() in str(cell).lower() for kw in all_keywords) for cell in row):
                     results.append({
                         "row": row,
                     })
