@@ -2361,12 +2361,17 @@ const PE_COLUMNS = [
     { key: 'quarter', label: 'Quarter' },
     { key: 'year', label: 'Year' },
     { key: 'qtreps', label: 'Qtr EPS' },
+    { key: 'epsqoq', label: 'EPS Q/Q' },
+    { key: 'epsyoy', label: 'EPS Y/Y' },
     { key: 'cumeps', label: 'Cum. EPS' },
+    { key: 'cumprevfy', label: 'Cum. Prev FY' },
+    { key: 'prevfyeps', label: 'Prev FY EPS' },
     { key: 'fyeps', label: 'FY EPS (Est.)' },
     { key: 'cmp', label: 'CMP' },
     { key: 'pe', label: 'PE' },
     { key: 'sector', label: 'Sector' },
-    { key: 'value', label: 'Value' },
+    { key: 'remark', label: 'Remark' },
+    { key: 'comments', label: 'Comments' },
     { key: 'file', label: 'File' },
     { key: 'date', label: 'Date' },
 ];
@@ -2375,7 +2380,14 @@ let _peVisibleCols = null;
 function _peLoadColVisibility() {
     try {
         const saved = localStorage.getItem('peVisibleColumns');
-        if (saved) return new Set(JSON.parse(saved));
+        if (saved) {
+            const set = new Set(JSON.parse(saved));
+            const allKeys = new Set(PE_COLUMNS.map(c => c.key));
+            for (const k of allKeys) {
+                if (!set.has(k) && !localStorage.getItem('peCol_hidden_' + k)) set.add(k);
+            }
+            return set;
+        }
     } catch (e) {}
     return new Set(PE_COLUMNS.map(c => c.key));
 }
@@ -2418,7 +2430,13 @@ function peInitColumnsToggle() {
 
 function peToggleColumn(key, visible) {
     if (!_peVisibleCols) _peVisibleCols = _peLoadColVisibility();
-    if (visible) _peVisibleCols.add(key); else _peVisibleCols.delete(key);
+    if (visible) {
+        _peVisibleCols.add(key);
+        localStorage.removeItem('peCol_hidden_' + key);
+    } else {
+        _peVisibleCols.delete(key);
+        localStorage.setItem('peCol_hidden_' + key, '1');
+    }
     _peSaveColVisibility();
     peApplyColumnVisibility();
     peInitColumnsToggle();
@@ -2443,11 +2461,175 @@ function peInitMultiselects() {
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.addEventListener('click', () => {
         peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear(); peFilterState.exchange.clear();
+        _peCalClear();
         _peFiltersInitialized = true;
         pePopulateFilterDropdowns();
         renderPEAnalysis();
         _updatePETitle();
     });
+}
+
+// ---- Date Range Calendar Picker ----
+const _peCal = { viewYear: null, viewMonth: null, start: null, end: null, picking: 'start' };
+
+function peInitDateRangePicker() {
+    const now = new Date();
+    _peCal.viewYear = now.getFullYear();
+    _peCal.viewMonth = now.getMonth();
+    _peCalRender();
+}
+
+function _peCalRender() {
+    const dd = document.getElementById('peDateDropdown');
+    if (!dd) return;
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+    const y = _peCal.viewYear, m = _peCal.viewMonth;
+    const firstDay = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const daysInPrev = new Date(y, m, 0).getDate();
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    let html = `<div class="pe-cal-header">
+        <button type="button" onclick="_peCalNav(-1)" title="Previous month">&#8249;</button>
+        <span class="pe-cal-title">${months[m]} ${y}</span>
+        <button type="button" onclick="_peCalNav(1)" title="Next month">&#8250;</button>
+    </div><div class="pe-cal-grid">`;
+    for (const d of dows) html += `<span class="pe-cal-dow">${d}</span>`;
+
+    for (let i = 0; i < firstDay; i++) {
+        const day = daysInPrev - firstDay + 1 + i;
+        const dt = new Date(y, m - 1, day); dt.setHours(0,0,0,0);
+        html += `<button type="button" class="pe-cal-day other-month ${_peCalDayClass(dt, today)}" data-date="${_peCalFmt(dt)}">${day}</button>`;
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dt = new Date(y, m, d); dt.setHours(0,0,0,0);
+        html += `<button type="button" class="pe-cal-day ${_peCalDayClass(dt, today)}" data-date="${_peCalFmt(dt)}">${d}</button>`;
+    }
+    const totalCells = firstDay + daysInMonth;
+    const remaining = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+        const dt = new Date(y, m + 1, i); dt.setHours(0,0,0,0);
+        html += `<button type="button" class="pe-cal-day other-month ${_peCalDayClass(dt, today)}" data-date="${_peCalFmt(dt)}">${i}</button>`;
+    }
+    html += '</div>';
+
+    if (_peCal.start || _peCal.end) {
+        const startStr = _peCal.start ? _peCalDisplayFmt(_peCal.start) : '—';
+        const endStr = _peCal.end ? _peCalDisplayFmt(_peCal.end) : startStr;
+        html += `<div class="pe-cal-footer">
+            <span class="pe-cal-range-text">${startStr}  →  ${endStr}</span>
+        </div>`;
+    }
+    dd.innerHTML = html;
+
+    dd.querySelectorAll('.pe-cal-day').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _peCalPickDate(btn.dataset.date);
+        });
+    });
+}
+
+function _peCalFmt(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function _peCalDisplayFmt(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function _peCalDayClass(dt, today) {
+    let cls = '';
+    if (dt.getTime() === today.getTime()) cls += ' today';
+    if (_peCal.start && _peCal.end) {
+        const s = new Date(_peCal.start + 'T00:00:00'), e = new Date(_peCal.end + 'T00:00:00');
+        s.setHours(0,0,0,0); e.setHours(0,0,0,0);
+        if (dt >= s && dt <= e) cls += ' in-range';
+        if (_peCalFmt(dt) === _peCal.start) cls += ' range-start';
+        if (_peCalFmt(dt) === _peCal.end) cls += ' range-end';
+    } else if (_peCal.start && _peCalFmt(dt) === _peCal.start) {
+        cls += ' range-start range-end';
+    }
+    return cls;
+}
+
+function _peCalNav(dir) {
+    _peCal.viewMonth += dir;
+    if (_peCal.viewMonth < 0) { _peCal.viewMonth = 11; _peCal.viewYear--; }
+    if (_peCal.viewMonth > 11) { _peCal.viewMonth = 0; _peCal.viewYear++; }
+    _peCalRender();
+}
+
+function _peCalPickDate(dateStr) {
+    if (_peCal.picking === 'start' || !_peCal.start) {
+        _peCal.start = dateStr;
+        _peCal.end = null;
+        _peCal.picking = 'end';
+        _peCalRender();
+    } else {
+        if (dateStr < _peCal.start) {
+            _peCal.start = dateStr;
+            _peCalRender();
+            return;
+        }
+        _peCal.end = dateStr;
+        _peCal.picking = 'start';
+        _peCalRender();
+        _peCalApply();
+    }
+}
+
+function _peCalClear() {
+    _peCal.start = null;
+    _peCal.end = null;
+    _peCal.picking = 'start';
+    const df = document.getElementById('peDateFrom'); if (df) df.value = '';
+    const dt = document.getElementById('peDateTo'); if (dt) dt.value = '';
+    _peCalUpdateLabel();
+    _peCalRender();
+    pePopulateFilterDropdowns();
+    renderPEAnalysis();
+}
+
+function _peCalApply() {
+    const df = document.getElementById('peDateFrom');
+    const dt = document.getElementById('peDateTo');
+    if (df) df.value = _peCal.start || '';
+    if (dt) dt.value = _peCal.end || _peCal.start || '';
+    _peCalUpdateLabel();
+    document.getElementById('peDateRangeWrap')?.classList.remove('open');
+    pePopulateFilterDropdowns();
+    renderPEAnalysis();
+}
+
+function _peCalUpdateLabel() {
+    const label = document.getElementById('peDateRangeLabel');
+    const btn = document.getElementById('peDateRangeBtn');
+    if (!label || !btn) return;
+    const df = document.getElementById('peDateFrom')?.value;
+    const dt = document.getElementById('peDateTo')?.value;
+
+    let clearSpan = btn.querySelector('.pe-cal-btn-clear');
+    if (df || dt) {
+        const text = (df && dt) ? _peCalDisplayFmt(df) + ' – ' + _peCalDisplayFmt(dt)
+            : df ? 'From ' + _peCalDisplayFmt(df) : 'Date Range';
+        label.textContent = text;
+        if (!clearSpan) {
+            clearSpan = document.createElement('span');
+            clearSpan.className = 'pe-cal-btn-clear';
+            clearSpan.innerHTML = '&times;';
+            clearSpan.title = 'Clear date filter';
+            clearSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _peCalClear();
+            });
+            btn.appendChild(clearSpan);
+        }
+    } else {
+        label.textContent = 'Date Range';
+        if (clearSpan) clearSpan.remove();
+    }
 }
 
 function pePopulateFilterDropdowns() {
@@ -2473,6 +2655,7 @@ function pePopulateFilterDropdowns() {
         const wrap = document.getElementById(filterId);
         if (!wrap) return;
         const dd = wrap.querySelector('.pe-multiselect-dropdown');
+        if (!dd) return;
         const badge = wrap.querySelector('.pe-ms-badge');
         const sorted = [...values].sort();
         let html = '';
@@ -2499,7 +2682,8 @@ function pePopulateFilterDropdowns() {
     buildDropdown('peSectorFilter', sectors, 'sector', true);
     buildDropdown('peExchangeFilter', exchanges, 'exchange', false);
 
-    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size + peFilterState.exchange.size > 0;
+    const dateActive = !!(document.getElementById('peDateFrom')?.value || document.getElementById('peDateTo')?.value);
+    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size + peFilterState.exchange.size > 0 || dateActive;
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.style.display = anyActive ? 'flex' : 'none';
     if (typeof refreshIcons === 'function') refreshIcons();
@@ -2531,8 +2715,8 @@ function evalFormulaExpr(expr, quartersEps) {
     if (!expr) return null;
     if (expr === 'FY') return quartersEps['FY'] || null;
     const vars = {
-        PQ4: quartersEps['PQ4'], PFY: quartersEps['PFY'],
-        PN9: quartersEps['PN9'], PN6: quartersEps['PN6'],
+        PQ4: quartersEps['PQ4'], PQ3: quartersEps['PQ3'], PQ2: quartersEps['PQ2'], PQ1: quartersEps['PQ1'],
+        PFY: quartersEps['PFY'], PN9: quartersEps['PN9'], PN6: quartersEps['PN6'], PN3: quartersEps['PN3'],
         N9: quartersEps['N9'], N6: quartersEps['N6'], N3: quartersEps['N3'],
         Q4: quartersEps['Q4'], Q3: quartersEps['Q3'], Q2: quartersEps['Q2'], Q1: quartersEps['Q1'],
     };
@@ -2649,7 +2833,7 @@ async function loadPEAnalysis(fetchCmp = false) {
         }
     } catch (e) {
         console.error('Error loading PE analysis:', e);
-        showNotificationToast('Failed to load PE analysis', 'error');
+        showNotificationToast('Failed to load PE analysis: ' + (e.message || e), 'error');
     }
 }
 
@@ -2674,6 +2858,17 @@ function _getVisiblePESymbols() {
     }
     if (peFilterState.exchange.size > 0) {
         filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
+    }
+    const dfv = document.getElementById('peDateFrom')?.value;
+    const dtv = document.getElementById('peDateTo')?.value;
+    if (dfv || dtv) {
+        const from = dfv ? new Date(dfv + 'T00:00:00') : null;
+        const to = dtv ? new Date(dtv + 'T23:59:59') : null;
+        filtered = filtered.filter(r => {
+            if (!r.updated_at) return false;
+            const d = new Date(r.updated_at);
+            return (!from || d >= from) && (!to || d <= to);
+        });
     }
     return filtered.map(r => r.stock_symbol);
 }
@@ -2706,6 +2901,19 @@ function renderPEAnalysis() {
     }
     if (peFilterState.exchange.size > 0) {
         filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
+    }
+    const dateFromVal = document.getElementById('peDateFrom')?.value;
+    const dateToVal = document.getElementById('peDateTo')?.value;
+    if (dateFromVal || dateToVal) {
+        const from = dateFromVal ? new Date(dateFromVal + 'T00:00:00') : null;
+        const to = dateToVal ? new Date(dateToVal + 'T23:59:59') : null;
+        filtered = filtered.filter(r => {
+            if (!r.updated_at) return false;
+            const d = new Date(r.updated_at);
+            if (from && d < from) return false;
+            if (to && d > to) return false;
+            return true;
+        });
     }
 
     if (filtered.length === 0) {
@@ -2745,14 +2953,47 @@ function renderPEAnalysis() {
 
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
+
+        // Current FY cumulative EPS (Q1 has no meaningful cumulative — it's just Q1 itself)
         let cumEpsVal = null, cumLabel = '';
-        if (q === 'Q4' || q === 'FY') { cumEpsVal = qe['N12'] || qe['NFY']; cumLabel = 'N12'; }
+        if (q === 'Q4' || q === 'FY') { cumEpsVal = qe['N12'] || qe['FY']; cumLabel = 'N12'; }
         else if (q === 'Q3') { cumEpsVal = qe['N9']; cumLabel = 'N9'; }
         else if (q === 'Q2') { cumEpsVal = qe['N6']; cumLabel = 'N6'; }
-        else if (q === 'Q1') { cumEpsVal = qe['N3']; cumLabel = 'N3'; }
         const cumCell = cumEpsVal != null
             ? `${fmt(cumEpsVal)}<br><small style="color:#888">${cumLabel}</small>`
-            : (cumLabel ? `<small style="color:#555">${cumLabel}</small>` : '');
+            : (q === 'Q1' ? '<small style="color:#555">—</small>' : (cumLabel ? `<small style="color:#555">${cumLabel}</small>` : ''));
+
+        // EPS Q-on-Q: previous quarter's EPS
+        const qoqMap = { Q2: 'Q1', Q3: 'Q2', Q4: 'Q3', Q1: 'PQ4' };
+        const prevQKey = qoqMap[q];
+        const epsQoQ = prevQKey ? qe[prevQKey] : null;
+        const qoqLabel = prevQKey || '';
+        const qoqCell = epsQoQ != null
+            ? `${fmt(epsQoQ)}<br><small style="color:#888">${qoqLabel}</small>`
+            : (qoqLabel ? `<small style="color:#555">${qoqLabel}</small>` : '');
+
+        // EPS Y-on-Y: same quarter from previous year
+        const yoyKey = q ? `P${q}` : null;
+        const epsYoY = yoyKey ? qe[yoyKey] : null;
+        const yoyLabel = yoyKey || '';
+        const yoyCell = epsYoY != null
+            ? `${fmt(epsYoY)}<br><small style="color:#888">Prev ${q}</small>`
+            : (yoyLabel ? `<small style="color:#555">Prev ${q}</small>` : '');
+
+        // Cumulative EPS from previous FY (Y-on-Y comparison; Q1 has no cumulative to compare)
+        let cumPrevVal = null, cumPrevLabel = '';
+        if (q === 'Q4' || q === 'FY') { cumPrevVal = qe['PFY']; cumPrevLabel = 'Prev N12'; }
+        else if (q === 'Q3') { cumPrevVal = qe['PN9']; cumPrevLabel = 'Prev N9'; }
+        else if (q === 'Q2') { cumPrevVal = qe['PN6']; cumPrevLabel = 'Prev N6'; }
+        const cumPrevCell = cumPrevVal != null
+            ? `${fmt(cumPrevVal)}<br><small style="color:#888">${cumPrevLabel}</small>`
+            : (q === 'Q1' ? '<small style="color:#555">—</small>' : (cumPrevLabel ? `<small style="color:#555">${cumPrevLabel}</small>` : ''));
+
+        // Previous full year EPS
+        const prevFyEps = qe['PFY'];
+        const prevFyCell = prevFyEps != null
+            ? `${fmt(prevFyEps)}<br><small style="color:#888">Prev FY</small>`
+            : '<small style="color:#555">Prev FY</small>';
 
         for (let fi = 0; fi < rowCount; fi++) {
             const formula = activeFormulas[fi];
@@ -2780,8 +3021,11 @@ function renderPEAnalysis() {
             const exchBadge = (r.exchange || 'NSE').toUpperCase() === 'BSE'
                 ? '<span class="pe-exch-badge pe-exch-bse">BSE</span>'
                 : '<span class="pe-exch-badge pe-exch-nse">NSE</span>';
-            const valBadge = r.valuation === 'EXPENSIVE' ? '<span class="pe-val-badge pe-val-expensive">EXPENSIVE</span>'
-                : r.valuation === 'CHEAP' ? '<span class="pe-val-badge pe-val-cheap">CHEAP</span>' : '';
+            const remarkBadge = r.valuation === 'EXPENSIVE' ? '<span class="pe-val-badge pe-val-expensive">EXPENSIVE</span>'
+                : r.valuation === 'CHEAP' ? '<span class="pe-val-badge pe-val-cheap">CHEAP</span>'
+                : r.valuation ? `<span class="pe-val-badge pe-val-custom">${r.valuation}</span>`
+                : '<span class="pe-val-badge pe-val-pending">PENDING</span>';
+            const commentText = r.comments ? `<span class="pe-comment-text" title="${(r.comments || '').replace(/"/g, '&quot;')}">${r.comments}</span>` : '';
 
             if (rowCount === 1) {
                 html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
@@ -2790,12 +3034,17 @@ function renderPEAnalysis() {
                     <td class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
                     <td class="pvc-year pe-col-year">${yearDisplay}</td>
                     <td class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
+                    <td class="pvc-epsqoq">${qoqCell}</td>
+                    <td class="pvc-epsyoy">${yoyCell}</td>
                     <td class="pvc-cumeps">${cumCell}</td>
+                    <td class="pvc-cumprevfy">${cumPrevCell}</td>
+                    <td class="pvc-prevfyeps">${prevFyCell}</td>
                     <td class="pvc-fyeps pe-col-fyeps">${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
                     <td class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
                     <td class="pvc-pe pe-col-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
                     <td class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td class="pvc-value">${valBadge}</td>
+                    <td class="pvc-remark">${remarkBadge}</td>
+                    <td class="pvc-comments">${commentText}</td>
                     <td class="pvc-file" style="text-align:center">${fileLink}</td>
                     <td class="pvc-date">${updated}</td>
                     <td class="pvc-edit" style="text-align:center">${editBtnInner}</td>
@@ -2807,12 +3056,17 @@ function renderPEAnalysis() {
                     <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
                     <td rowspan="${rowCount}" class="pvc-year pe-col-year">${yearDisplay}</td>
                     <td rowspan="${rowCount}" class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-epsqoq">${qoqCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-epsyoy">${yoyCell}</td>
                     <td rowspan="${rowCount}" class="pvc-cumeps">${cumCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-cumprevfy">${cumPrevCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-prevfyeps">${prevFyCell}</td>
                     <td class="pvc-fyeps">${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
                     <td rowspan="${rowCount}" class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
                     <td class="pvc-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
                     <td rowspan="${rowCount}" class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td rowspan="${rowCount}" class="pvc-value">${valBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-remark">${remarkBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-comments">${commentText}</td>
                     <td rowspan="${rowCount}" class="pvc-file" style="text-align:center">${fileLink}</td>
                     <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
                     <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${editBtnInner}</td>
@@ -2863,6 +3117,76 @@ function _yearOptions(selected) {
     return opts;
 }
 
+function _peGetCustomRemarks() {
+    try {
+        return JSON.parse(localStorage.getItem('peCustomRemarks') || '[]');
+    } catch (e) { return []; }
+}
+
+function _peSaveCustomRemarks(tags) {
+    localStorage.setItem('peCustomRemarks', JSON.stringify(tags));
+}
+
+function _peGetCustomRemarkOptions(currentVal) {
+    const builtIn = ['', 'CHEAP', 'EXPENSIVE'];
+    const custom = _peGetCustomRemarks();
+    if (currentVal && !builtIn.includes(currentVal) && !custom.includes(currentVal)) {
+        custom.push(currentVal);
+        _peSaveCustomRemarks(custom);
+    }
+    return custom.map(tag =>
+        `<option value="${tag}"${tag === currentVal ? ' selected' : ''}>${tag}</option>`
+    ).join('');
+}
+
+function peRemarkSelectChanged(sel) {
+    if (sel.value !== '__custom__') {
+        const existing = sel.parentElement.querySelector('.pe-custom-remark-input');
+        if (existing) existing.remove();
+        _peCheckDirty();
+        return;
+    }
+    const existing = sel.parentElement.querySelector('.pe-custom-remark-input');
+    if (existing) { existing.querySelector('input').focus(); return; }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'pe-custom-remark-input';
+    wrap.innerHTML = `
+        <input type="text" class="pe-panel-input" placeholder="e.g. UNDERVALUED" style="width:100%;margin-top:6px;font-size:0.8rem;" autofocus>
+        <div style="display:flex;gap:4px;margin-top:4px;">
+            <button type="button" class="pe-custom-remark-ok" style="flex:1;">Add</button>
+            <button type="button" class="pe-custom-remark-cancel" style="flex:0 0 auto;">Cancel</button>
+        </div>
+    `;
+    sel.parentElement.appendChild(wrap);
+    const inp = wrap.querySelector('input');
+    setTimeout(() => inp.focus(), 0);
+
+    const confirmAdd = () => {
+        const val = inp.value.trim().toUpperCase();
+        if (!val) { cancelAdd(); return; }
+        const custom = _peGetCustomRemarks();
+        if (!custom.includes(val)) { custom.push(val); _peSaveCustomRemarks(custom); }
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = val; opt.selected = true;
+        sel.insertBefore(opt, sel.querySelector('option[value="__custom__"]'));
+        wrap.remove();
+        _peCheckDirty();
+    };
+    const cancelAdd = () => {
+        sel.value = sel.dataset.orig || '';
+        wrap.remove();
+        _peCheckDirty();
+    };
+
+    wrap.querySelector('.pe-custom-remark-ok').onclick = confirmAdd;
+    wrap.querySelector('.pe-custom-remark-cancel').onclick = cancelAdd;
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); confirmAdd(); }
+        if (e.key === 'Escape') { cancelAdd(); }
+    });
+}
+
 function peStartEdit(sym, quarter, fy) {
     peCancelEdit();
     const row = document.querySelector(`tr[data-pe-sym="${sym}"][data-pe-q="${quarter}"][data-pe-fy="${fy}"]`);
@@ -2893,9 +3217,6 @@ function peStartEdit(sym, quarter, fy) {
                 <div class="pe-panel-actions">
                     <button class="pe-action-pill pe-action-save pe-save-disabled" id="pePanelSaveBtn" onclick="peSaveEdit('${sym}','${quarter}','${fy}','${basis}')" disabled>
                         <i data-lucide="check" style="width:14px;height:14px;"></i> Save
-                    </button>
-                    <button class="pe-action-pill pe-action-delete" onclick="peDeleteRow('${sym}','${quarter}','${fy}')">
-                        <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Delete
                     </button>
                     <button class="pe-action-pill pe-action-cancel" onclick="peCancelEdit()">
                         <i data-lucide="x" style="width:14px;height:14px;"></i> Cancel
@@ -2928,12 +3249,18 @@ function peStartEdit(sym, quarter, fy) {
                     ${sectorPlaceholder}
                 </div>
                 <div class="pe-panel-field">
-                    <label>Value</label>
-                    <select class="pe-panel-input" data-field="valuation" data-orig="${r.valuation || ''}">
+                    <label>Remark</label>
+                    <select class="pe-panel-input" data-field="valuation" data-orig="${r.valuation || ''}" onchange="peRemarkSelectChanged(this)">
                         <option value=""${!r.valuation ? ' selected' : ''}>—</option>
                         <option value="CHEAP"${r.valuation === 'CHEAP' ? ' selected' : ''}>CHEAP</option>
                         <option value="EXPENSIVE"${r.valuation === 'EXPENSIVE' ? ' selected' : ''}>EXPENSIVE</option>
+                        ${_peGetCustomRemarkOptions(r.valuation)}
+                        <option value="__custom__">+ Add custom…</option>
                     </select>
+                </div>
+                <div class="pe-panel-field pe-panel-field-wide">
+                    <label>Comments</label>
+                    <textarea class="pe-panel-input pe-panel-textarea" data-field="comments" data-orig="${(r.comments || '').replace(/"/g, '&quot;')}" rows="2" placeholder="Add a comment…">${r.comments || ''}</textarea>
                 </div>
             </div>
         </div>
@@ -2997,6 +3324,8 @@ async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
     if (exchange !== null) body.exchange = exchange;
     const valuation = getVal('valuation');
     if (valuation !== null) body.valuation = valuation;
+    const comments = getVal('comments');
+    if (comments !== null) body.comments = comments;
 
     try {
         const resp = await fetch(`/api/pe_analysis/${encodeURIComponent(sym)}`, {
@@ -3017,6 +3346,7 @@ async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
                 if (body.sector !== undefined) r.sector = body.sector;
                 if (body.exchange) r.exchange = body.exchange;
                 if (body.valuation !== undefined) r.valuation = body.valuation;
+                if (body.comments !== undefined) r.comments = body.comments;
             }
             renderPEAnalysis();
             showNotificationToast('Row saved', 'success');
@@ -3078,6 +3408,19 @@ function exportPEAnalysisToExcel() {
     if (peFilterState.exchange.size > 0) {
         filtered = filtered.filter(r => peFilterState.exchange.has(r.exchange || ''));
     }
+    const eDateFrom = document.getElementById('peDateFrom')?.value;
+    const eDateTo = document.getElementById('peDateTo')?.value;
+    if (eDateFrom || eDateTo) {
+        const from = eDateFrom ? new Date(eDateFrom + 'T00:00:00') : null;
+        const to = eDateTo ? new Date(eDateTo + 'T23:59:59') : null;
+        filtered = filtered.filter(r => {
+            if (!r.updated_at) return false;
+            const d = new Date(r.updated_at);
+            if (from && d < from) return false;
+            if (to && d > to) return false;
+            return true;
+        });
+    }
     if (!filtered.length) return;
 
     const activeFormulas = peFormulas.filter(f => peActiveFormulaIds.includes(f.id));
@@ -3088,7 +3431,7 @@ function exportPEAnalysisToExcel() {
     const rowCount = Math.max(activeFormulas.length, 1);
 
     const rows = [];
-    const header = ['Stock', 'Company', 'Quarter', 'Year', 'Qtr EPS', 'Cum EPS', 'Formula', 'FY EPS (Est.)', 'FY EPS Formula', 'CMP', 'PE', 'Sector', 'Date'];
+    const header = ['Stock', 'Company', 'Quarter', 'Year', 'Qtr EPS', 'EPS Q/Q', 'EPS Y/Y', 'Cum EPS', 'Cum Prev FY', 'Prev FY EPS', 'Formula', 'FY EPS (Est.)', 'FY EPS Formula', 'CMP', 'PE', 'Sector', 'Remark', 'Comments', 'Date'];
     rows.push(header);
 
     for (const r of filtered) {
@@ -3098,8 +3441,17 @@ function exportPEAnalysisToExcel() {
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
         let cumEpsVal = null;
-        if (q === 'Q3') cumEpsVal = qe['N9'];
+        if (q === 'Q4' || q === 'FY') cumEpsVal = qe['N12'] || qe['FY'];
+        else if (q === 'Q3') cumEpsVal = qe['N9'];
         else if (q === 'Q2') cumEpsVal = qe['N6'];
+        const qoqMap = { Q2: 'Q1', Q3: 'Q2', Q4: 'Q3', Q1: 'PQ4' };
+        const epsQoQVal = qoqMap[q] ? qe[qoqMap[q]] : null;
+        const epsYoYVal = q ? qe[`P${q}`] : null;
+        let cumPrevFyVal = null;
+        if (q === 'Q4' || q === 'FY') cumPrevFyVal = qe['PFY'];
+        else if (q === 'Q3') cumPrevFyVal = qe['PN9'];
+        else if (q === 'Q2') cumPrevFyVal = qe['PN6'];
+        const prevFyEpsVal = qe['PFY'];
         const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
 
         for (let fi = 0; fi < rowCount; fi++) {
@@ -3124,13 +3476,19 @@ function exportPEAnalysisToExcel() {
                 r.quarter || '',
                 yearDisplay,
                 r.qtr_eps ?? '',
+                epsQoQVal ?? '',
+                epsYoYVal ?? '',
                 cumEpsVal ?? '',
+                cumPrevFyVal ?? '',
+                prevFyEpsVal ?? '',
                 formulaName,
                 computedEps ?? '',
                 exprLabel,
                 r.cmp ?? '',
                 computedPe ?? '',
                 r.sector || '',
+                r.valuation || '',
+                r.comments || '',
                 updated
             ]);
         }
@@ -3163,6 +3521,7 @@ function exportPEAnalysisToExcel() {
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
         const exportBtn = document.getElementById('peExportBtn');
         if (filterInput) filterInput.addEventListener('input', renderPEAnalysis);
+        peInitDateRangePicker();
         if (refreshBtn) refreshBtn.addEventListener('click', () => loadPEAnalysis(false));
         if (exportBtn) exportBtn.addEventListener('click', exportPEAnalysisToExcel);
         if (fetchCmpBtn) fetchCmpBtn.addEventListener('click', async () => {

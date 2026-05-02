@@ -996,6 +996,7 @@ async def init_db():
             ("cumulative_eps_basic_consolidated", "REAL"),
             ("cumulative_eps_diluted_consolidated", "REAL"),
             ("valuation", "TEXT"),
+            ("comments", "TEXT"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
@@ -3911,6 +3912,27 @@ async def get_quarterly_results(symbol: str = None, financial_year: str = None, 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _normalize_fy_year(fy_str):
+    """Extract the ending calendar year from any financial_year format.
+    'FY2025-26' → 2026, '2026' → 2026, 'FY26' → 2026, None → None."""
+    if not fy_str:
+        return None
+    s = str(fy_str).strip()
+    if '-' in s:
+        suffix = s.split('-')[-1]
+        try:
+            y = int(suffix)
+            return y if y > 100 else 2000 + y
+        except (ValueError, TypeError):
+            pass
+    import re
+    nums = re.findall(r'\d+', s)
+    if nums:
+        y = int(nums[-1])
+        return y if y > 100 else 2000 + y
+    return None
+
+
 @app.get("/api/pe_analysis")
 async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
     """PE Analysis: one row per stock (latest non-FY quarter), consolidated-first FY EPS, optional live CMP + PE.
@@ -3945,6 +3967,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qr.cmp_updated_at,
                     qr.source_pdf_url,
                     qr.valuation,
+                    qr.comments,
                     s.sector,
                     s.exchange
                 FROM quarterly_results qr
@@ -3962,44 +3985,59 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
             rows = await cursor.fetchall()
 
             # Fetch per-quarter EPS + cumulative EPS for all stocks/FYs (for formula variants)
+            # Use normalized year to match across FY format variants (e.g. "2026" vs "FY2025-26")
             quarters_map = {}
-            sym_fy_set = set((r["stock_symbol"], r["financial_year"]) for r in rows)
-            if sym_fy_set:
-                where_parts = " OR ".join(["(stock_symbol = ? AND financial_year = ?)"] * len(sym_fy_set))
-                flat_params = [v for pair in sym_fy_set for v in pair]
-                qtr_cursor = await db.execute(f"""
-                    SELECT stock_symbol, quarter, financial_year,
-                           COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
-                                    eps_diluted_standalone, eps_basic_standalone) AS qtr_eps,
-                           COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
-                                    cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
-                    FROM quarterly_results
-                    WHERE quarter NOT IN ('FY') AND ({where_parts})
-                """, flat_params)
-                for qr in await qtr_cursor.fetchall():
-                    sym = qr["stock_symbol"]
-                    if sym not in quarters_map:
-                        quarters_map[sym] = {}
-                    if qr["qtr_eps"] is not None:
-                        quarters_map[sym][qr["quarter"]] = round(qr["qtr_eps"], 4)
-                    if qr["cum_eps"] is not None:
-                        n_key = {"Q1": "N3", "Q2": "N6", "Q3": "N9"}.get(qr["quarter"])
-                        if n_key:
-                            quarters_map[sym][n_key] = round(qr["cum_eps"], 4)
-
-            # Fetch previous FY EPS + previous cumulative N9 for PFY/PN9/PQ4 formula variables
-            prev_fy_map = {}
             sym_set = set(r["stock_symbol"] for r in rows)
             sym_fy_map = {r["stock_symbol"]: r["financial_year"] for r in rows}
+            sym_norm_year = {}
+            for sym, raw_fy in sym_fy_map.items():
+                norm = _normalize_fy_year(raw_fy)
+                if norm:
+                    sym_norm_year[sym] = norm
+
             if sym_set:
                 for sym in sym_set:
-                    current_fy = sym_fy_map.get(sym)
-                    if not current_fy:
+                    norm_yr = sym_norm_year.get(sym)
+                    if not norm_yr:
                         continue
-                    try:
-                        prev_fy_str = str(int(current_fy) - 1)
-                    except (ValueError, TypeError):
+                    yr_str = str(norm_yr)
+                    fy_long = f"FY{norm_yr - 1}-{yr_str[-2:]}"
+                    qtr_cursor = await db.execute("""
+                        SELECT stock_symbol, quarter, financial_year,
+                               COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
+                                        eps_diluted_standalone, eps_basic_standalone) AS qtr_eps,
+                               COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
+                                        cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
+                        FROM quarterly_results
+                        WHERE stock_symbol = ?
+                          AND financial_year IN (?, ?, ?)
+                    """, (sym, yr_str, fy_long, f"FY{yr_str[-2:]}"))
+                    for qr in await qtr_cursor.fetchall():
+                        if sym not in quarters_map:
+                            quarters_map[sym] = {}
+                        q_label = qr["quarter"]
+                        if q_label == "FY":
+                            if qr["qtr_eps"] is not None:
+                                quarters_map[sym]["N12"] = round(qr["qtr_eps"], 4)
+                                quarters_map[sym]["FY"] = round(qr["qtr_eps"], 4)
+                        else:
+                            if qr["qtr_eps"] is not None:
+                                quarters_map[sym][q_label] = round(qr["qtr_eps"], 4)
+                            if qr["cum_eps"] is not None:
+                                n_key = {"Q1": "N3", "Q2": "N6", "Q3": "N9"}.get(q_label)
+                                if n_key:
+                                    quarters_map[sym][n_key] = round(qr["cum_eps"], 4)
+
+            # Fetch previous FY EPS + previous cumulative for PFY/PN9/PQ1-PQ4 formula variables
+            prev_fy_map = {}
+            if sym_set:
+                for sym in sym_set:
+                    norm_yr = sym_norm_year.get(sym)
+                    if not norm_yr:
                         continue
+                    prev_yr = norm_yr - 1
+                    prev_yr_str = str(prev_yr)
+                    prev_fy_long = f"FY{prev_yr - 1}-{prev_yr_str[-2:]}"
                     pfy_cursor = await db.execute("""
                         SELECT quarter,
                                COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
@@ -4007,16 +4045,21 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                                COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
                                         cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
                         FROM quarterly_results
-                        WHERE stock_symbol = ? AND financial_year = ?
-                    """, (sym, prev_fy_str))
+                        WHERE stock_symbol = ? AND financial_year IN (?, ?, ?)
+                    """, (sym, prev_yr_str, prev_fy_long, f"FY{prev_yr_str[-2:]}"))
                     pfy_data = {}
                     for pr in await pfy_cursor.fetchall():
-                        if pr["quarter"] == "FY" and pr["eps"] is not None:
+                        q_label = pr["quarter"]
+                        if q_label == "FY" and pr["eps"] is not None:
                             pfy_data["PFY"] = round(pr["eps"], 4)
-                        if pr["quarter"] == "Q3" and pr["cum_eps"] is not None:
-                            pfy_data["PN9"] = round(pr["cum_eps"], 4)
-                        if pr["quarter"] == "Q2" and pr["cum_eps"] is not None:
+                        if q_label in ("Q1", "Q2", "Q3", "Q4") and pr["eps"] is not None:
+                            pfy_data[f"P{q_label}"] = round(pr["eps"], 4)
+                        if q_label == "Q1" and pr["cum_eps"] is not None:
+                            pfy_data["PN3"] = round(pr["cum_eps"], 4)
+                        if q_label == "Q2" and pr["cum_eps"] is not None:
                             pfy_data["PN6"] = round(pr["cum_eps"], 4)
+                        if q_label == "Q3" and pr["cum_eps"] is not None:
+                            pfy_data["PN9"] = round(pr["cum_eps"], 4)
                     if pfy_data:
                         prev_fy_map[sym] = pfy_data
 
@@ -4032,10 +4075,19 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qm["N6"] = round(qm["Q1"] + qm["Q2"], 4)
                 if "N9" not in qm and qm.get("Q1") is not None and qm.get("Q2") is not None and qm.get("Q3") is not None:
                     qm["N9"] = round(qm["Q1"] + qm["Q2"] + qm["Q3"], 4)
+                if "N12" not in qm and all(qm.get(q) is not None for q in ("Q1", "Q2", "Q3", "Q4")):
+                    qm["N12"] = round(qm["Q1"] + qm["Q2"] + qm["Q3"] + qm["Q4"], 4)
                 # Add previous FY data
                 pfy = prev_fy_map.get(sym, {})
                 for k, v in pfy.items():
                     qm[k] = v
+                # Fallback: compute PN3 from PQ1 if not extracted as cumulative
+                if "PN3" not in qm and qm.get("PQ1") is not None:
+                    qm["PN3"] = round(qm["PQ1"], 4)
+                if "PN6" not in qm and qm.get("PQ1") is not None and qm.get("PQ2") is not None:
+                    qm["PN6"] = round(qm["PQ1"] + qm["PQ2"], 4)
+                if "PN9" not in qm and qm.get("PQ1") is not None and qm.get("PQ2") is not None and qm.get("PQ3") is not None:
+                    qm["PN9"] = round(qm["PQ1"] + qm["PQ2"] + qm["PQ3"], 4)
                 # Compute PQ4 = PFY - PN9
                 if "PFY" in qm and "PN9" in qm:
                     qm["PQ4"] = round(qm["PFY"] - qm["PN9"], 4)
@@ -4075,6 +4127,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                 "updated_at": r["updated_at"],
                 "source_pdf_url": r["source_pdf_url"],
                 "valuation": r["valuation"],
+                "comments": r["comments"],
                 "quarters_eps": quarters_map.get(r["stock_symbol"], {}),
             })
             if fetch_cmp:
@@ -4227,6 +4280,7 @@ class PEEditRequest(BaseModel):
     sector: str = None
     exchange: str = None
     valuation: str = None
+    comments: str = None
     eps_basis: str = None
     old_quarter: str = None
     old_financial_year: str = None
@@ -4275,6 +4329,10 @@ async def update_pe_analysis_row(stock_symbol: str, body: PEEditRequest):
             if body.valuation is not None:
                 sets.append("valuation = ?")
                 params.append(body.valuation if body.valuation else None)
+
+            if body.comments is not None:
+                sets.append("comments = ?")
+                params.append(body.comments if body.comments else None)
 
             pe_val = None
             cmp_for_pe = body.cmp

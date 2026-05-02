@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="/static/css/styles.css?v=20260412c">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260501i">
 </head>
 <body>
     <div class="app-shell">
@@ -271,11 +271,21 @@
                             </div>
                             <div class="pe-multiselect" id="peSectorFilter">
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Sector</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
-                                <div lclass="pe-multiselect-dropdown"></div>
+                                <div class="pe-multiselect-dropdown"></div>
                             </div>
                             <div class="pe-multiselect" id="peExchangeFilter">
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Exchange</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
                                 <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <div class="pe-multiselect" id="peDateRangeWrap">
+                                <button class="pe-multiselect-btn" type="button" id="peDateRangeBtn">
+                                    <i data-lucide="calendar-range" style="width:14px;height:14px;"></i>
+                                    <span class="pe-ms-label" id="peDateRangeLabel">Date Range</span>
+                                    <i data-lucide="chevron-down" style="width:14px;height:14px;"></i>
+                                </button>
+                                <div class="pe-multiselect-dropdown pe-date-dropdown" id="peDateDropdown"></div>
+                                <input type="hidden" id="peDateFrom">
+                                <input type="hidden" id="peDateTo">
                             </div>
                             <button id="peClearFiltersBtn" class="btn-refresh btn-sm pe-clear-btn" title="Clear all filters" style="display:none;">
                                 <i data-lucide="x"></i>
@@ -346,12 +356,17 @@
                                         <th class="pvc-quarter">Quarter</th>
                                         <th class="pvc-year">Year</th>
                                         <th class="pvc-qtreps">Qtr EPS</th>
+                                        <th class="pvc-epsqoq">EPS Q/Q</th>
+                                        <th class="pvc-epsyoy">EPS Y/Y</th>
                                         <th class="pvc-cumeps">Cum. EPS</th>
+                                        <th class="pvc-cumprevfy">Cum. Prev FY</th>
+                                        <th class="pvc-prevfyeps">Prev FY EPS</th>
                                         <th class="pvc-fyeps">FY EPS (Est.)</th>
                                         <th class="pvc-cmp">CMP (&#8377;)</th>
                                         <th class="pvc-pe">PE</th>
                                         <th class="pvc-sector">Sector</th>
-                                        <th class="pvc-value">Value</th>
+                                        <th class="pvc-remark">Remark</th>
+                                        <th class="pvc-comments">Comments</th>
                                         <th class="pvc-file">File</th>
                                         <th class="pvc-date">Date</th>
                                         <th class="pvc-edit" style="width:36px"></th>
@@ -694,7 +709,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260412d"></script>
+    <script src="/static/js/dashboard.js?v=20260501i"></script>
     <script>
         lucide.createIcons();
     </script>
