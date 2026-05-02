@@ -2938,7 +2938,8 @@ function renderPEAnalysis() {
     for (const r of filtered) {
         const qtrEps = r.qtr_eps;
         const cmp = r.cmp;
-        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
+        const dateSource = r.announcement_date || r.updated_at;
+        const updated = dateSource ? new Date(dateSource).toLocaleDateString('en-IN') : '';
         const basisBadge = (r.eps_basis === 'S' && qtrEps != null && qtrEps !== '') ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Standalone only — no consolidated EPS available">S</span>' : '';
         const fy = r.financial_year || '';
         const yearVal = _fyEndingYear(fy) || fy;
@@ -3452,7 +3453,8 @@ function exportPEAnalysisToExcel() {
         else if (q === 'Q3') cumPrevFyVal = qe['PN9'];
         else if (q === 'Q2') cumPrevFyVal = qe['PN6'];
         const prevFyEpsVal = qe['PFY'];
-        const updated = r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-IN') : '';
+        const exportDateSource = r.announcement_date || r.updated_at;
+        const updated = exportDateSource ? new Date(exportDateSource).toLocaleDateString('en-IN') : '';
 
         for (let fi = 0; fi < rowCount; fi++) {
             const formula = activeFormulas[fi];

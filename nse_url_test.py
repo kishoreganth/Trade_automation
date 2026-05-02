@@ -43,6 +43,7 @@ import sys
 import codecs
 from stock_info import SME_companies, BSE_NSE_companies
 from bse import BSE
+from bse.constants import CATEGORY as BSE_CATEGORY
 import fitz
 import base64
 from openai import AsyncOpenAI
@@ -57,6 +58,9 @@ load_dotenv()
 # Auto fetch flag - controls both backend scheduled task and frontend UI
 # Set AUTO_FETCH_ENABLED=true in .env to enable auto fetch
 AUTO_FETCH_ENABLED = os.getenv("AUTO_FETCH_ENABLED", "false").lower() == "true"
+MAX_CONCURRENT_EXTRACTIONS = int(os.getenv("MAX_CONCURRENT_EXTRACTIONS", "25"))
+extraction_semaphore = asyncio.Semaphore(MAX_CONCURRENT_EXTRACTIONS)
+extraction_stats = {"running": 0, "pending": 0, "completed": 0, "failed": 0}
 
 from get_quote import main as get_quote_main
 import uuid
@@ -473,17 +477,20 @@ async def lifespan(app: FastAPI):
     
     # Start all background tasks in parallel using asyncio.create_task
     # sme_task = asyncio.create_task(run_periodic_task_sme())
-    equities_task = asyncio.create_task(run_periodic_task_equities())
+    nse_task = asyncio.create_task(run_periodic_task_equities())
+    bse_all_task = asyncio.create_task(run_periodic_task_bse_all())
+    bse_results_task = asyncio.create_task(run_periodic_task_bse_results())
+    extraction_logger_task = asyncio.create_task(run_extraction_status_logger())
     cleanup_task = asyncio.create_task(run_periodic_cleanup())
     
     # Only start scheduled fetch task if AUTO_FETCH_ENABLED is true
     if AUTO_FETCH_ENABLED:
         scheduled_quotes_task = asyncio.create_task(run_scheduled_fetch_quotes())
-        logger.info("✅ All background tasks started: Equities, Periodic Cleanup, and Scheduled Fetch Quotes")
-        logger.info(f"📅 Scheduled fetch quotes: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
+        logger.info("All background tasks started: NSE, BSE-All, BSE-Results, Periodic Cleanup, Scheduled Fetch Quotes")
+        logger.info(f"Scheduled fetch quotes: {SCHEDULED_FETCH_CONFIG['hour']:02d}:{SCHEDULED_FETCH_CONFIG['minute']:02d}:{SCHEDULED_FETCH_CONFIG['second']:02d} IST (Mon-Fri)")
     else:
-        logger.info("✅ Background tasks started: Equities, Periodic Cleanup")
-        logger.info("⚠️ Auto fetch DISABLED (set AUTO_FETCH_ENABLED=true in .env to enable)")
+        logger.info("Background tasks started: NSE, BSE-All, BSE-Results, Periodic Cleanup")
+        logger.info("Auto fetch DISABLED (set AUTO_FETCH_ENABLED=true in .env to enable)")
     
     logger.info(f"🧹 Cleanup policy: PDFs={CLEANUP_CONFIG['pdf_retention_days']}d, Images={CLEANUP_CONFIG['images_retention_days']}d, Post-OCR cleanup={'ON' if CLEANUP_CONFIG['post_ocr_cleanup'] else 'OFF'}")
     
@@ -975,7 +982,8 @@ async def init_db():
                 units TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                UNIQUE(stock_symbol, quarter, financial_year),
+                announcement_date TEXT,
+                UNIQUE(stock_symbol, quarter, financial_year, announcement_date),
                 FOREIGN KEY (source_message_id) REFERENCES messages(id)
             )
         """)
@@ -997,14 +1005,110 @@ async def init_db():
             ("cumulative_eps_diluted_consolidated", "REAL"),
             ("valuation", "TEXT"),
             ("comments", "TEXT"),
+            ("announcement_date", "TEXT"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+        # Migrate UNIQUE constraint: (stock_symbol, quarter, financial_year) → include announcement_date
+        migrate_needed = False
+        try:
+            idx_info = await db.execute_fetchall("PRAGMA index_list('quarterly_results')")
+            for idx in idx_info:
+                idx_name = idx[1] if isinstance(idx, (list, tuple)) else idx["name"]
+                cols_info = await db.execute_fetchall(f"PRAGMA index_info('{idx_name}')")
+                col_names = [c[2] if isinstance(c, (list, tuple)) else c["name"] for c in cols_info]
+                if col_names == ["stock_symbol", "quarter", "financial_year"]:
+                    migrate_needed = True
+                    break
+        except Exception:
+            pass
+
+        if migrate_needed:
+            logger.info("Migrating quarterly_results: relaxing UNIQUE to include announcement_date...")
+            col_cursor = await db.execute_fetchall("PRAGMA table_info('quarterly_results')")
+            existing_cols = [c[1] if isinstance(c, (list, tuple)) else c["name"] for c in col_cursor]
+            cols_csv = ", ".join(existing_cols)
+            await db.execute(f"ALTER TABLE quarterly_results RENAME TO _qr_old")
+            await db.execute(f"""
+                CREATE TABLE quarterly_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stock_symbol TEXT NOT NULL,
+                    company_name TEXT,
+                    quarter TEXT NOT NULL,
+                    financial_year TEXT NOT NULL,
+                    period_ended TEXT,
+                    eps_basic_standalone REAL,
+                    eps_diluted_standalone REAL,
+                    eps_basic_consolidated REAL,
+                    eps_diluted_consolidated REAL,
+                    fy_eps_basic_standalone REAL,
+                    fy_eps_diluted_standalone REAL,
+                    fy_eps_basic_consolidated REAL,
+                    fy_eps_diluted_consolidated REAL,
+                    fy_eps_formula_standalone TEXT,
+                    fy_eps_formula_consolidated TEXT,
+                    standalone_data TEXT,
+                    consolidated_data TEXT,
+                    raw_ai_response TEXT,
+                    source_pdf_url TEXT,
+                    source_message_id INTEGER,
+                    exchange TEXT,
+                    units TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    stock_id INTEGER REFERENCES stocks(id),
+                    cmp REAL,
+                    pe REAL,
+                    cmp_updated_at TEXT,
+                    cumulative_eps_basic_standalone REAL,
+                    cumulative_eps_diluted_standalone REAL,
+                    cumulative_eps_basic_consolidated REAL,
+                    cumulative_eps_diluted_consolidated REAL,
+                    valuation TEXT,
+                    comments TEXT,
+                    announcement_date TEXT,
+                    UNIQUE(stock_symbol, quarter, financial_year, announcement_date),
+                    FOREIGN KEY (source_message_id) REFERENCES messages(id)
+                )
+            """)
+            safe_cols = [c for c in existing_cols if c in [
+                "id", "stock_symbol", "company_name", "quarter", "financial_year", "period_ended",
+                "eps_basic_standalone", "eps_diluted_standalone", "eps_basic_consolidated", "eps_diluted_consolidated",
+                "fy_eps_basic_standalone", "fy_eps_diluted_standalone", "fy_eps_basic_consolidated", "fy_eps_diluted_consolidated",
+                "fy_eps_formula_standalone", "fy_eps_formula_consolidated",
+                "standalone_data", "consolidated_data", "raw_ai_response",
+                "source_pdf_url", "source_message_id", "exchange", "units", "created_at", "updated_at",
+                "stock_id", "cmp", "pe", "cmp_updated_at",
+                "cumulative_eps_basic_standalone", "cumulative_eps_diluted_standalone",
+                "cumulative_eps_basic_consolidated", "cumulative_eps_diluted_consolidated",
+                "valuation", "comments", "announcement_date",
+            ]]
+            safe_csv = ", ".join(safe_cols)
+            await db.execute(f"INSERT INTO quarterly_results ({safe_csv}) SELECT {safe_csv} FROM _qr_old")
+            await db.execute("DROP TABLE _qr_old")
+            await db.commit()
+            logger.info("Migration complete: quarterly_results UNIQUE constraint now includes announcement_date")
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_symbol ON quarterly_results(stock_symbol)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_quarter_fy ON quarterly_results(quarter, financial_year)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_stock_id ON quarterly_results(stock_id)")
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS failed_extractions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_symbol TEXT NOT NULL,
+                pdf_url TEXT,
+                exchange TEXT,
+                announcement_date TEXT,
+                error_message TEXT,
+                attempts INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'failed',
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            )
+        """)
 
         # Create pe_formulas table for custom FY EPS estimation formulas
         await db.execute("""
@@ -2059,7 +2163,8 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
                                     exchange, units, now_iso, stock_id=None,
                                     fy_eps_basic_s=None, fy_eps_diluted_s=None,
                                     fy_eps_basic_c=None, fy_eps_diluted_c=None,
-                                    fy_eps_formula_s=None, fy_eps_formula_c=None):
+                                    fy_eps_formula_s=None, fy_eps_formula_c=None,
+                                    announcement_date=None):
     """UPSERT a single quarterly result row with full-year estimated EPS and stock_id FK."""
     eps_basic_s = standalone_data.get('eps_basic') if standalone_data else None
     eps_diluted_s = standalone_data.get('eps_diluted') if standalone_data else None
@@ -2080,9 +2185,10 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
          cumulative_eps_basic_standalone, cumulative_eps_diluted_standalone,
          cumulative_eps_basic_consolidated, cumulative_eps_diluted_consolidated,
          standalone_data, consolidated_data, raw_ai_response,
-         source_pdf_url, source_message_id, exchange, units, stock_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(stock_symbol, quarter, financial_year)
+         source_pdf_url, source_message_id, exchange, units, stock_id,
+         announcement_date, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(stock_symbol, quarter, financial_year, announcement_date)
         DO UPDATE SET
             company_name = excluded.company_name,
             period_ended = excluded.period_ended,
@@ -2106,6 +2212,7 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
             source_pdf_url = excluded.source_pdf_url,
             units = excluded.units,
             stock_id = excluded.stock_id,
+            announcement_date = COALESCE(excluded.announcement_date, quarterly_results.announcement_date),
             updated_at = excluded.updated_at
     """, (
         stock_symbol, company_name, quarter, financial_year, period_ended,
@@ -2117,11 +2224,11 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
         json.dumps(consolidated_data) if consolidated_data else None,
         json.dumps(raw_ai_response) if raw_ai_response else None,
         source_pdf_url, source_message_id, exchange, units, stock_id,
-        now_iso, now_iso
+        announcement_date, now_iso, now_iso
     ))
 
 
-async def process_quarterly_results(ai_response, stock_symbol, message_id=None, pdf_url=None, exchange=None):
+async def process_quarterly_results(ai_response, stock_symbol, message_id=None, pdf_url=None, exchange=None, announcement_date=None):
     """Process AI quarterly results (flat array structure) and UPSERT into quarterly_results table."""
     try:
         if not ai_response or ai_response.get('error'):
@@ -2207,6 +2314,7 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
                     fy_eps_basic_s=fy_basic_s, fy_eps_diluted_s=fy_diluted_s,
                     fy_eps_basic_c=fy_basic_c, fy_eps_diluted_c=fy_diluted_c,
                     fy_eps_formula_s=fy_formula_s, fy_eps_formula_c=fy_formula_c,
+                    announcement_date=announcement_date,
                 )
                 stored.append({"stock_symbol": stock_symbol, "quarter": quarter, "financial_year": fy})
             await db.commit()
@@ -2488,23 +2596,67 @@ async def _call_openai_vision_general(encoded_images: list) -> dict:
     return result
 
 
-async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, exchange=None):
-    """Full pipeline: PDF download → PyMuPDF extract → AI quarterly extraction → DB store."""
-    try:
-        pdf_path = await download_pdf_async(pdf_url, "downloads_concall")
+async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, exchange=None, announcement_date=None):
+    """Semaphore-gated extraction with retry. Limits concurrent extractions to MAX_CONCURRENT_EXTRACTIONS."""
+    extraction_stats["pending"] += 1
+    max_retries = 3
+    backoff_delays = [5, 15, 30]
 
-        encoded_images = await _extract_financial_pages_as_b64(pdf_path)
-        if not encoded_images:
-            logger.error(f"No financial pages found in PDF for {stock_symbol}")
+    async with extraction_semaphore:
+        extraction_stats["pending"] -= 1
+        extraction_stats["running"] += 1
+        last_error = None
+        try:
+            for attempt in range(1, max_retries + 1):
+                try:
+                    pdf_path = await download_pdf_async(pdf_url, "downloads_concall")
+                    encoded_images = await _extract_financial_pages_as_b64(pdf_path)
+                    if not encoded_images:
+                        logger.error(f"No financial pages found in PDF for {stock_symbol}")
+                        extraction_stats["running"] -= 1
+                        extraction_stats["failed"] += 1
+                        await _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, "No financial pages found in PDF", attempt)
+                        return None
+
+                    ai_response = await _call_openai_vision_quarterly(encoded_images)
+                    result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange, announcement_date=announcement_date)
+                    extraction_stats["running"] -= 1
+                    extraction_stats["completed"] += 1
+                    return result
+
+                except Exception as e:
+                    last_error = str(e)
+                    if attempt < max_retries:
+                        delay = backoff_delays[attempt - 1]
+                        logger.warning(f"Extraction attempt {attempt}/{max_retries} failed for {stock_symbol}: {e} — retrying in {delay}s")
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(f"Extraction failed after {max_retries} attempts for {stock_symbol}: {e}")
+
+            extraction_stats["running"] -= 1
+            extraction_stats["failed"] += 1
+            await _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, last_error, max_retries)
             return None
 
-        ai_response = await _call_openai_vision_quarterly(encoded_images)
-        result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange)
-        return result
+        except Exception as e:
+            extraction_stats["running"] -= 1
+            extraction_stats["failed"] += 1
+            logger.error(f"Quarterly extraction critical error for {stock_symbol}: {e}")
+            return None
 
+
+async def _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, error_msg, attempts):
+    """Log a failed extraction to the failed_extractions table."""
+    try:
+        now_iso = get_ist_now().isoformat()
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO failed_extractions (stock_symbol, pdf_url, exchange, announcement_date, error_message, attempts, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (stock_symbol, pdf_url, exchange, announcement_date, str(error_msg)[:500], attempts, now_iso))
+            await db.commit()
     except Exception as e:
-        logger.error(f"Quarterly extraction failed for {stock_symbol}: {e}")
-        return None
+        logger.error(f"Failed to log extraction failure for {stock_symbol}: {e}")
 
 
 async def set_webhook():
@@ -2958,7 +3110,7 @@ async def process_ca_data(ca_docs):
                 ###### x ---- Quarterly extraction (quarterly_results only) ---- x ########
                 if dashboard_option in ("quaterly_result", "quarterly_result"):
                     asyncio.create_task(
-                        run_quarterly_extraction(attachment_file, row['symbol'], message_id, exchange="NSE")
+                        run_quarterly_extraction(attachment_file, row['symbol'], message_id, exchange="NSE", announcement_date=str(row.get('an_dt', '')))
                     )
                 ###### X --------------------------------------------X #########
                 ################################################################
@@ -2993,10 +3145,31 @@ async def process_ca_data(ca_docs):
         return 1
 
 def _fetch_bse_announcements_sync():
-    """Sync BSE fetch - run in executor. Returns raw BSE API response."""
+    """Sync BSE fetch with date-range pagination — fetches ALL announcements for today.
+    Uses from_date=today, to_date=today and paginates through all pages."""
     bse_download_folder.mkdir(parents=True, exist_ok=True)
+    today = datetime.now()
+    all_rows = []
     with BSE(bse_download_folder) as bse:
-        return bse.announcements(page_no=1, segment="equity")
+        page = 1
+        max_pages = 20
+        while page <= max_pages:
+            try:
+                data = bse.announcements(page_no=page, from_date=today, to_date=today, segment="equity")
+                table = data.get("Table", [])
+                if not table:
+                    break
+                all_rows.extend(table)
+                total_count_info = data.get("Table1", [])
+                total_count = int(total_count_info[0].get("ROWCNT", 0)) if total_count_info else 0
+                if total_count and len(all_rows) >= total_count:
+                    break
+                page += 1
+            except Exception as e:
+                logger.warning(f"BSE page {page} fetch error: {e}")
+                break
+    logger.info(f"BSE date-range fetch: {len(all_rows)} announcements across {page} page(s) for {today.strftime('%Y-%m-%d')}")
+    return {"Table": all_rows}
 
 
 async def fetch_bse_announcements():
@@ -3090,11 +3263,7 @@ async def process_bse_ca_data(bse_data):
                     norm_row["symbol"], norm_row["sm_name"], norm_row["desc"],
                     attachment_file, exchange="BSE", save_to_dashboard=False
                 )
-        # Quarterly extraction (quarterly_results only)
-        if dashboard_option in ("quaterly_result", "quarterly_result"):
-            asyncio.create_task(
-                run_quarterly_extraction(attachment_file, norm_row["symbol"], message_id, exchange="BSE")
-            )
+        # BSE quarterly extraction is handled by the dedicated BSE Results job (CA_bse_results)
     df_raw = pd.DataFrame(raw_rows_to_append)
     if await aiofiles.os.path.exists(bse_csv_file_path):
         df_existing = pd.read_csv(bse_csv_file_path, dtype="object")
@@ -3105,6 +3274,112 @@ async def process_bse_ca_data(bse_data):
     async with aiofiles.open(bse_csv_file_path, mode="w") as f:
         await f.write(df_updated.to_csv(index=False))
     logger.info(f"BSE CSV updated with {len(raw_rows_to_append)} new rows")
+    return 1
+
+
+def _fetch_bse_results_sync():
+    """Sync BSE fetch — only RESULT category announcements for today, paginated."""
+    bse_download_folder.mkdir(parents=True, exist_ok=True)
+    today = datetime.now()
+    all_rows = []
+    with BSE(bse_download_folder) as bse:
+        page = 1
+        max_pages = 50
+        while page <= max_pages:
+            try:
+                data = bse.announcements(
+                    page_no=page, from_date=today, to_date=today,
+                    segment="equity", category=BSE_CATEGORY.RESULT,
+                )
+                table = data.get("Table", [])
+                if not table:
+                    break
+                all_rows.extend(table)
+                total_count_info = data.get("Table1", [])
+                total_count = int(total_count_info[0].get("ROWCNT", 0)) if total_count_info else 0
+                if total_count and len(all_rows) >= total_count:
+                    break
+                page += 1
+            except Exception as e:
+                logger.warning(f"BSE results page {page} fetch error: {e}")
+                break
+    logger.info(f"BSE RESULT fetch: {len(all_rows)} result announcements across {page} page(s) for {today.strftime('%Y-%m-%d')}")
+    return {"Table": all_rows}
+
+
+async def fetch_bse_results():
+    """Fetch BSE RESULT-category announcements only (runs sync BSE in executor)."""
+    try:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _fetch_bse_results_sync)
+    except Exception as e:
+        logger.error(f"BSE results fetch failed: {e}")
+        return None
+
+
+BSE_RESULTS_CSV = "bse_result_announcements.csv"
+bse_results_csv_path = os.path.join("corporate_announcements", BSE_RESULTS_CSV)
+
+
+async def process_bse_results_data(bse_data):
+    """Process BSE RESULT-category announcements — directly trigger quarterly extraction.
+    No keyword mapping needed since BSE already filtered by Result category."""
+    if not bse_data or "Table" not in bse_data:
+        logger.warning("BSE results data empty or invalid structure")
+        return None
+    table = bse_data["Table"]
+    if not table:
+        return 1
+
+    existing_newsids = set()
+    if await aiofiles.os.path.exists(bse_results_csv_path):
+        async with aiofiles.open(bse_results_csv_path, mode="r") as f:
+            content = await f.read()
+            df_existing = pd.read_csv(io.StringIO(content), dtype="object")
+            if "NEWSID" in df_existing.columns:
+                existing_newsids = set(df_existing["NEWSID"].dropna().astype(str).str.strip())
+
+    normalized_rows = []
+    raw_rows_to_append = []
+    for row in table:
+        newsid = str(row.get("NEWSID", "")).strip()
+        if newsid in existing_newsids:
+            continue
+        norm = _bse_row_to_normalized(row)
+        normalized_rows.append(norm)
+        raw_rows_to_append.append(row)
+
+    if not normalized_rows:
+        return 1
+
+    for norm_row in normalized_rows:
+        attachment_file = norm_row["attchmntFile"]
+        if attachment_file == "-":
+            continue
+        message = f'''<b>{norm_row['symbol']} - {norm_row['sm_name']}</b>\n\n{norm_row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+
+        message_id = await save_announcement_to_dashboard(
+            norm_row["symbol"], norm_row["sm_name"], norm_row["desc"], attachment_file,
+            exchange="BSE", option="quarterly_result", message=message
+        )
+
+        asyncio.create_task(
+            run_quarterly_extraction(
+                attachment_file, norm_row["symbol"], message_id,
+                exchange="BSE", announcement_date=norm_row.get("an_dt", "")
+            )
+        )
+
+    df_raw = pd.DataFrame(raw_rows_to_append)
+    if await aiofiles.os.path.exists(bse_results_csv_path):
+        df_existing = pd.read_csv(bse_results_csv_path, dtype="object")
+        df_updated = pd.concat([df_raw, df_existing], ignore_index=True)
+    else:
+        df_updated = df_raw
+    Path(bse_results_csv_path).parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(bse_results_csv_path, mode="w") as f:
+        await f.write(df_updated.to_csv(index=False))
+    logger.info(f"BSE results CSV updated with {len(raw_rows_to_append)} new result rows")
     return 1
 
 
@@ -3417,7 +3692,7 @@ async def CA_equities():
 
 
 async def CA_bse():
-    """Fetch BSE corporate announcements and process. Runs in parallel with NSE."""
+    """Fetch ALL BSE corporate announcements and process for dashboard (no quarterly extraction)."""
     try:
         bse_data = await fetch_bse_announcements()
         if bse_data:
@@ -3427,34 +3702,94 @@ async def CA_bse():
     return None
 
 
-# Function to run the periodic task
+async def CA_bse_results():
+    """Fetch BSE RESULT-category announcements and trigger quarterly extraction for PE Analysis."""
+    try:
+        bse_data = await fetch_bse_results()
+        if bse_data:
+            return await process_bse_results_data(bse_data)
+    except Exception as e:
+        logger.error(f"BSE Results CA error: {e}")
+    return None
+
+
 async def run_periodic_task_equities():
+    """Background Job 1: NSE announcements — starts at 0s, runs every 60s."""
     global ai_processing_active
-    logger.info("Starting NSE + BSE corporate announcements task")
+    logger.info("Starting background job: NSE announcements (offset=0s, interval=60s)")
     while True:
         try:
             if ai_processing_active:
-                logger.info("AI processing active, pausing background task...")
                 await asyncio.sleep(10)
                 continue
-            logger.info("Fetching NSE + BSE in parallel...")
-            nse_task = asyncio.create_task(CA_equities())
-            bse_task = asyncio.create_task(CA_bse())
-            nse_result, bse_result = await asyncio.gather(nse_task, bse_task)
+            nse_result = await CA_equities()
             if nse_result is None:
                 logger.warning("NSE fetch failed, will retry next cycle")
             else:
                 logger.info("NSE fetch completed")
-            if bse_result is None:
-                logger.warning("BSE fetch failed, will retry next cycle")
-            else:
-                logger.info("BSE fetch completed")
             await asyncio.sleep(60)
         except Exception as e:
-            logger.error(f"Error in run_periodic_task_equities: {str(e)}")
+            logger.error(f"Error in NSE background job: {str(e)}")
             await asyncio.sleep(30)
 
 
+async def run_periodic_task_bse_all():
+    """Background Job 2: BSE ALL announcements — starts at +20s, runs every 60s."""
+    global ai_processing_active
+    logger.info("Starting background job: BSE all announcements (offset=20s, interval=60s)")
+    await asyncio.sleep(20)
+    while True:
+        try:
+            if ai_processing_active:
+                await asyncio.sleep(10)
+                continue
+            bse_result = await CA_bse()
+            if bse_result is None:
+                logger.warning("BSE all-announcements fetch failed, will retry next cycle")
+            else:
+                logger.info("BSE all-announcements fetch completed")
+            await asyncio.sleep(60)
+        except Exception as e:
+            logger.error(f"Error in BSE all-announcements background job: {str(e)}")
+            await asyncio.sleep(30)
+
+
+async def run_periodic_task_bse_results():
+    """Background Job 3: BSE RESULT-category — starts at +40s, runs every 60s."""
+    global ai_processing_active
+    logger.info("Starting background job: BSE results (offset=40s, interval=60s)")
+    await asyncio.sleep(40)
+    while True:
+        try:
+            if ai_processing_active:
+                await asyncio.sleep(10)
+                continue
+            bse_result = await CA_bse_results()
+            if bse_result is None:
+                logger.warning("BSE results fetch failed, will retry next cycle")
+            else:
+                logger.info("BSE results fetch completed")
+            await asyncio.sleep(60)
+        except Exception as e:
+            logger.error(f"Error in BSE results background job: {str(e)}")
+            await asyncio.sleep(30)
+
+
+async def run_extraction_status_logger():
+    """Logs extraction queue stats every 60s when there's activity."""
+    while True:
+        try:
+            stats = extraction_stats
+            total_active = stats["running"] + stats["pending"]
+            if total_active > 0 or stats["completed"] > 0:
+                logger.info(
+                    f"Extraction queue: {stats['running']} running, {stats['pending']} pending, "
+                    f"{stats['completed']} completed, {stats['failed']} failed "
+                    f"(max concurrent: {MAX_CONCURRENT_EXTRACTIONS})"
+                )
+            await asyncio.sleep(60)
+        except Exception:
+            await asyncio.sleep(60)
 
 
 async def verify_session(request: Request) -> Optional[Dict]:
@@ -3968,19 +4303,20 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qr.source_pdf_url,
                     qr.valuation,
                     qr.comments,
+                    qr.announcement_date,
                     s.sector,
                     s.exchange
                 FROM quarterly_results qr
                 LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
                 WHERE qr.quarter NOT IN ('FY')
-                AND qr.id IN (
-                    SELECT id FROM quarterly_results q2
+                AND qr.quarter || '|' || qr.financial_year IN (
+                    SELECT q2.quarter || '|' || q2.financial_year FROM quarterly_results q2
                     WHERE q2.stock_symbol = qr.stock_symbol
                     AND q2.quarter NOT IN ('FY')
                     ORDER BY q2.financial_year DESC, q2.quarter DESC
                     LIMIT 1
                 )
-                ORDER BY qr.updated_at DESC
+                ORDER BY qr.stock_symbol, qr.created_at DESC
             """)
             rows = await cursor.fetchall()
 
@@ -3988,7 +4324,9 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
             # Use normalized year to match across FY format variants (e.g. "2026" vs "FY2025-26")
             quarters_map = {}
             sym_set = set(r["stock_symbol"] for r in rows)
-            sym_fy_map = {r["stock_symbol"]: r["financial_year"] for r in rows}
+            sym_fy_map = {}
+            for r in rows:
+                sym_fy_map.setdefault(r["stock_symbol"], r["financial_year"])
             sym_norm_year = {}
             for sym, raw_fy in sym_fy_map.items():
                 norm = _normalize_fy_year(raw_fy)
@@ -4011,11 +4349,16 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                         FROM quarterly_results
                         WHERE stock_symbol = ?
                           AND financial_year IN (?, ?, ?)
+                        ORDER BY created_at DESC
                     """, (sym, yr_str, fy_long, f"FY{yr_str[-2:]}"))
+                    seen_quarters = set()
                     for qr in await qtr_cursor.fetchall():
+                        q_label = qr["quarter"]
+                        if q_label in seen_quarters:
+                            continue
+                        seen_quarters.add(q_label)
                         if sym not in quarters_map:
                             quarters_map[sym] = {}
-                        q_label = qr["quarter"]
                         if q_label == "FY":
                             if qr["qtr_eps"] is not None:
                                 quarters_map[sym]["N12"] = round(qr["qtr_eps"], 4)
@@ -4046,10 +4389,15 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                                         cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
                         FROM quarterly_results
                         WHERE stock_symbol = ? AND financial_year IN (?, ?, ?)
+                        ORDER BY created_at DESC
                     """, (sym, prev_yr_str, prev_fy_long, f"FY{prev_yr_str[-2:]}"))
                     pfy_data = {}
+                    pfy_seen = set()
                     for pr in await pfy_cursor.fetchall():
                         q_label = pr["quarter"]
+                        if q_label in pfy_seen:
+                            continue
+                        pfy_seen.add(q_label)
                         if q_label == "FY" and pr["eps"] is not None:
                             pfy_data["PFY"] = round(pr["eps"], 4)
                         if q_label in ("Q1", "Q2", "Q3", "Q4") and pr["eps"] is not None:
@@ -4125,6 +4473,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                 "pe": pe_val,
                 "cmp_updated_at": r["cmp_updated_at"],
                 "updated_at": r["updated_at"],
+                "announcement_date": r["announcement_date"],
                 "source_pdf_url": r["source_pdf_url"],
                 "valuation": r["valuation"],
                 "comments": r["comments"],
