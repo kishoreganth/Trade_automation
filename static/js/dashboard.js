@@ -2865,8 +2865,9 @@ function _getVisiblePESymbols() {
         const from = dfv ? new Date(dfv + 'T00:00:00') : null;
         const to = dtv ? new Date(dtv + 'T23:59:59') : null;
         filtered = filtered.filter(r => {
-            if (!r.updated_at) return false;
-            const d = new Date(r.updated_at);
+            const dateStr = r.announcement_date || r.updated_at;
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
             return (!from || d >= from) && (!to || d <= to);
         });
     }
@@ -2908,8 +2909,9 @@ function renderPEAnalysis() {
         const from = dateFromVal ? new Date(dateFromVal + 'T00:00:00') : null;
         const to = dateToVal ? new Date(dateToVal + 'T23:59:59') : null;
         filtered = filtered.filter(r => {
-            if (!r.updated_at) return false;
-            const d = new Date(r.updated_at);
+            const dateStr = r.announcement_date || r.updated_at;
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
             if (from && d < from) return false;
             if (to && d > to) return false;
             return true;
@@ -3082,6 +3084,18 @@ function renderPEAnalysis() {
     }
     tbody.innerHTML = html;
     if (typeof refreshIcons === 'function') refreshIcons();
+    _syncPETopScroll();
+}
+
+function _syncPETopScroll() {
+    const topScroll = document.getElementById('peTopScroll');
+    const container = document.getElementById('peTableContainer');
+    const table = document.getElementById('peAnalysisTable');
+    if (!topScroll || !container || !table) return;
+    topScroll.firstElementChild.style.width = table.scrollWidth + 'px';
+    let syncing = false;
+    topScroll.onscroll = () => { if (!syncing) { syncing = true; container.scrollLeft = topScroll.scrollLeft; syncing = false; } };
+    container.onscroll = () => { if (!syncing) { syncing = true; topScroll.scrollLeft = container.scrollLeft; syncing = false; } };
 }
 
 // PE Inline Edit
@@ -3415,8 +3429,9 @@ function exportPEAnalysisToExcel() {
         const from = eDateFrom ? new Date(eDateFrom + 'T00:00:00') : null;
         const to = eDateTo ? new Date(eDateTo + 'T23:59:59') : null;
         filtered = filtered.filter(r => {
-            if (!r.updated_at) return false;
-            const d = new Date(r.updated_at);
+            const dateStr = r.announcement_date || r.updated_at;
+            if (!dateStr) return false;
+            const d = new Date(dateStr);
             if (from && d < from) return false;
             if (to && d > to) return false;
             return true;

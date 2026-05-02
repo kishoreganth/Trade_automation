@@ -4316,7 +4316,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     ORDER BY q2.financial_year DESC, q2.quarter DESC
                     LIMIT 1
                 )
-                ORDER BY qr.stock_symbol, qr.created_at DESC
+                ORDER BY qr.created_at DESC
             """)
             rows = await cursor.fetchall()
 

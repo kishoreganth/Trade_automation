@@ -2100,6 +2100,33 @@ select.pe-panel-input option { background: #1e1e2e; color: #e2e8f0; }
     .stat-number { font-size: 1.4rem; }
 }
 
+/* PE Analysis — top horizontal scrollbar */
+.pe-top-scroll {
+    overflow-x: scroll;
+    overflow-y: hidden;
+    height: 16px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
+    scrollbar-width: thin;
+}
+.pe-top-scroll > div {
+    height: 1px;
+}
+.pe-top-scroll::-webkit-scrollbar {
+    height: 8px;
+}
+.pe-top-scroll::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+}
+.pe-top-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.25);
+    border-radius: 4px;
+}
+.pe-top-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.4);
+}
+
 /* PE Analysis — highlighted key columns */
 #peAnalysisTable th.pvc-qtreps,
 #peAnalysisTable td.pvc-qtreps {
