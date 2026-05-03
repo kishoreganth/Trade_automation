@@ -837,9 +837,39 @@ tbody tr:hover {
     align-items: center;
     flex-wrap: wrap;
     margin-bottom: 0;
-    padding: 0 24px 12px;
-    flex-wrap: wrap;
+    padding: 10px 24px;
     flex-shrink: 0;
+}
+.pe-controls-tier1 {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+.pe-controls-tier1 .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.pe-controls-tier1 .control-group label {
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.pe-controls-tier1 .control-group select {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 13px;
+}
+.pe-controls-tier2 {
+    padding-top: 8px;
+    padding-bottom: 10px;
 }
 
 .result-count {
@@ -876,7 +906,25 @@ tbody tr:hover {
 .pe-multiselect.open .pe-multiselect-dropdown { display: block; }
 #peColumnsToggle .pe-multiselect-dropdown {
     left: auto; right: 0; position: fixed;
-    top: auto; max-height: 70vh;
+    top: auto; max-height: none; overflow: visible;
+    min-width: 200px;
+}
+.pe-col-search {
+    padding: 8px 10px 4px;
+    position: sticky; top: 0;
+    background: var(--card-bg, #1a1f2e);
+    z-index: 1;
+}
+.pe-col-search input {
+    width: 100%; padding: 6px 10px; font-size: 12px; border-radius: 6px;
+    border: 1px solid var(--border-color, #2a3042);
+    background: var(--input-bg, #0f1219); color: #e2e8f0;
+    outline: none;
+}
+.pe-col-search input:focus { border-color: #4f46e5; }
+.pe-col-list {
+    max-height: 260px; overflow-y: auto;
+    padding-bottom: 4px;
 }
 .pe-ms-option {
     display: flex; align-items: center; gap: 8px;
@@ -973,12 +1021,19 @@ tbody tr:hover {
 
 /* PE Edit */
 .pe-edit-btn {
-    background: none; border: none; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;
-    color: #64748b; transition: color 0.15s, background 0.15s;
+    background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); cursor: pointer;
+    padding: 6px 8px; border-radius: 6px; line-height: 1;
+    color: #6366f1; transition: all 0.2s ease;
 }
-.pe-edit-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.08); }
+.pe-edit-btn:hover {
+    background: #6366f1; color: #fff; border-color: #6366f1;
+    transform: scale(1.2);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+}
 .pe-editing { background: rgba(99,102,241,0.06) !important; }
 #peAnalysisTable { min-width: 1100px; }
+#peAnalysisTable th.pvc-date,
+#peAnalysisTable td.pvc-date { min-width: 90px; white-space: nowrap; font-size: 0.8rem; }
 
 /* PE Edit Panel (slide-down below row) */
 .pe-panel-row td { padding: 0 !important; border-top: none !important; }
@@ -1079,6 +1134,85 @@ select.pe-panel-input option { background: #1e1e2e; color: #e2e8f0; }
 }
 .pe-panel-textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); outline: none; }
 .pe-panel-field-wide { min-width: 260px; flex: 2; }
+
+/* PE Edit Drawer (slide-out right panel) */
+.pe-drawer-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 9998;
+    transition: opacity 0.2s;
+}
+.pe-drawer {
+    position: fixed; top: 0; right: -380px; width: 360px; height: 100vh;
+    background: #f8f9fb; border-left: 1px solid #d1d5db;
+    z-index: 9999; display: flex; flex-direction: column;
+    box-shadow: -8px 0 30px rgba(0,0,0,0.15);
+    transition: right 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.pe-drawer.open { right: 0; }
+.pe-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 14px; border-bottom: 1px solid #d1d5db;
+    background: #fff;
+}
+.pe-drawer-title {
+    font-size: 1.05rem; font-weight: 700; color: #111827;
+    display: flex; align-items: center; gap: 8px;
+}
+.pe-drawer-close {
+    background: #e5e7eb; border: none; color: #374151; font-size: 1.3rem;
+    cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+.pe-drawer-close:hover { background: #d1d5db; color: #111827; }
+.pe-drawer-body {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 16px;
+}
+.pe-drawer-field {
+    display: flex; flex-direction: column; gap: 5px;
+}
+.pe-drawer-field label {
+    font-size: 0.78rem; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.pe-drawer-field input,
+.pe-drawer-field select,
+.pe-drawer-field textarea {
+    background: #fff; border: 1px solid #d1d5db;
+    color: #111827; border-radius: 6px; padding: 10px 14px; font-size: 0.9rem;
+    width: 100%; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+}
+.pe-drawer-field input:focus,
+.pe-drawer-field select:focus,
+.pe-drawer-field textarea:focus {
+    border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+}
+.pe-drawer-field input::placeholder,
+.pe-drawer-field textarea::placeholder { color: #9ca3af; }
+.pe-drawer-field select { cursor: pointer; }
+.pe-drawer-field select option { background: #fff; color: #111827; }
+.pe-drawer-field textarea { min-height: 80px; resize: vertical; }
+.pe-drawer-footer {
+    display: flex; gap: 10px; padding: 16px 20px;
+    border-top: 1px solid #d1d5db;
+    justify-content: flex-end;
+    background: #fff;
+}
+.pe-drawer-footer .pe-action-save {
+    background: #10b981; color: #fff; font-size: 0.85rem; padding: 9px 20px;
+}
+.pe-drawer-footer .pe-action-save:hover:not(:disabled) { background: #059669; }
+.pe-drawer-footer .pe-action-save:disabled { background: #d1fae5; color: #6ee7b7; cursor: not-allowed; }
+.pe-drawer-footer .pe-action-cancel {
+    background: #e5e7eb; color: #374151; font-size: 0.85rem; padding: 9px 20px;
+}
+.pe-drawer-footer .pe-action-cancel:hover { background: #d1d5db; color: #111827; }
+.pe-drawer-info {
+    font-size: 0.85rem; color: #374151; padding: 10px 14px;
+    background: #eef2ff; border-radius: 6px;
+    border: 1px solid #c7d2fe;
+}
+.pe-drawer-info strong { color: #111827; }
 
 /* PE Formula button (right-aligned, outline style) */
 .pe-formula-btn {

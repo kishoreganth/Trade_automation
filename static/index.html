@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="/static/css/styles.css?v=20260501i">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260503g">
 </head>
 <body>
     <div class="app-shell">
@@ -256,10 +256,16 @@
                             <i data-lucide="line-chart"></i>
                             <h3 id="peAnalysisTitle">PE Analysis &mdash; Quarterly Results</h3>
                         </div>
-                        <div class="pe-controls">
-                            <div class="search-input-wrap search-input-sm">
-                                <i data-lucide="search" class="search-icon"></i>
-                                <input type="text" id="peSymbolFilter" placeholder="Filter by symbol or sector...">
+                        <!-- Tier 1: Core data filters + pagination -->
+                        <div class="pe-controls pe-controls-tier1">
+                            <div class="control-group">
+                                <label>Show</label>
+                                <select id="peShowLimit">
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                    <option value="0">All</option>
+                                </select>
                             </div>
                             <div class="pe-multiselect" id="peYearFilter">
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Year</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
@@ -269,12 +275,24 @@
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Quarter</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
                                 <div class="pe-multiselect-dropdown"></div>
                             </div>
-                            <div class="pe-multiselect" id="peSectorFilter">
-                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Sector</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
-                                <div class="pe-multiselect-dropdown"></div>
-                            </div>
                             <div class="pe-multiselect" id="peExchangeFilter">
                                 <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Exchange</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
+                                <div class="pe-multiselect-dropdown"></div>
+                            </div>
+                            <button id="peClearFiltersBtn" class="btn-refresh btn-sm pe-clear-btn" title="Clear all filters" style="display:none;">
+                                <i data-lucide="x"></i>
+                                <span>Clear</span>
+                            </button>
+                            <span id="peResultCount" class="result-count"></span>
+                        </div>
+                        <!-- Tier 2: Search, secondary filters, and actions -->
+                        <div class="pe-controls pe-controls-tier2">
+                            <div class="search-input-wrap search-input-sm">
+                                <i data-lucide="search" class="search-icon"></i>
+                                <input type="text" id="peSymbolFilter" placeholder="Filter by symbol or sector...">
+                            </div>
+                            <div class="pe-multiselect" id="peSectorFilter">
+                                <button class="pe-multiselect-btn" type="button"><span class="pe-ms-label">Sector</span><span class="pe-ms-badge" style="display:none"></span><i data-lucide="chevron-down" style="width:14px;height:14px;"></i></button>
                                 <div class="pe-multiselect-dropdown"></div>
                             </div>
                             <div class="pe-multiselect" id="peDateRangeWrap">
@@ -287,7 +305,7 @@
                                 <input type="hidden" id="peDateFrom">
                                 <input type="hidden" id="peDateTo">
                             </div>
-                            <button id="peClearFiltersBtn" class="btn-refresh btn-sm pe-clear-btn" title="Clear all filters" style="display:none;">
+                            <button id="peClearTier2Btn" class="btn-refresh btn-sm pe-clear-btn" title="Clear search, sector & date filters" style="display:none;">
                                 <i data-lucide="x"></i>
                                 <span>Clear</span>
                             </button>
@@ -299,11 +317,6 @@
                                 <i data-lucide="indian-rupee"></i>
                                 <span>Fetch CMP</span>
                             </button>
-                            <button id="peUploadToggleBtn" class="btn-refresh btn-sm" title="Upload quarterly result PDF">
-                                <i data-lucide="upload"></i>
-                                <span>Upload PDF</span>
-                            </button>
-                            <span id="peResultCount" class="result-count"></span>
                             <div style="flex:1"></div>
                             <button id="peExportBtn" class="btn-refresh btn-sm" title="Export to Excel">
                                 <i data-lucide="download"></i>
@@ -352,6 +365,7 @@
                             <table class="data-table" id="peAnalysisTable">
                                 <thead>
                                     <tr>
+                                        <th class="pvc-date">Date</th>
                                         <th class="pvc-stock">Stock</th>
                                         <th class="pvc-exch">Exch</th>
                                         <th class="pvc-quarter">Quarter</th>
@@ -369,7 +383,6 @@
                                         <th class="pvc-remark">Remark</th>
                                         <th class="pvc-comments">Comments</th>
                                         <th class="pvc-file">File</th>
-                                        <th class="pvc-date">Date</th>
                                         <th class="pvc-edit" style="width:36px"></th>
                                     </tr>
                                 </thead>
@@ -674,6 +687,24 @@
         </div>
     </div>
 
+    <!-- PE Edit Drawer (slide-out right panel) -->
+    <div id="peEditDrawerBackdrop" class="pe-drawer-backdrop" style="display:none;"></div>
+    <div id="peEditDrawer" class="pe-drawer">
+        <div class="pe-drawer-header">
+            <span class="pe-drawer-title" id="peDrawerTitle">Edit Row</span>
+            <button class="pe-drawer-close" onclick="peCancelEdit()" title="Close">&times;</button>
+        </div>
+        <div class="pe-drawer-body" id="peDrawerBody"></div>
+        <div class="pe-drawer-footer">
+            <button class="pe-action-pill pe-action-save pe-save-disabled" id="pePanelSaveBtn" disabled>
+                <i data-lucide="check" style="width:14px;height:14px;"></i> Save
+            </button>
+            <button class="pe-action-pill pe-action-cancel" onclick="peCancelEdit()">
+                <i data-lucide="x" style="width:14px;height:14px;"></i> Cancel
+            </button>
+        </div>
+    </div>
+
     <!-- Formulas Modal (body-level for proper fixed positioning) -->
     <div id="peFormulaModal" class="pe-modal-overlay" style="display:none;">
         <div class="pe-modal-content">
@@ -710,7 +741,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260501i"></script>
+    <script src="/static/js/dashboard.js?v=20260503e"></script>
     <script>
         lucide.createIcons();
     </script>

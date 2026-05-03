@@ -570,6 +570,8 @@ function showContentForOption(optionValue) {
     const aiAnalyzerContainer = document.getElementById('aiAnalyzerContainer');
     const placeOrderPage = document.getElementById('placeOrderPage');
     const contentArea = document.querySelector('.content-area');
+    const globalControls = document.querySelector('.controls');
+    const globalStats = document.querySelector('.stats');
 
     contentArea.style.display = 'flex';
     placeOrderPage.style.display = 'none';
@@ -578,7 +580,11 @@ function showContentForOption(optionValue) {
     analyticsContainer.style.display = 'none';
     aiAnalyzerContainer.style.display = 'none';
 
-    if (optionValue === 'pe_analysis' || optionValue === 'stock_value') {
+    const isAnalytics = (optionValue === 'pe_analysis' || optionValue === 'stock_value');
+    if (globalControls) globalControls.style.display = isAnalytics ? 'none' : '';
+    if (globalStats) globalStats.style.display = isAnalytics ? 'none' : '';
+
+    if (isAnalytics) {
         analyticsContainer.style.display = 'block';
         document.getElementById('peAnalysisView').style.display = optionValue === 'pe_analysis' ? 'block' : 'none';
         document.getElementById('stockValueView').style.display = optionValue === 'stock_value' ? 'block' : 'none';
@@ -2357,6 +2363,7 @@ function _updatePETitle() {
 
 // PE Column Visibility
 const PE_COLUMNS = [
+    { key: 'date', label: 'Date' },
     { key: 'exch', label: 'Exchange' },
     { key: 'quarter', label: 'Quarter' },
     { key: 'year', label: 'Year' },
@@ -2373,7 +2380,6 @@ const PE_COLUMNS = [
     { key: 'remark', label: 'Remark' },
     { key: 'comments', label: 'Comments' },
     { key: 'file', label: 'File' },
-    { key: 'date', label: 'Date' },
 ];
 let _peVisibleCols = null;
 
@@ -2417,15 +2423,27 @@ function peInitColumnsToggle() {
     if (!_peVisibleCols) _peVisibleCols = _peLoadColVisibility();
     const dd = document.getElementById('peColumnsDropdown');
     if (!dd) return;
-    let html = '';
+    let html = '<div class="pe-col-search"><input type="text" id="peColSearchInput" placeholder="Search columns..." autocomplete="off"></div>';
+    html += '<div class="pe-col-list">';
     for (const col of PE_COLUMNS) {
         const checked = _peVisibleCols.has(col.key);
-        html += `<label class="pe-ms-option${checked ? ' checked' : ''}">
+        html += `<label class="pe-ms-option pe-col-item${checked ? ' checked' : ''}" data-col-label="${col.label.toLowerCase()}">
             <input type="checkbox" ${checked ? 'checked' : ''} onchange="peToggleColumn('${col.key}', this.checked)">
             <span>${col.label}</span>
         </label>`;
     }
+    html += '</div>';
     dd.innerHTML = html;
+    const searchInput = document.getElementById('peColSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value.toLowerCase();
+            dd.querySelectorAll('.pe-col-item').forEach(item => {
+                item.style.display = item.dataset.colLabel.includes(q) ? '' : 'none';
+            });
+        });
+        searchInput.addEventListener('click', e => e.stopPropagation());
+    }
 }
 
 function peToggleColumn(key, visible) {
@@ -2460,8 +2478,18 @@ function peInitMultiselects() {
     });
     const clearBtn = document.getElementById('peClearFiltersBtn');
     if (clearBtn) clearBtn.addEventListener('click', () => {
-        peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.sector.clear(); peFilterState.exchange.clear();
+        peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.exchange.clear();
+        _peFiltersInitialized = true;
+        pePopulateFilterDropdowns();
+        renderPEAnalysis();
+        _updatePETitle();
+    });
+    const clearBtn2 = document.getElementById('peClearTier2Btn');
+    if (clearBtn2) clearBtn2.addEventListener('click', () => {
+        peFilterState.sector.clear();
         _peCalClear();
+        const searchInput = document.getElementById('peSymbolFilter');
+        if (searchInput) searchInput.value = '';
         _peFiltersInitialized = true;
         pePopulateFilterDropdowns();
         renderPEAnalysis();
@@ -2682,10 +2710,16 @@ function pePopulateFilterDropdowns() {
     buildDropdown('peSectorFilter', sectors, 'sector', true);
     buildDropdown('peExchangeFilter', exchanges, 'exchange', false);
 
-    const dateActive = !!(document.getElementById('peDateFrom')?.value || document.getElementById('peDateTo')?.value);
-    const anyActive = peFilterState.year.size + peFilterState.quarter.size + peFilterState.sector.size + peFilterState.exchange.size > 0 || dateActive;
+    const tier1Active = peFilterState.year.size + peFilterState.quarter.size + peFilterState.exchange.size > 0;
     const clearBtn = document.getElementById('peClearFiltersBtn');
-    if (clearBtn) clearBtn.style.display = anyActive ? 'flex' : 'none';
+    if (clearBtn) clearBtn.style.display = tier1Active ? 'flex' : 'none';
+
+    const dateActive = !!(document.getElementById('peDateFrom')?.value || document.getElementById('peDateTo')?.value);
+    const searchActive = !!(document.getElementById('peSymbolFilter')?.value?.trim());
+    const tier2Active = peFilterState.sector.size > 0 || dateActive || searchActive;
+    const clearBtn2 = document.getElementById('peClearTier2Btn');
+    if (clearBtn2) clearBtn2.style.display = tier2Active ? 'flex' : 'none';
+
     if (typeof refreshIcons === 'function') refreshIcons();
 }
 
@@ -2925,7 +2959,15 @@ function renderPEAnalysis() {
         return;
     }
     emptyMsg.style.display = 'none';
-    document.getElementById('peResultCount').textContent = `${filtered.length} stocks`;
+
+    const peLimit = parseInt(document.getElementById('peShowLimit')?.value || '0', 10);
+    const totalFiltered = filtered.length;
+    if (peLimit > 0 && filtered.length > peLimit) {
+        filtered = filtered.slice(0, peLimit);
+    }
+    document.getElementById('peResultCount').textContent = peLimit > 0 && totalFiltered > peLimit
+        ? `${filtered.length} of ${totalFiltered} stocks`
+        : `${totalFiltered} stocks`;
 
     const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '';
 
@@ -2941,7 +2983,8 @@ function renderPEAnalysis() {
         const qtrEps = r.qtr_eps;
         const cmp = r.cmp;
         const dateSource = r.announcement_date || r.updated_at;
-        const updated = dateSource ? new Date(dateSource).toLocaleDateString('en-IN') : '';
+        const _dt = dateSource ? new Date(dateSource) : null;
+        const updated = _dt ? `<span style="white-space:nowrap">${_dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span><br><small style="color:#888;white-space:nowrap">${_dt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})}</small>` : '';
         const basisBadge = (r.eps_basis === 'S' && qtrEps != null && qtrEps !== '') ? '<span style="font-size:0.65rem;background:#854d0e;color:#fde68a;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Standalone only — no consolidated EPS available">S</span>' : '';
         const fy = r.financial_year || '';
         const yearVal = _fyEndingYear(fy) || fy;
@@ -3032,6 +3075,7 @@ function renderPEAnalysis() {
 
             if (rowCount === 1) {
                 html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
+                    <td class="pvc-date">${updated}</td>
                     <td class="pvc-stock">${stockCell}</td>
                     <td class="pvc-exch pe-col-exch">${exchBadge}</td>
                     <td class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
@@ -3049,11 +3093,11 @@ function renderPEAnalysis() {
                     <td class="pvc-remark">${remarkBadge}</td>
                     <td class="pvc-comments">${commentText}</td>
                     <td class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td class="pvc-date">${updated}</td>
                     <td class="pvc-edit" style="text-align:center">${editBtnInner}</td>
                 </tr>`;
             } else if (isFirst) {
                 html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
+                    <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
                     <td rowspan="${rowCount}" class="pvc-stock">${stockCell}</td>
                     <td rowspan="${rowCount}" class="pvc-exch pe-col-exch">${exchBadge}</td>
                     <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
@@ -3071,7 +3115,6 @@ function renderPEAnalysis() {
                     <td rowspan="${rowCount}" class="pvc-remark">${remarkBadge}</td>
                     <td rowspan="${rowCount}" class="pvc-comments">${commentText}</td>
                     <td rowspan="${rowCount}" class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
                     <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${editBtnInner}</td>
                 </tr>`;
             } else {
@@ -3104,10 +3147,10 @@ let _peSectorsList = null;
 function _peCheckDirty() {
     const btn = document.getElementById('pePanelSaveBtn');
     if (!btn) return;
-    const panel = document.getElementById('peEditPanel');
-    if (!panel) return;
+    const body = document.getElementById('peDrawerBody');
+    if (!body) return;
     let dirty = false;
-    panel.querySelectorAll('.pe-panel-input').forEach(el => {
+    body.querySelectorAll('.pe-drawer-input').forEach(el => {
         const orig = el.getAttribute('data-orig');
         if (orig !== null && el.value !== orig) dirty = true;
     });
@@ -3167,7 +3210,7 @@ function peRemarkSelectChanged(sel) {
     const wrap = document.createElement('div');
     wrap.className = 'pe-custom-remark-input';
     wrap.innerHTML = `
-        <input type="text" class="pe-panel-input" placeholder="e.g. UNDERVALUED" style="width:100%;margin-top:6px;font-size:0.8rem;" autofocus>
+        <input type="text" class="pe-drawer-input" placeholder="e.g. UNDERVALUED" style="width:100%;margin-top:6px;font-size:0.8rem;" autofocus>
         <div style="display:flex;gap:4px;margin-top:4px;">
             <button type="button" class="pe-custom-remark-ok" style="flex:1;">Add</button>
             <button type="button" class="pe-custom-remark-cancel" style="flex:0 0 auto;">Cancel</button>
@@ -3205,8 +3248,7 @@ function peRemarkSelectChanged(sel) {
 function peStartEdit(sym, quarter, fy) {
     peCancelEdit();
     const row = document.querySelector(`tr[data-pe-sym="${sym}"][data-pe-q="${quarter}"][data-pe-fy="${fy}"]`);
-    if (!row) return;
-    row.classList.add('pe-editing');
+    if (row) row.classList.add('pe-editing');
 
     const r = peAnalysisData.find(d => d.stock_symbol === sym && d.quarter === quarter && d.financial_year === fy);
     if (!r) return;
@@ -3215,90 +3257,85 @@ function peStartEdit(sym, quarter, fy) {
     const curExch = (r.exchange || 'NSE').toUpperCase();
     const yearVal = _fyEndingYear(fy) || fy;
 
-    const colCount = row.closest('table').querySelector('thead tr').children.length;
-    const panelRow = document.createElement('tr');
-    panelRow.className = 'pe-panel-row';
-    panelRow.id = 'peEditPanel';
+    const drawer = document.getElementById('peEditDrawer');
+    const backdrop = document.getElementById('peEditDrawerBackdrop');
+    const titleEl = document.getElementById('peDrawerTitle');
+    const body = document.getElementById('peDrawerBody');
+    const saveBtn = document.getElementById('pePanelSaveBtn');
+
+    titleEl.innerHTML = `<i data-lucide="pencil" style="width:14px;height:14px;"></i> ${r.company_name || sym}`;
 
     const exchOpts = ['NSE','BSE'].map(e => `<option value="${e}"${e === curExch ? ' selected' : ''}>${e}</option>`).join('');
     const qtrOpts = ['Q1','Q2','Q3','Q4','FY'].map(q => `<option value="${q}"${q === quarter ? ' selected' : ''}>${q}</option>`).join('');
-    const sectorOrig = r.sector || '';
-    const sectorPlaceholder = `<select class="pe-panel-input" data-field="sector" data-orig="${sectorOrig}"><option>Loading...</option></select>`;
 
-    panelRow.innerHTML = `<td colspan="${colCount}">
-        <div class="pe-panel">
-            <div class="pe-panel-header">
-                <span class="pe-panel-title"><i data-lucide="pencil" style="width:14px;height:14px;"></i> Edit — <strong>${r.company_name || sym}</strong></span>
-                <div class="pe-panel-actions">
-                    <button class="pe-action-pill pe-action-save pe-save-disabled" id="pePanelSaveBtn" onclick="peSaveEdit('${sym}','${quarter}','${fy}','${basis}')" disabled>
-                        <i data-lucide="check" style="width:14px;height:14px;"></i> Save
-                    </button>
-                    <button class="pe-action-pill pe-action-cancel" onclick="peCancelEdit()">
-                        <i data-lucide="x" style="width:14px;height:14px;"></i> Cancel
-                    </button>
-                </div>
-            </div>
-            <div class="pe-panel-fields">
-                <div class="pe-panel-field">
-                    <label>Exchange</label>
-                    <select class="pe-panel-input" data-field="exchange" data-orig="${curExch}">${exchOpts}</select>
-                </div>
-                <div class="pe-panel-field">
-                    <label>Quarter</label>
-                    <select class="pe-panel-input" data-field="quarter" data-orig="${quarter}">${qtrOpts}</select>
-                </div>
-                <div class="pe-panel-field">
-                    <label>Year</label>
-                    <select class="pe-panel-input" data-field="year" data-orig="${yearVal}">${_yearOptions(yearVal)}</select>
-                </div>
-                <div class="pe-panel-field">
-                    <label>Qtr EPS</label>
-                    <input type="number" step="0.01" class="pe-panel-input" data-field="qtr_eps" value="${r.qtr_eps != null ? r.qtr_eps : ''}" data-orig="${r.qtr_eps != null ? r.qtr_eps : ''}" placeholder="—">
-                </div>
-                <div class="pe-panel-field">
-                    <label>CMP</label>
-                    <input type="number" step="0.01" class="pe-panel-input" data-field="cmp" value="${r.cmp != null ? r.cmp : ''}" data-orig="${r.cmp != null ? r.cmp : ''}" placeholder="—">
-                </div>
-                <div class="pe-panel-field">
-                    <label>Sector</label>
-                    ${sectorPlaceholder}
-                </div>
-                <div class="pe-panel-field">
-                    <label>Remark</label>
-                    <select class="pe-panel-input" data-field="valuation" data-orig="${r.valuation || ''}" onchange="peRemarkSelectChanged(this)">
-                        <option value=""${!r.valuation ? ' selected' : ''}>—</option>
-                        <option value="CHEAP"${r.valuation === 'CHEAP' ? ' selected' : ''}>CHEAP</option>
-                        <option value="EXPENSIVE"${r.valuation === 'EXPENSIVE' ? ' selected' : ''}>EXPENSIVE</option>
-                        ${_peGetCustomRemarkOptions(r.valuation)}
-                        <option value="__custom__">+ Add custom…</option>
-                    </select>
-                </div>
-                <div class="pe-panel-field pe-panel-field-wide">
-                    <label>Comments</label>
-                    <textarea class="pe-panel-input pe-panel-textarea" data-field="comments" data-orig="${(r.comments || '').replace(/"/g, '&quot;')}" rows="2" placeholder="Add a comment…">${r.comments || ''}</textarea>
-                </div>
-            </div>
+    const fyEpsVal = r.fy_eps != null ? r.fy_eps : '';
+    const peVal = r.pe != null ? r.pe : '';
+
+    body.innerHTML = `
+        <div class="pe-drawer-info">
+            <strong>${sym}</strong> &mdash; ${quarter} ${fy}<br>
+            <span style="font-size:0.8rem;color:#6b7280;">${curExch} &bull; Qtr EPS: ${r.qtr_eps != null ? r.qtr_eps : '—'}</span>
         </div>
-    </td>`;
+        <div class="pe-drawer-field">
+            <label>CMP (₹)</label>
+            <input type="number" step="0.01" class="pe-drawer-input" data-field="cmp" value="${r.cmp != null ? r.cmp : ''}" data-orig="${r.cmp != null ? r.cmp : ''}" placeholder="—">
+        </div>
+        <div class="pe-drawer-field">
+            <label>FY EPS (Est.)</label>
+            <input type="number" step="0.01" class="pe-drawer-input" data-field="fy_eps" value="${fyEpsVal}" data-orig="${fyEpsVal}" placeholder="—">
+        </div>
+        <div class="pe-drawer-field">
+            <label>PE Value</label>
+            <input type="number" step="0.01" class="pe-drawer-input" data-field="pe" value="${peVal}" data-orig="${peVal}" placeholder="—" readonly style="background:#f3f4f6;color:#6b7280;">
+        </div>
+        <div class="pe-drawer-field">
+            <label>Sector</label>
+            <select class="pe-drawer-input" data-field="sector" data-orig="${r.sector || ''}"><option>Loading...</option></select>
+        </div>
+        <div class="pe-drawer-field">
+            <label>Remark</label>
+            <select class="pe-drawer-input" data-field="valuation" data-orig="${r.valuation || ''}" onchange="peRemarkSelectChanged(this)">
+                <option value=""${!r.valuation ? ' selected' : ''}>—</option>
+                <option value="CHEAP"${r.valuation === 'CHEAP' ? ' selected' : ''}>CHEAP</option>
+                <option value="EXPENSIVE"${r.valuation === 'EXPENSIVE' ? ' selected' : ''}>EXPENSIVE</option>
+                ${_peGetCustomRemarkOptions(r.valuation)}
+                <option value="__custom__">+ Add custom…</option>
+            </select>
+        </div>
+        <div class="pe-drawer-field">
+            <label>Comments</label>
+            <textarea class="pe-drawer-input" data-field="comments" data-orig="${(r.comments || '').replace(/"/g, '&quot;')}" rows="3" placeholder="Add a comment…">${r.comments || ''}</textarea>
+        </div>
+    `;
 
-    // Find last sub-row for this stock (for multi-formula rows)
-    let insertAfter = row;
-    let next = row.nextElementSibling;
-    while (next && next.classList.contains('pe-formula-row')) {
-        insertAfter = next;
-        next = next.nextElementSibling;
-    }
-    insertAfter.parentNode.insertBefore(panelRow, insertAfter.nextSibling);
+    saveBtn.onclick = () => peSaveEdit(sym, quarter, fy, basis);
+    saveBtn.disabled = true;
+    saveBtn.classList.add('pe-save-disabled');
+
+    backdrop.style.display = 'block';
+    backdrop.onclick = () => peCancelEdit();
+    requestAnimationFrame(() => drawer.classList.add('open'));
+
+    const _recalcPE = () => {
+        const cmpEl = body.querySelector('[data-field="cmp"]');
+        const epsEl = body.querySelector('[data-field="fy_eps"]');
+        const peEl = body.querySelector('[data-field="pe"]');
+        if (!cmpEl || !epsEl || !peEl) return;
+        const c = parseFloat(cmpEl.value), e = parseFloat(epsEl.value);
+        peEl.value = (c > 0 && e > 0) ? (c / e).toFixed(2) : '';
+    };
+    body.querySelector('[data-field="cmp"]')?.addEventListener('input', () => { _recalcPE(); _peCheckDirty(); });
+    body.querySelector('[data-field="fy_eps"]')?.addEventListener('input', () => { _recalcPE(); _peCheckDirty(); });
 
     _loadPeSectors().then(sectors => {
-        const sel = panelRow.querySelector('[data-field="sector"]');
+        const sel = body.querySelector('[data-field="sector"]');
         if (sel) {
             sel.innerHTML = ['', ...sectors].map(s => `<option value="${s}"${s === (r.sector || '') ? ' selected' : ''}>${s || '—'}</option>`).join('');
             sel.addEventListener('change', _peCheckDirty);
         }
     });
 
-    panelRow.querySelectorAll('.pe-panel-input').forEach(el => {
+    body.querySelectorAll('.pe-drawer-input').forEach(el => {
         el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', _peCheckDirty);
     });
 
@@ -3306,7 +3343,7 @@ function peStartEdit(sym, quarter, fy) {
 }
 
 async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
-    const panel = document.getElementById('peEditPanel');
+    const panel = document.getElementById('peDrawerBody');
     if (!panel) return;
 
     const getVal = (field) => {
@@ -3363,6 +3400,7 @@ async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
                 if (body.valuation !== undefined) r.valuation = body.valuation;
                 if (body.comments !== undefined) r.comments = body.comments;
             }
+            peCancelEdit();
             renderPEAnalysis();
             showNotificationToast('Row saved', 'success');
         } else {
@@ -3375,8 +3413,10 @@ async function peSaveEdit(sym, oldQuarter, oldFy, basis) {
 }
 
 function peCancelEdit() {
-    const panel = document.getElementById('peEditPanel');
-    if (panel) panel.remove();
+    const drawer = document.getElementById('peEditDrawer');
+    const backdrop = document.getElementById('peEditDrawerBackdrop');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.style.display = 'none';
     document.querySelectorAll('.pe-editing').forEach(el => el.classList.remove('pe-editing'));
 }
 
@@ -3447,7 +3487,7 @@ function exportPEAnalysisToExcel() {
     const rowCount = Math.max(activeFormulas.length, 1);
 
     const rows = [];
-    const header = ['Stock', 'Company', 'Quarter', 'Year', 'Qtr EPS', 'EPS Q/Q', 'EPS Y/Y', 'Cum EPS', 'Cum Prev FY', 'Prev FY EPS', 'Formula', 'FY EPS (Est.)', 'FY EPS Formula', 'CMP', 'PE', 'Sector', 'Remark', 'Comments', 'Date'];
+    const header = ['Date', 'Stock', 'Company', 'Quarter', 'Year', 'Qtr EPS', 'EPS Q/Q', 'EPS Y/Y', 'Cum EPS', 'Cum Prev FY', 'Prev FY EPS', 'Formula', 'FY EPS (Est.)', 'FY EPS Formula', 'CMP', 'PE', 'Sector', 'Remark', 'Comments'];
     rows.push(header);
 
     for (const r of filtered) {
@@ -3469,7 +3509,7 @@ function exportPEAnalysisToExcel() {
         else if (q === 'Q2') cumPrevFyVal = qe['PN6'];
         const prevFyEpsVal = qe['PFY'];
         const exportDateSource = r.announcement_date || r.updated_at;
-        const updated = exportDateSource ? new Date(exportDateSource).toLocaleDateString('en-IN') : '';
+        const updated = exportDateSource ? new Date(exportDateSource).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }) : '';
 
         for (let fi = 0; fi < rowCount; fi++) {
             const formula = activeFormulas[fi];
@@ -3488,6 +3528,7 @@ function exportPEAnalysisToExcel() {
                 formulaName = formula.name;
             }
             rows.push([
+                updated,
                 r.stock_symbol || '',
                 r.company_name || '',
                 r.quarter || '',
@@ -3506,7 +3547,6 @@ function exportPEAnalysisToExcel() {
                 r.sector || '',
                 r.valuation || '',
                 r.comments || '',
-                updated
             ]);
         }
     }
@@ -3537,7 +3577,17 @@ function exportPEAnalysisToExcel() {
         const refreshBtn = document.getElementById('peRefreshBtn');
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
         const exportBtn = document.getElementById('peExportBtn');
-        if (filterInput) filterInput.addEventListener('input', renderPEAnalysis);
+        if (filterInput) filterInput.addEventListener('input', () => {
+            renderPEAnalysis();
+            const searchActive = !!(filterInput.value?.trim());
+            const dateActive = !!(document.getElementById('peDateFrom')?.value || document.getElementById('peDateTo')?.value);
+            const tier2Active = peFilterState.sector.size > 0 || dateActive || searchActive;
+            const cb2 = document.getElementById('peClearTier2Btn');
+            if (cb2) cb2.style.display = tier2Active ? 'flex' : 'none';
+            if (typeof refreshIcons === 'function') refreshIcons();
+        });
+        const showLimitSelect = document.getElementById('peShowLimit');
+        if (showLimitSelect) showLimitSelect.addEventListener('change', renderPEAnalysis);
         peInitDateRangePicker();
         if (refreshBtn) refreshBtn.addEventListener('click', () => loadPEAnalysis(false));
         if (exportBtn) exportBtn.addEventListener('click', exportPEAnalysisToExcel);
