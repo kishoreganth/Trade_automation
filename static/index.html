@@ -360,6 +360,18 @@
                             </form>
                             <div id="peUploadStatus" style="display:none; margin-top:0.75rem; padding:8px 12px; border-radius:6px; font-size:0.85rem;"></div>
                         </div>
+                        <div id="pePaginationTop" class="pe-pagination" style="display:none;">
+                            <button class="pe-page-btn pe-page-first" title="First page" disabled><i data-lucide="chevrons-left" style="width:16px;height:16px;"></i></button>
+                            <button class="pe-page-btn pe-page-prev" title="Previous" disabled><i data-lucide="chevron-left" style="width:16px;height:16px;"></i></button>
+                            <div class="pe-page-numbers"></div>
+                            <button class="pe-page-btn pe-page-next" title="Next" disabled><i data-lucide="chevron-right" style="width:16px;height:16px;"></i></button>
+                            <button class="pe-page-btn pe-page-last" title="Last page" disabled><i data-lucide="chevrons-right" style="width:16px;height:16px;"></i></button>
+                            <div class="pe-page-goto">
+                                <input type="number" min="1" placeholder="Go to" class="pe-page-input">
+                                <button class="pe-page-btn pe-go-btn">Go</button>
+                            </div>
+                            <span class="pe-page-total"></span>
+                        </div>
                         <div class="pe-top-scroll" id="peTopScroll"><div></div></div>
                         <div class="table-container" id="peTableContainer">
                             <table class="data-table" id="peAnalysisTable">
@@ -392,6 +404,18 @@
                         <div id="peAnalysisEmpty" style="display:none;" class="empty-state-block">
                             <i data-lucide="file-search" class="empty-icon"></i>
                             <p>No quarterly results yet. Data will appear as quarterly result PDFs are processed.</p>
+                        </div>
+                        <div id="pePaginationBottom" class="pe-pagination" style="display:none;">
+                            <button class="pe-page-btn pe-page-first" title="First page" disabled><i data-lucide="chevrons-left" style="width:16px;height:16px;"></i></button>
+                            <button class="pe-page-btn pe-page-prev" title="Previous" disabled><i data-lucide="chevron-left" style="width:16px;height:16px;"></i></button>
+                            <div class="pe-page-numbers"></div>
+                            <button class="pe-page-btn pe-page-next" title="Next" disabled><i data-lucide="chevron-right" style="width:16px;height:16px;"></i></button>
+                            <button class="pe-page-btn pe-page-last" title="Last page" disabled><i data-lucide="chevrons-right" style="width:16px;height:16px;"></i></button>
+                            <div class="pe-page-goto">
+                                <input type="number" min="1" placeholder="Go to" class="pe-page-input">
+                                <button class="pe-page-btn pe-go-btn">Go</button>
+                            </div>
+                            <span class="pe-page-total"></span>
                         </div>
                     </div>
                     <div class="analytics-view" id="stockValueView" style="display: none;">

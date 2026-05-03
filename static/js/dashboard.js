@@ -2342,6 +2342,7 @@ function _fyEndingYear(fy) {
 }
 
 let peAnalysisData = [];
+let peCurrentPage = 1;
 let peFormulas = [];
 let peActiveFormulaIds = JSON.parse(localStorage.getItem('peActiveFormulaIds') || '[]');
 
@@ -2480,6 +2481,7 @@ function peInitMultiselects() {
     if (clearBtn) clearBtn.addEventListener('click', () => {
         peFilterState.year.clear(); peFilterState.quarter.clear(); peFilterState.exchange.clear();
         _peFiltersInitialized = true;
+        peCurrentPage = 1;
         pePopulateFilterDropdowns();
         renderPEAnalysis();
         _updatePETitle();
@@ -2487,6 +2489,7 @@ function peInitMultiselects() {
     const clearBtn2 = document.getElementById('peClearTier2Btn');
     if (clearBtn2) clearBtn2.addEventListener('click', () => {
         peFilterState.sector.clear();
+        peCurrentPage = 1;
         _peCalClear();
         const searchInput = document.getElementById('peSymbolFilter');
         if (searchInput) searchInput.value = '';
@@ -2725,6 +2728,7 @@ function pePopulateFilterDropdowns() {
 
 function peToggleFilter(key, val, checked) {
     if (checked) peFilterState[key].add(val); else peFilterState[key].delete(val);
+    peCurrentPage = 1;
     pePopulateFilterDropdowns();
     renderPEAnalysis();
     _updatePETitle();
@@ -2956,18 +2960,27 @@ function renderPEAnalysis() {
         tbody.innerHTML = '';
         emptyMsg.style.display = 'block';
         document.getElementById('peResultCount').textContent = '';
+        document.querySelectorAll('.pe-pagination').forEach(w => w.style.display = 'none');
         return;
     }
     emptyMsg.style.display = 'none';
 
     const peLimit = parseInt(document.getElementById('peShowLimit')?.value || '0', 10);
     const totalFiltered = filtered.length;
-    if (peLimit > 0 && filtered.length > peLimit) {
-        filtered = filtered.slice(0, peLimit);
+    let peTotalPages = 1;
+    if (peLimit > 0) {
+        peTotalPages = Math.ceil(totalFiltered / peLimit);
+        if (peCurrentPage > peTotalPages) peCurrentPage = peTotalPages;
+        if (peCurrentPage < 1) peCurrentPage = 1;
+        const startIdx = (peCurrentPage - 1) * peLimit;
+        filtered = filtered.slice(startIdx, startIdx + peLimit);
+    } else {
+        peCurrentPage = 1;
     }
-    document.getElementById('peResultCount').textContent = peLimit > 0 && totalFiltered > peLimit
-        ? `${filtered.length} of ${totalFiltered} stocks`
+    document.getElementById('peResultCount').textContent = peLimit > 0 && peTotalPages > 1
+        ? `${(peCurrentPage - 1) * peLimit + 1}–${Math.min(peCurrentPage * peLimit, totalFiltered)} of ${totalFiltered} stocks`
         : `${totalFiltered} stocks`;
+    renderPEPagination(peTotalPages, totalFiltered, peLimit);
 
     const fmt = v => (v !== null && v !== undefined && v !== '-' && v !== '') ? Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) : '';
 
@@ -3129,6 +3142,82 @@ function renderPEAnalysis() {
     if (typeof refreshIcons === 'function') refreshIcons();
     _syncPETopScroll();
 }
+
+function renderPEPagination(totalPages, totalItems, perPage) {
+    document.querySelectorAll('.pe-pagination').forEach(wrap => {
+        if (perPage <= 0 || totalPages <= 1) {
+            wrap.style.display = 'none';
+            return;
+        }
+        wrap.style.display = 'flex';
+
+        wrap.querySelector('.pe-page-first').disabled = peCurrentPage <= 1;
+        wrap.querySelector('.pe-page-prev').disabled = peCurrentPage <= 1;
+        wrap.querySelector('.pe-page-next').disabled = peCurrentPage >= totalPages;
+        wrap.querySelector('.pe-page-last').disabled = peCurrentPage >= totalPages;
+
+        const numContainer = wrap.querySelector('.pe-page-numbers');
+        const pages = _buildPageList(peCurrentPage, totalPages, 7);
+        numContainer.innerHTML = pages.map(p => {
+            if (p === '...') return '<span class="pe-page-ellipsis">...</span>';
+            const cls = p === peCurrentPage ? 'pe-page-num active' : 'pe-page-num';
+            return `<button class="${cls}" data-page="${p}">${p}</button>`;
+        }).join('');
+
+        const input = wrap.querySelector('.pe-page-input');
+        input.max = totalPages;
+        input.placeholder = `${peCurrentPage}/${totalPages}`;
+        input.value = '';
+
+        wrap.querySelector('.pe-page-total').textContent =
+            `Page ${peCurrentPage} of ${totalPages}`;
+    });
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+function _peGoToPage(page) {
+    const peLimit = parseInt(document.getElementById('peShowLimit')?.value || '0', 10);
+    if (peLimit <= 0) return;
+    const totalFiltered = document.querySelectorAll('.pe-pagination')[0]
+        ?.querySelector('.pe-page-last')?.disabled === false
+        ? Infinity : peCurrentPage;
+    peCurrentPage = Math.max(1, page);
+    renderPEAnalysis();
+    document.getElementById('peTableContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+(function initPEPaginationControls() {
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.pe-pagination').forEach(wrap => {
+            wrap.querySelector('.pe-page-first')?.addEventListener('click', () => _peGoToPage(1));
+            wrap.querySelector('.pe-page-prev')?.addEventListener('click', () => _peGoToPage(peCurrentPage - 1));
+            wrap.querySelector('.pe-page-next')?.addEventListener('click', () => _peGoToPage(peCurrentPage + 1));
+            wrap.querySelector('.pe-page-last')?.addEventListener('click', () => {
+                const peLimit = parseInt(document.getElementById('peShowLimit')?.value || '0', 10);
+                if (peLimit <= 0) return;
+                _peGoToPage(99999);
+            });
+            wrap.querySelector('.pe-page-numbers')?.addEventListener('click', e => {
+                const btn = e.target.closest('[data-page]');
+                if (btn) _peGoToPage(parseInt(btn.dataset.page, 10));
+            });
+            const goBtn = wrap.querySelector('.pe-go-btn');
+            const input = wrap.querySelector('.pe-page-input');
+            if (goBtn && input) {
+                goBtn.addEventListener('click', () => {
+                    const v = parseInt(input.value, 10);
+                    if (v >= 1) _peGoToPage(v);
+                });
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        const v = parseInt(input.value, 10);
+                        if (v >= 1) _peGoToPage(v);
+                    }
+                });
+            }
+        });
+    });
+})();
 
 function _syncPETopScroll() {
     const topScroll = document.getElementById('peTopScroll');
@@ -3578,6 +3667,7 @@ function exportPEAnalysisToExcel() {
         const fetchCmpBtn = document.getElementById('peFetchCmpBtn');
         const exportBtn = document.getElementById('peExportBtn');
         if (filterInput) filterInput.addEventListener('input', () => {
+            peCurrentPage = 1;
             renderPEAnalysis();
             const searchActive = !!(filterInput.value?.trim());
             const dateActive = !!(document.getElementById('peDateFrom')?.value || document.getElementById('peDateTo')?.value);
@@ -3587,7 +3677,7 @@ function exportPEAnalysisToExcel() {
             if (typeof refreshIcons === 'function') refreshIcons();
         });
         const showLimitSelect = document.getElementById('peShowLimit');
-        if (showLimitSelect) showLimitSelect.addEventListener('change', renderPEAnalysis);
+        if (showLimitSelect) showLimitSelect.addEventListener('change', () => { peCurrentPage = 1; renderPEAnalysis(); });
         peInitDateRangePicker();
         if (refreshBtn) refreshBtn.addEventListener('click', () => loadPEAnalysis(false));
         if (exportBtn) exportBtn.addEventListener('click', exportPEAnalysisToExcel);
