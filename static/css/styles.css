@@ -1134,6 +1134,33 @@ select.pe-panel-input option { background: #1e1e2e; color: #e2e8f0; }
 .pe-val-expensive { background: #7f1d1d; color: #fca5a5; }
 .pe-val-pending { background: rgba(245,158,11,0.15); color: #d97706; }
 .pe-val-custom { background: #312e81; color: #a5b4fc; }
+
+/* Extraction status badges */
+.pe-ext-badge {
+    font-size: 0.6rem; font-weight: 700; padding: 2px 6px; border-radius: 3px;
+    letter-spacing: 0.3px; display: inline-flex; align-items: center; gap: 3px; margin-top: 2px;
+}
+.pe-ext-failed { background: #7f1d1d; color: #fca5a5; }
+.pe-ext-queued { background: rgba(245,158,11,0.15); color: #d97706; }
+.pe-ext-processing { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.pe-ext-spinner {
+    display: inline-block; width: 10px; height: 10px; border: 2px solid currentColor;
+    border-top-color: transparent; border-radius: 50%;
+    animation: pe-spin 0.8s linear infinite;
+}
+@keyframes pe-spin { to { transform: rotate(360deg); } }
+.pe-retry-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; font-size: 0.7rem; font-weight: 600;
+    background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b;
+    border-radius: 4px; cursor: pointer; white-space: nowrap;
+    transition: background 0.2s, transform 0.1s;
+}
+.pe-retry-btn:hover { background: #991b1b; transform: scale(1.03); }
+.pe-retry-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+tr.pe-row-pending { opacity: 0.8; }
+tr.pe-row-pending td { border-left: 2px solid #ef4444; }
+
 .pe-comment-text {
     font-size: 0.78rem; color: var(--text-secondary, #334155); max-width: 180px;
     display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

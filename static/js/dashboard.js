@@ -446,18 +446,30 @@ function renderBoardMeetingResults() {
         const cd = r.consolidated_data || {};
         const data = sd.revenue ? sd : cd;
         const updatedTime = new Date(r.updated_at);
+        const extSt = r.extraction_status || 'completed';
+        const isFailed = extSt === 'failed';
+        const isQueued = extSt === 'queued';
+        const isProc = extSt === 'processing';
+        const isPend = isFailed || isQueued || isProc;
+        let statusBadge = '';
+        if (isFailed) statusBadge = ' <span class="pe-ext-badge pe-ext-failed">FAILED</span>';
+        else if (isQueued) statusBadge = ' <span class="pe-ext-badge pe-ext-queued">QUEUED</span>';
+        else if (isProc) statusBadge = ' <span class="pe-ext-badge pe-ext-processing"><span class="pe-ext-spinner"></span></span>';
+        const retryCell = isFailed
+            ? `<button class="pe-retry-btn" onclick="peRetryExtraction('${r.stock_symbol}', this)"><i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Retry</button>`
+            : '';
 
         return `
-            <tr class="new-message">
-                <td><span class="symbol-badge">${r.stock_symbol}</span></td>
-                <td>${r.quarter || '-'}</td>
-                <td>${r.financial_year || '-'}</td>
-                <td>${data.revenue ? Number(data.revenue).toLocaleString() : '-'}</td>
-                <td>${data.profit_before_tax ? Number(data.profit_before_tax).toLocaleString() : '-'}</td>
-                <td>${data.profit_after_tax ? Number(data.profit_after_tax).toLocaleString() : '-'}</td>
-                <td>${data.total_income ? Number(data.total_income).toLocaleString() : '-'}</td>
-                <td>${data.other_income ? Number(data.other_income).toLocaleString() : '-'}</td>
-                <td>${r.eps_basic_standalone ? Number(r.eps_basic_standalone).toFixed(2) : (r.eps_basic_consolidated ? Number(r.eps_basic_consolidated).toFixed(2) : '-')}</td>
+            <tr class="new-message ${isPend ? 'pe-row-pending' : ''}">
+                <td><span class="symbol-badge">${r.stock_symbol}</span>${statusBadge}</td>
+                <td>${isPend ? '-' : (r.quarter || '-')}</td>
+                <td>${isPend ? '-' : (r.financial_year || '-')}</td>
+                <td>${isPend ? '-' : (data.revenue ? Number(data.revenue).toLocaleString() : '-')}</td>
+                <td>${isPend ? '-' : (data.profit_before_tax ? Number(data.profit_before_tax).toLocaleString() : '-')}</td>
+                <td>${isPend ? '-' : (data.profit_after_tax ? Number(data.profit_after_tax).toLocaleString() : '-')}</td>
+                <td>${isPend ? '-' : (data.total_income ? Number(data.total_income).toLocaleString() : '-')}</td>
+                <td>${isPend ? '-' : (data.other_income ? Number(data.other_income).toLocaleString() : '-')}</td>
+                <td>${isPend ? retryCell : (r.eps_basic_standalone ? Number(r.eps_basic_standalone).toFixed(2) : (r.eps_basic_consolidated ? Number(r.eps_basic_consolidated).toFixed(2) : '-'))}</td>
                 <td class="timestamp">${updatedTime.toLocaleString()}</td>
             </tr>
         `;
@@ -3010,6 +3022,21 @@ function renderPEAnalysis() {
             ? `<strong>${r.company_name}</strong><br><small style="color:#888">${sym}</small>`
             : `<strong>${sym}</strong>${r.company_name ? '<br><small style="color:#888">' + r.company_name + '</small>' : ''}`;
 
+        const extStatus = r.extraction_status || 'completed';
+        const isFailed = extStatus === 'failed';
+        const isQueued = extStatus === 'queued';
+        const isProcessing = extStatus === 'processing';
+        const isPending = isFailed || isQueued || isProcessing;
+        let extBadge = '';
+        if (isFailed) {
+            extBadge = `<span class="pe-ext-badge pe-ext-failed" title="${(r.extraction_error || 'Extraction failed').replace(/"/g, '&quot;')}">FAILED</span>`;
+        } else if (isQueued) {
+            extBadge = '<span class="pe-ext-badge pe-ext-queued">QUEUED</span>';
+        } else if (isProcessing) {
+            extBadge = '<span class="pe-ext-badge pe-ext-processing"><span class="pe-ext-spinner"></span> EXTRACTING</span>';
+        }
+        const retryBtn = isFailed ? `<button class="pe-retry-btn" data-symbol="${sym}" onclick="peRetryExtraction('${sym}', this)" title="Retry extraction"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Retry</button>` : '';
+
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
 
@@ -3087,48 +3114,48 @@ function renderPEAnalysis() {
             const commentText = r.comments ? `<span class="pe-comment-text" title="${(r.comments || '').replace(/"/g, '&quot;')}">${r.comments}</span>` : '';
 
             if (rowCount === 1) {
-                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}" ${isPending ? 'class="pe-row-pending"' : ''}>
                     <td class="pvc-date">${updated}</td>
-                    <td class="pvc-stock">${stockCell}</td>
+                    <td class="pvc-stock">${stockCell}${extBadge ? '<br>' + extBadge : ''}</td>
                     <td class="pvc-exch pe-col-exch">${exchBadge}</td>
-                    <td class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
-                    <td class="pvc-year pe-col-year">${yearDisplay}</td>
-                    <td class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
-                    <td class="pvc-epsqoq">${qoqCell}</td>
-                    <td class="pvc-epsyoy">${yoyCell}</td>
-                    <td class="pvc-cumeps">${cumCell}</td>
-                    <td class="pvc-cumprevfy">${cumPrevCell}</td>
-                    <td class="pvc-prevfyeps">${prevFyCell}</td>
-                    <td class="pvc-fyeps pe-col-fyeps">${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
-                    <td class="pvc-pe pe-col-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td class="pvc-quarter pe-col-quarter">${isPending ? '' : (r.quarter || '')}</td>
+                    <td class="pvc-year pe-col-year">${isPending ? '' : yearDisplay}</td>
+                    <td class="pvc-qtreps pe-col-qtreps">${isPending ? '' : fmt(qtrEps) + basisBadge}</td>
+                    <td class="pvc-epsqoq">${isPending ? '' : qoqCell}</td>
+                    <td class="pvc-epsyoy">${isPending ? '' : yoyCell}</td>
+                    <td class="pvc-cumeps">${isPending ? '' : cumCell}</td>
+                    <td class="pvc-cumprevfy">${isPending ? '' : cumPrevCell}</td>
+                    <td class="pvc-prevfyeps">${isPending ? '' : prevFyCell}</td>
+                    <td class="pvc-fyeps pe-col-fyeps">${isPending ? '' : fmt(computedEps) + '<br><small style="color:#888">' + exprLabel + '</small>'}</td>
+                    <td class="pvc-cmp pe-col-cmp">${isPending ? '' : (cmp ? '₹' + fmt(cmp) : '')}</td>
+                    <td class="pvc-pe pe-col-pe ${isPending ? '' : peClassFor(computedPe)}" style="font-weight:600">${isPending ? '' : peVal}</td>
                     <td class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td class="pvc-remark">${remarkBadge}</td>
-                    <td class="pvc-comments">${commentText}</td>
+                    <td class="pvc-remark">${isPending ? retryBtn : remarkBadge}</td>
+                    <td class="pvc-comments">${isPending ? `<small style="color:#ef4444">${r.extraction_error || ''}</small>` : commentText}</td>
                     <td class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td class="pvc-edit" style="text-align:center">${editBtnInner}</td>
+                    <td class="pvc-edit" style="text-align:center">${isPending ? '' : editBtnInner}</td>
                 </tr>`;
             } else if (isFirst) {
-                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}" ${isPending ? 'class="pe-row-pending"' : ''}>
                     <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
-                    <td rowspan="${rowCount}" class="pvc-stock">${stockCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-stock">${stockCell}${extBadge ? '<br>' + extBadge : ''}</td>
                     <td rowspan="${rowCount}" class="pvc-exch pe-col-exch">${exchBadge}</td>
-                    <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
-                    <td rowspan="${rowCount}" class="pvc-year pe-col-year">${yearDisplay}</td>
-                    <td rowspan="${rowCount}" class="pvc-qtreps pe-col-qtreps">${fmt(qtrEps)}${basisBadge}</td>
-                    <td rowspan="${rowCount}" class="pvc-epsqoq">${qoqCell}</td>
-                    <td rowspan="${rowCount}" class="pvc-epsyoy">${yoyCell}</td>
-                    <td rowspan="${rowCount}" class="pvc-cumeps">${cumCell}</td>
-                    <td rowspan="${rowCount}" class="pvc-cumprevfy">${cumPrevCell}</td>
-                    <td rowspan="${rowCount}" class="pvc-prevfyeps">${prevFyCell}</td>
-                    <td class="pvc-fyeps">${formulaTag} ${fmt(computedEps)}<br><small style="color:#888">${exprLabel}</small></td>
-                    <td rowspan="${rowCount}" class="pvc-cmp pe-col-cmp">${cmp ? '₹' + fmt(cmp) : ''}</td>
-                    <td class="pvc-pe ${peClassFor(computedPe)}" style="font-weight:600">${peVal}</td>
+                    <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${isPending ? '' : (r.quarter || '')}</td>
+                    <td rowspan="${rowCount}" class="pvc-year pe-col-year">${isPending ? '' : yearDisplay}</td>
+                    <td rowspan="${rowCount}" class="pvc-qtreps pe-col-qtreps">${isPending ? '' : fmt(qtrEps) + basisBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-epsqoq">${isPending ? '' : qoqCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-epsyoy">${isPending ? '' : yoyCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-cumeps">${isPending ? '' : cumCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-cumprevfy">${isPending ? '' : cumPrevCell}</td>
+                    <td rowspan="${rowCount}" class="pvc-prevfyeps">${isPending ? '' : prevFyCell}</td>
+                    <td class="pvc-fyeps">${isPending ? '' : formulaTag + ' ' + fmt(computedEps) + '<br><small style="color:#888">' + exprLabel + '</small>'}</td>
+                    <td rowspan="${rowCount}" class="pvc-cmp pe-col-cmp">${isPending ? '' : (cmp ? '₹' + fmt(cmp) : '')}</td>
+                    <td class="pvc-pe ${isPending ? '' : peClassFor(computedPe)}" style="font-weight:600">${isPending ? '' : peVal}</td>
                     <td rowspan="${rowCount}" class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td rowspan="${rowCount}" class="pvc-remark">${remarkBadge}</td>
-                    <td rowspan="${rowCount}" class="pvc-comments">${commentText}</td>
+                    <td rowspan="${rowCount}" class="pvc-remark">${isPending ? retryBtn : remarkBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-comments">${isPending ? `<small style="color:#ef4444">${r.extraction_error || ''}</small>` : commentText}</td>
                     <td rowspan="${rowCount}" class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${editBtnInner}</td>
+                    <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${isPending ? '' : editBtnInner}</td>
                 </tr>`;
             } else {
                 html += `<tr${rowClass}>
@@ -3141,6 +3168,33 @@ function renderPEAnalysis() {
     tbody.innerHTML = html;
     if (typeof refreshIcons === 'function') refreshIcons();
     _syncPETopScroll();
+}
+
+async function peRetryExtraction(symbol, btnEl) {
+    if (!symbol) return;
+    const origHtml = btnEl.innerHTML;
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<span class="pe-ext-spinner"></span> Retrying...';
+    try {
+        const resp = await fetch(`/api/retry_extraction/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            const item = peAnalysisData.find(r => r.stock_symbol === symbol && r.extraction_status === 'failed');
+            if (item) {
+                item.extraction_status = 'queued';
+                item.extraction_error = null;
+            }
+            renderPEAnalysis();
+        } else {
+            btnEl.innerHTML = origHtml;
+            btnEl.disabled = false;
+            alert(data.detail || 'Retry failed');
+        }
+    } catch (e) {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+        alert('Retry failed: ' + e.message);
+    }
 }
 
 function renderPEPagination(totalPages, totalItems, perPage) {

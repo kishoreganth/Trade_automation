@@ -1006,6 +1006,9 @@ async def init_db():
             ("valuation", "TEXT"),
             ("comments", "TEXT"),
             ("announcement_date", "TEXT"),
+            ("extraction_status", "TEXT DEFAULT 'completed'"),
+            ("extraction_error", "TEXT"),
+            ("source_pdf_url_tracking", "TEXT"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE quarterly_results ADD COLUMN {col} {col_type}")
@@ -1094,6 +1097,7 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_symbol ON quarterly_results(stock_symbol)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_quarter_fy ON quarterly_results(quarter, financial_year)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_stock_id ON quarterly_results(stock_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_qr_extraction_status ON quarterly_results(extraction_status)")
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS failed_extractions (
@@ -2157,6 +2161,32 @@ def _compute_all_fy_eps(ai_response: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _insert_extraction_placeholder(stock_symbol, company_name, pdf_url, exchange, announcement_date, message_id=None):
+    """Insert a placeholder row in quarterly_results with extraction_status='queued' so it appears in dashboard immediately."""
+    try:
+        now_iso = get_ist_now().isoformat()
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO quarterly_results
+                (stock_symbol, company_name, quarter, financial_year, exchange,
+                 source_pdf_url, source_message_id, announcement_date,
+                 extraction_status, source_pdf_url_tracking, created_at, updated_at)
+                SELECT ?, ?, 'PENDING', 'PENDING', ?, ?, ?, ?, 'queued', ?, ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM quarterly_results
+                    WHERE stock_symbol = ? AND extraction_status IN ('queued', 'processing')
+                    AND source_pdf_url = ?
+                )
+            """, (stock_symbol, company_name or '', exchange or '', pdf_url, message_id, announcement_date or '',
+                  pdf_url, now_iso, now_iso,
+                  stock_symbol, pdf_url))
+            await db.commit()
+            if db.total_changes > 0:
+                logger.info(f"Placeholder row created for {stock_symbol} (status=queued)")
+    except Exception as e:
+        logger.warning(f"Failed to insert placeholder for {stock_symbol}: {e}")
+
+
 async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, financial_year,
                                     period_ended, standalone_data, consolidated_data,
                                     raw_ai_response, source_pdf_url, source_message_id,
@@ -2347,8 +2377,9 @@ async def process_quarterly_results(ai_response, stock_symbol, message_id=None, 
 
 
 _FINANCIAL_KEYWORDS = ['revenue', 'expense', 'tax', 'profit', 'earning',
-                       'income', 'eps', 'share capital', 'diluted', 'comprehensive']
-_MIN_KEYWORD_MATCHES = 3
+                       'income', 'eps', 'share capital', 'diluted', 'comprehensive',
+                       'quarter ended', 'year ended']
+_MIN_KEYWORD_MATCHES = 2
 
 
 def _extract_text_pymupdf(pdf_path: str) -> list:
@@ -2596,6 +2627,37 @@ async def _call_openai_vision_general(encoded_images: list) -> dict:
     return result
 
 
+async def _update_extraction_status(stock_symbol, pdf_url, status, error_msg=None):
+    """Update extraction_status on the placeholder row (or any matching queued/processing row)."""
+    try:
+        now_iso = get_ist_now().isoformat()
+        async with aiosqlite.connect(DB_PATH) as db:
+            if status == 'failed':
+                await db.execute("""
+                    UPDATE quarterly_results
+                    SET extraction_status = ?, extraction_error = ?, updated_at = ?
+                    WHERE stock_symbol = ? AND source_pdf_url_tracking = ?
+                    AND extraction_status IN ('queued', 'processing')
+                """, (status, str(error_msg)[:500] if error_msg else None, now_iso, stock_symbol, pdf_url))
+            elif status == 'processing':
+                await db.execute("""
+                    UPDATE quarterly_results
+                    SET extraction_status = ?, updated_at = ?
+                    WHERE stock_symbol = ? AND source_pdf_url_tracking = ?
+                    AND extraction_status = 'queued'
+                """, (status, now_iso, stock_symbol, pdf_url))
+            elif status == 'completed':
+                await db.execute("""
+                    DELETE FROM quarterly_results
+                    WHERE stock_symbol = ? AND source_pdf_url_tracking = ?
+                    AND extraction_status IN ('queued', 'processing')
+                    AND quarter = 'PENDING'
+                """, (stock_symbol, pdf_url))
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to update extraction status for {stock_symbol}: {e}")
+
+
 async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, exchange=None, announcement_date=None):
     """Semaphore-gated extraction with retry. Limits concurrent extractions to MAX_CONCURRENT_EXTRACTIONS."""
     extraction_stats["pending"] += 1
@@ -2605,6 +2667,7 @@ async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, excha
     async with extraction_semaphore:
         extraction_stats["pending"] -= 1
         extraction_stats["running"] += 1
+        await _update_extraction_status(stock_symbol, pdf_url, 'processing')
         last_error = None
         try:
             for attempt in range(1, max_retries + 1):
@@ -2616,12 +2679,14 @@ async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, excha
                         extraction_stats["running"] -= 1
                         extraction_stats["failed"] += 1
                         await _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, "No financial pages found in PDF", attempt)
+                        await _update_extraction_status(stock_symbol, pdf_url, 'failed', "No financial pages found in PDF")
                         return None
 
                     ai_response = await _call_openai_vision_quarterly(encoded_images)
                     result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange, announcement_date=announcement_date)
                     extraction_stats["running"] -= 1
                     extraction_stats["completed"] += 1
+                    await _update_extraction_status(stock_symbol, pdf_url, 'completed')
                     return result
 
                 except Exception as e:
@@ -2636,12 +2701,14 @@ async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, excha
             extraction_stats["running"] -= 1
             extraction_stats["failed"] += 1
             await _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, last_error, max_retries)
+            await _update_extraction_status(stock_symbol, pdf_url, 'failed', last_error)
             return None
 
         except Exception as e:
             extraction_stats["running"] -= 1
             extraction_stats["failed"] += 1
             logger.error(f"Quarterly extraction critical error for {stock_symbol}: {e}")
+            await _update_extraction_status(stock_symbol, pdf_url, 'failed', str(e))
             return None
 
 
@@ -3109,6 +3176,10 @@ async def process_ca_data(ca_docs):
                 ################################################################
                 ###### x ---- Quarterly extraction (quarterly_results only) ---- x ########
                 if dashboard_option in ("quaterly_result", "quarterly_result"):
+                    await _insert_extraction_placeholder(
+                        row['symbol'], row['sm_name'], attachment_file,
+                        "NSE", str(row.get('an_dt', '')), message_id
+                    )
                     asyncio.create_task(
                         run_quarterly_extraction(attachment_file, row['symbol'], message_id, exchange="NSE", announcement_date=str(row.get('an_dt', '')))
                     )
@@ -3361,6 +3432,11 @@ async def process_bse_results_data(bse_data):
         message_id = await save_announcement_to_dashboard(
             norm_row["symbol"], norm_row["sm_name"], norm_row["desc"], attachment_file,
             exchange="BSE", option="quarterly_result", message=message
+        )
+
+        await _insert_extraction_placeholder(
+            norm_row["symbol"], norm_row["sm_name"], attachment_file,
+            "BSE", norm_row.get("an_dt", ""), message_id
         )
 
         asyncio.create_task(
@@ -4300,21 +4376,26 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qr.cmp AS stored_cmp,
                     qr.pe AS stored_pe,
                     qr.cmp_updated_at,
-                    qr.source_pdf_url,
+                    COALESCE(qr.source_pdf_url, qr.source_pdf_url_tracking) AS source_pdf_url,
                     qr.valuation,
                     qr.comments,
                     qr.announcement_date,
                     s.sector,
-                    s.exchange
+                    s.exchange,
+                    COALESCE(qr.extraction_status, 'completed') AS extraction_status,
+                    qr.extraction_error
                 FROM quarterly_results qr
                 LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
                 WHERE qr.quarter NOT IN ('FY')
-                AND qr.quarter || '|' || qr.financial_year IN (
-                    SELECT q2.quarter || '|' || q2.financial_year FROM quarterly_results q2
-                    WHERE q2.stock_symbol = qr.stock_symbol
-                    AND q2.quarter NOT IN ('FY')
-                    ORDER BY q2.financial_year DESC, q2.quarter DESC
-                    LIMIT 1
+                AND (
+                    qr.extraction_status IN ('queued', 'processing', 'failed')
+                    OR qr.quarter || '|' || qr.financial_year IN (
+                        SELECT q2.quarter || '|' || q2.financial_year FROM quarterly_results q2
+                        WHERE q2.stock_symbol = qr.stock_symbol
+                        AND q2.quarter NOT IN ('FY', 'PENDING')
+                        ORDER BY q2.financial_year DESC, q2.quarter DESC
+                        LIMIT 1
+                    )
                 )
                 ORDER BY qr.created_at DESC
             """)
@@ -4457,6 +4538,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
             if stored_cmp and fy_eps_rounded and fy_eps_rounded > 0 and not stored_pe:
                 pe_val = round(stored_cmp / fy_eps_rounded, 2)
 
+            ext_status = r["extraction_status"] if "extraction_status" in r.keys() else "completed"
             stock_data.append({
                 "stock_symbol": r["stock_symbol"],
                 "company_name": r["company_name"],
@@ -4478,6 +4560,8 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                 "valuation": r["valuation"],
                 "comments": r["comments"],
                 "quarters_eps": quarters_map.get(r["stock_symbol"], {}),
+                "extraction_status": ext_status,
+                "extraction_error": r["extraction_error"] if "extraction_error" in r.keys() else None,
             })
             if fetch_cmp:
                 symbols_needing_cmp.append(r["stock_symbol"])
@@ -4760,6 +4844,100 @@ async def delete_pe_analysis_row(stock_symbol: str, quarter: str = "", financial
             return {"success": True, "deleted": 1}
     except Exception as e:
         logger.error(f"Error deleting PE row {stock_symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/retry_extraction/{stock_symbol}")
+async def retry_extraction(stock_symbol: str):
+    """Re-run quarterly extraction for a failed stock. Finds the PDF URL from the failed placeholder row."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            row = await db.execute_fetchall("""
+                SELECT id, source_pdf_url, source_pdf_url_tracking, exchange, announcement_date, source_message_id
+                FROM quarterly_results
+                WHERE stock_symbol = ? AND extraction_status = 'failed'
+                ORDER BY created_at DESC LIMIT 1
+            """, (stock_symbol,))
+            if not row:
+                raise HTTPException(status_code=404, detail=f"No failed extraction found for {stock_symbol}")
+
+            r = dict(row[0])
+            pdf_url = r.get("source_pdf_url_tracking") or r.get("source_pdf_url")
+            if not pdf_url:
+                raise HTTPException(status_code=400, detail=f"No PDF URL found for {stock_symbol}")
+
+            now_iso = get_ist_now().isoformat()
+            await db.execute("""
+                UPDATE quarterly_results SET extraction_status = 'queued', extraction_error = NULL, updated_at = ?
+                WHERE stock_symbol = ? AND extraction_status = 'failed'
+                AND id = ?
+            """, (now_iso, stock_symbol, r["id"]))
+            await db.commit()
+
+        asyncio.create_task(
+            run_quarterly_extraction(
+                pdf_url, stock_symbol,
+                message_id=r.get("source_message_id"),
+                exchange=r.get("exchange"),
+                announcement_date=r.get("announcement_date")
+            )
+        )
+
+        logger.info(f"Retry extraction queued for {stock_symbol}: {pdf_url}")
+        return {"success": True, "stock_symbol": stock_symbol, "pdf_url": pdf_url, "status": "queued"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrying extraction for {stock_symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/extraction_status")
+async def get_extraction_status():
+    """Get extraction pipeline status summary for today."""
+    try:
+        today = get_ist_now().strftime("%Y-%m-%d")
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN extraction_status = 'completed' OR extraction_status IS NULL THEN 1 ELSE 0 END) AS completed,
+                    SUM(CASE WHEN extraction_status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                    SUM(CASE WHEN extraction_status = 'queued' THEN 1 ELSE 0 END) AS queued,
+                    SUM(CASE WHEN extraction_status = 'processing' THEN 1 ELSE 0 END) AS processing
+                FROM quarterly_results
+                WHERE DATE(created_at) = ?
+            """, (today,))
+            row = await cursor.fetchone()
+
+            failed_cursor = await db.execute("""
+                SELECT stock_symbol, extraction_error, COALESCE(source_pdf_url, source_pdf_url_tracking) AS pdf_url, exchange
+                FROM quarterly_results
+                WHERE extraction_status = 'failed' AND DATE(created_at) = ?
+                ORDER BY created_at DESC
+            """, (today,))
+            failed_rows = await failed_cursor.fetchall()
+            failed_details = [
+                {"stock_symbol": f[0], "error": f[1], "pdf_url": f[2], "exchange": f[3]}
+                for f in failed_rows
+            ]
+
+        return {
+            "success": True,
+            "date": today,
+            "in_memory": extraction_stats,
+            "db": {
+                "total": row[0] or 0,
+                "completed": row[1] or 0,
+                "failed": row[2] or 0,
+                "queued": row[3] or 0,
+                "processing": row[4] or 0,
+            },
+            "failed_details": failed_details,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching extraction status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

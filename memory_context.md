@@ -5045,3 +5045,41 @@ copy_trading/
 - `peCancelEdit()` — calls `renderPEAnalysis()` to restore.
 
 **CSS (`styles.css`)**: `.pe-edit-btn`, `.pe-save-btn`, `.pe-cancel-btn`, `.pe-edit-input`, `.pe-edit-select`, `.pe-editing` styles.
+
+---
+
+## 2026-05-04 — Extraction Tracking, Retry & Improved Financial Page Detection
+
+**Problem**: BSE result announcements (34-38) were being fetched but only 27 showed in PE dashboard. Failed extractions disappeared silently. Financial page detection missed NBFC/insurance PDFs due to strict keyword matching.
+
+**Root Causes**:
+1. `_find_financial_pages()` required 3+ keyword matches from limited keyword set — NBFC PDFs with "Interest Income"/"Policyholders" missed
+2. No placeholder rows for queued/failed extractions — stocks vanished from dashboard if extraction failed
+3. `failed_extractions` table existed in code but not in running Docker container (old image)
+4. No way to retry failed extractions from UI
+
+**Solution**:
+
+**Backend (`nse_url_test.py`)**:
+- `_FINANCIAL_KEYWORDS` expanded with `'quarter ended'`, `'year ended'`; `_MIN_KEYWORD_MATCHES` reduced from 3 to 2
+- New columns on `quarterly_results`: `extraction_status` (queued/processing/completed/failed), `extraction_error`, `source_pdf_url_tracking`
+- `_insert_extraction_placeholder()` — inserts row with status='queued' before extraction starts (both BSE and NSE flows)
+- `_update_extraction_status()` — updates status at each extraction stage (processing → completed/failed); on success deletes placeholder row (real data replaces it)
+- `run_quarterly_extraction()` — now calls `_update_extraction_status` at each stage
+- `process_bse_results_data()` and NSE quarterly flow — call `_insert_extraction_placeholder` before `run_quarterly_extraction`
+- `GET /api/pe_analysis` — query now includes `extraction_status IN ('queued','processing','failed')` rows alongside completed ones; returns `extraction_status` and `extraction_error` fields
+- `POST /api/retry_extraction/{stock_symbol}` — finds failed row, resets to 'queued', fires `run_quarterly_extraction` background task
+- `GET /api/extraction_status` — returns daily summary: total/completed/failed/queued/processing + failed stock details
+
+**Frontend (`dashboard.js`)**:
+- `renderPEAnalysis()` — shows extraction status badges (FAILED/QUEUED/EXTRACTING) on stock name, empty value cells for pending rows, retry button in remark column, error message in comments column
+- `peRetryExtraction(symbol, btn)` — calls POST retry endpoint, shows spinner on button, updates local data and re-renders
+- `renderBoardMeetingResults()` — Feed quarterly results table also shows status badges and retry button for failed rows
+
+**CSS (`styles.css`)**:
+- `.pe-ext-badge`, `.pe-ext-failed`, `.pe-ext-queued`, `.pe-ext-processing` — status badge styles
+- `.pe-ext-spinner` — CSS spinner animation for processing state
+- `.pe-retry-btn` — retry button with hover/disabled states
+- `tr.pe-row-pending` — dim row + red left border for pending/failed rows
+
+**Performance**: Improved financial page detection catches more PDFs (2 keyword matches instead of 3, plus "quarter ended"/"year ended"). All BSE/NSE result announcements now tracked end-to-end in database regardless of extraction outcome.
