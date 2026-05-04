@@ -475,6 +475,9 @@ async def lifespan(app: FastAPI):
     
     logger.info("PyMuPDF (fitz) ready for PDF extraction — no OCR model needed")
     
+    # Recover any extractions stuck from previous server session
+    await _recover_stuck_extractions()
+    
     # Start all background tasks in parallel using asyncio.create_task
     # sme_task = asyncio.create_task(run_periodic_task_sme())
     nse_task = asyncio.create_task(run_periodic_task_equities())
@@ -2161,28 +2164,58 @@ def _compute_all_fy_eps(ai_response: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _insert_extraction_placeholder(stock_symbol, company_name, pdf_url, exchange, announcement_date, message_id=None):
-    """Insert a placeholder row in quarterly_results with extraction_status='queued' so it appears in dashboard immediately."""
+def _quarter_fy_from_date(date_str):
+    """Derive the most likely result quarter from announcement date.
+    Results are announced AFTER the quarter ends, so we map to the PREVIOUS quarter:
+    Apr-Jun announcement → Q4 results (Jan-Mar), FY = same year
+    Jul-Sep announcement → Q1 results (Apr-Jun), FY = next year
+    Oct-Dec announcement → Q2 results (Jul-Sep), FY = next year
+    Jan-Mar announcement → Q3 results (Oct-Dec), FY = same year"""
     try:
-        now_iso = get_ist_now().isoformat()
+        from dateutil import parser as dateparser
+        dt = dateparser.parse(str(date_str))
+    except Exception:
+        try:
+            dt = datetime.fromisoformat(str(date_str).replace('Z', '+00:00'))
+        except Exception:
+            dt = get_ist_now()
+    m = dt.month
+    if 4 <= m <= 6:
+        return "Q4", str(dt.year)
+    elif 7 <= m <= 9:
+        return "Q1", str(dt.year + 1)
+    elif 10 <= m <= 12:
+        return "Q2", str(dt.year + 1)
+    else:
+        return "Q3", str(dt.year)
+
+
+async def _insert_extraction_placeholder(stock_symbol, company_name, pdf_url, exchange, announcement_date, message_id=None, status='queued', error_msg=None):
+    """Insert a placeholder row in quarterly_results so it appears in PE page immediately.
+    Dedup by PDF URL — allows multiple filings per stock per day (each gets its own row)."""
+    try:
+        now = get_ist_now()
+        quarter, fy = _quarter_fy_from_date(announcement_date if announcement_date else now.isoformat())
+        now_iso = now.isoformat()
+        actual_pdf = pdf_url if pdf_url and pdf_url != '-' else None
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
                 INSERT INTO quarterly_results
                 (stock_symbol, company_name, quarter, financial_year, exchange,
                  source_pdf_url, source_message_id, announcement_date,
-                 extraction_status, source_pdf_url_tracking, created_at, updated_at)
-                SELECT ?, ?, 'PENDING', 'PENDING', ?, ?, ?, ?, 'queued', ?, ?, ?
+                 extraction_status, extraction_error, source_pdf_url_tracking, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE NOT EXISTS (
                     SELECT 1 FROM quarterly_results
-                    WHERE stock_symbol = ? AND extraction_status IN ('queued', 'processing')
-                    AND source_pdf_url = ?
+                    WHERE stock_symbol = ? AND source_pdf_url_tracking = ?
                 )
-            """, (stock_symbol, company_name or '', exchange or '', pdf_url, message_id, announcement_date or '',
-                  pdf_url, now_iso, now_iso,
-                  stock_symbol, pdf_url))
+            """, (stock_symbol, company_name or '', quarter, fy, exchange or '',
+                  actual_pdf, message_id, announcement_date or '',
+                  status, error_msg, actual_pdf, now_iso, now_iso,
+                  stock_symbol, actual_pdf))
             await db.commit()
             if db.total_changes > 0:
-                logger.info(f"Placeholder row created for {stock_symbol} (status=queued)")
+                logger.info(f"Placeholder row created for {stock_symbol} (status={status}, {quarter} FY{fy})")
     except Exception as e:
         logger.warning(f"Failed to insert placeholder for {stock_symbol}: {e}")
 
@@ -2243,6 +2276,8 @@ async def _upsert_quarterly_result(db, stock_symbol, company_name, quarter, fina
             units = excluded.units,
             stock_id = excluded.stock_id,
             announcement_date = COALESCE(excluded.announcement_date, quarterly_results.announcement_date),
+            extraction_status = 'completed',
+            extraction_error = NULL,
             updated_at = excluded.updated_at
     """, (
         stock_symbol, company_name, quarter, financial_year, period_ended,
@@ -2627,6 +2662,40 @@ async def _call_openai_vision_general(encoded_images: list) -> dict:
     return result
 
 
+async def _recover_stuck_extractions():
+    """On startup, re-trigger any queued/processing rows that were lost when server restarted."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            stuck = await db.execute_fetchall("""
+                SELECT stock_symbol, source_pdf_url, source_pdf_url_tracking, exchange, announcement_date, source_message_id
+                FROM quarterly_results
+                WHERE extraction_status IN ('queued', 'processing')
+                AND (source_pdf_url IS NOT NULL AND source_pdf_url != '')
+            """)
+            if not stuck:
+                logger.info("No stuck extractions to recover on startup")
+                return
+            logger.info(f"Recovering {len(stuck)} stuck extraction(s) from previous session")
+            await db.execute(
+                "UPDATE quarterly_results SET extraction_status = 'queued' WHERE extraction_status = 'processing'"
+            )
+            await db.commit()
+            for r in stuck:
+                pdf = r["source_pdf_url"] or r["source_pdf_url_tracking"]
+                if pdf:
+                    logger.info(f"Re-queuing stuck extraction: {r['stock_symbol']}")
+                    asyncio.create_task(
+                        run_quarterly_extraction(
+                            pdf, r["stock_symbol"], r["source_message_id"],
+                            exchange=r["exchange"] or "BSE",
+                            announcement_date=r["announcement_date"] or ""
+                        )
+                    )
+    except Exception as e:
+        logger.error(f"Error recovering stuck extractions: {e}")
+
+
 async def _update_extraction_status(stock_symbol, pdf_url, status, error_msg=None):
     """Update extraction_status on the placeholder row (or any matching queued/processing row)."""
     try:
@@ -2648,11 +2717,11 @@ async def _update_extraction_status(stock_symbol, pdf_url, status, error_msg=Non
                 """, (status, now_iso, stock_symbol, pdf_url))
             elif status == 'completed':
                 await db.execute("""
-                    DELETE FROM quarterly_results
+                    UPDATE quarterly_results
+                    SET extraction_status = 'completed', extraction_error = NULL, updated_at = ?
                     WHERE stock_symbol = ? AND source_pdf_url_tracking = ?
                     AND extraction_status IN ('queued', 'processing')
-                    AND quarter = 'PENDING'
-                """, (stock_symbol, pdf_url))
+                """, (now_iso, stock_symbol, pdf_url))
             await db.commit()
     except Exception as e:
         logger.warning(f"Failed to update extraction status for {stock_symbol}: {e}")
@@ -2684,6 +2753,13 @@ async def run_quarterly_extraction(pdf_url, stock_symbol, message_id=None, excha
 
                     ai_response = await _call_openai_vision_quarterly(encoded_images)
                     result = await process_quarterly_results(ai_response, stock_symbol, message_id, pdf_url, exchange, announcement_date=announcement_date)
+                    stored = result.get("stored", []) if isinstance(result, dict) else result
+                    if not stored:
+                        extraction_stats["running"] -= 1
+                        extraction_stats["failed"] += 1
+                        await _log_failed_extraction(stock_symbol, pdf_url, exchange, announcement_date, "OpenAI returned no periods/data from PDF", attempt)
+                        await _update_extraction_status(stock_symbol, pdf_url, 'failed', "OpenAI returned no periods/data from PDF")
+                        return None
                     extraction_stats["running"] -= 1
                     extraction_stats["completed"] += 1
                     await _update_extraction_status(stock_symbol, pdf_url, 'completed')
@@ -3393,8 +3469,8 @@ bse_results_csv_path = os.path.join("corporate_announcements", BSE_RESULTS_CSV)
 
 
 async def process_bse_results_data(bse_data):
-    """Process BSE RESULT-category announcements — directly trigger quarterly extraction.
-    No keyword mapping needed since BSE already filtered by Result category."""
+    """Process BSE RESULT-category announcements — ensure ALL appear in PE page.
+    Dedup via NEWSID for telegram/dashboard messages, but always ensure quarterly_results row exists."""
     if not bse_data or "Table" not in bse_data:
         logger.warning("BSE results data empty or invalid structure")
         return None
@@ -3410,52 +3486,75 @@ async def process_bse_results_data(bse_data):
             if "NEWSID" in df_existing.columns:
                 existing_newsids = set(df_existing["NEWSID"].dropna().astype(str).str.strip())
 
-    normalized_rows = []
+    new_rows_for_csv = []
     raw_rows_to_append = []
+
     for row in table:
         newsid = str(row.get("NEWSID", "")).strip()
-        if newsid in existing_newsids:
-            continue
         norm = _bse_row_to_normalized(row)
-        normalized_rows.append(norm)
-        raw_rows_to_append.append(row)
+        attachment_file = norm["attchmntFile"]
+        is_new = newsid not in existing_newsids
 
-    if not normalized_rows:
-        return 1
-
-    for norm_row in normalized_rows:
-        attachment_file = norm_row["attchmntFile"]
-        if attachment_file == "-":
-            continue
-        message = f'''<b>{norm_row['symbol']} - {norm_row['sm_name']}</b>\n\n{norm_row['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
-
-        message_id = await save_announcement_to_dashboard(
-            norm_row["symbol"], norm_row["sm_name"], norm_row["desc"], attachment_file,
-            exchange="BSE", option="quarterly_result", message=message
-        )
-
-        await _insert_extraction_placeholder(
-            norm_row["symbol"], norm_row["sm_name"], attachment_file,
-            "BSE", norm_row.get("an_dt", ""), message_id
-        )
-
-        asyncio.create_task(
-            run_quarterly_extraction(
-                attachment_file, norm_row["symbol"], message_id,
-                exchange="BSE", announcement_date=norm_row.get("an_dt", "")
+        # --- Dashboard/Telegram: only for new NEWSIDs ---
+        message_id = None
+        if is_new:
+            new_rows_for_csv.append(norm)
+            raw_rows_to_append.append(row)
+            message = f'''<b>{norm['symbol']} - {norm['sm_name']}</b>\n\n{norm['desc']}\n\nFile:\n <a href="{attachment_file}">{attachment_file}</a>'''
+            message_id = await save_announcement_to_dashboard(
+                norm["symbol"], norm["sm_name"], norm["desc"], attachment_file,
+                exchange="BSE", option="quarterly_result", message=message
             )
-        )
 
-    df_raw = pd.DataFrame(raw_rows_to_append)
-    if await aiofiles.os.path.exists(bse_results_csv_path):
-        df_existing = pd.read_csv(bse_results_csv_path, dtype="object")
-        df_updated = pd.concat([df_raw, df_existing], ignore_index=True)
-    else:
-        df_updated = df_raw
-    Path(bse_results_csv_path).parent.mkdir(parents=True, exist_ok=True)
-    async with aiofiles.open(bse_results_csv_path, mode="w") as f:
-        await f.write(df_updated.to_csv(index=False))
-    logger.info(f"BSE results CSV updated with {len(raw_rows_to_append)} new result rows")
+        # --- PE Page: ensure EVERY result announcement has a quarterly_results row ---
+        if attachment_file == "-":
+            await _insert_extraction_placeholder(
+                norm["symbol"], norm["sm_name"], attachment_file,
+                "BSE", norm.get("an_dt", ""), message_id,
+                status='failed', error_msg='No attachment in BSE filing'
+            )
+        else:
+            await _insert_extraction_placeholder(
+                norm["symbol"], norm["sm_name"], attachment_file,
+                "BSE", norm.get("an_dt", ""), message_id
+            )
+            if is_new:
+                asyncio.create_task(
+                    run_quarterly_extraction(
+                        attachment_file, norm["symbol"], message_id,
+                        exchange="BSE", announcement_date=norm.get("an_dt", "")
+                    )
+                )
+            else:
+                # Re-trigger extraction for stuck queued/processing rows (e.g. after server restart)
+                async with aiosqlite.connect(DB_PATH) as db:
+                    stuck = await db.execute_fetchall(
+                        "SELECT 1 FROM quarterly_results WHERE stock_symbol = ? AND source_pdf_url_tracking = ? AND extraction_status IN ('queued','processing') LIMIT 1",
+                        (norm["symbol"], attachment_file)
+                    )
+                    if stuck:
+                        logger.info(f"Re-triggering stuck extraction for {norm['symbol']}")
+                        asyncio.create_task(
+                            run_quarterly_extraction(
+                                attachment_file, norm["symbol"], message_id,
+                                exchange="BSE", announcement_date=norm.get("an_dt", "")
+                            )
+                        )
+
+    # Update CSV with new NEWSIDs
+    if raw_rows_to_append:
+        df_raw = pd.DataFrame(raw_rows_to_append)
+        if await aiofiles.os.path.exists(bse_results_csv_path):
+            df_existing = pd.read_csv(bse_results_csv_path, dtype="object")
+            df_updated = pd.concat([df_raw, df_existing], ignore_index=True)
+        else:
+            df_updated = df_raw
+        Path(bse_results_csv_path).parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(bse_results_csv_path, mode="w") as f:
+            await f.write(df_updated.to_csv(index=False))
+        logger.info(f"BSE results CSV updated with {len(raw_rows_to_append)} new result rows")
+
+    logger.info(f"BSE results: {len(table)} total announcements, {len(new_rows_for_csv)} new for dashboard, all ensured in PE page")
     return 1
 
 
@@ -4381,7 +4480,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     qr.comments,
                     qr.announcement_date,
                     s.sector,
-                    s.exchange,
+                    COALESCE(s.exchange, qr.exchange) AS exchange,
                     COALESCE(qr.extraction_status, 'completed') AS extraction_status,
                     qr.extraction_error
                 FROM quarterly_results qr
@@ -4392,7 +4491,7 @@ async def get_pe_analysis(fetch_cmp: bool = False, symbols: str = ""):
                     OR qr.quarter || '|' || qr.financial_year IN (
                         SELECT q2.quarter || '|' || q2.financial_year FROM quarterly_results q2
                         WHERE q2.stock_symbol = qr.stock_symbol
-                        AND q2.quarter NOT IN ('FY', 'PENDING')
+                        AND q2.quarter NOT IN ('FY')
                         ORDER BY q2.financial_year DESC, q2.quarter DESC
                         LIMIT 1
                     )
@@ -4895,22 +4994,38 @@ async def retry_extraction(stock_symbol: str):
 
 @app.get("/api/extraction_status")
 async def get_extraction_status():
-    """Get extraction pipeline status summary for today."""
+    """Get extraction pipeline status summary for today — shows unique stocks and row-level counts."""
     try:
         today = get_ist_now().strftime("%Y-%m-%d")
         async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            # Row-level counts (multiple rows per stock: standalone/consolidated × quarter/year)
             cursor = await db.execute("""
                 SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN extraction_status = 'completed' OR extraction_status IS NULL THEN 1 ELSE 0 END) AS completed,
-                    SUM(CASE WHEN extraction_status = 'failed' THEN 1 ELSE 0 END) AS failed,
-                    SUM(CASE WHEN extraction_status = 'queued' THEN 1 ELSE 0 END) AS queued,
-                    SUM(CASE WHEN extraction_status = 'processing' THEN 1 ELSE 0 END) AS processing
+                    COUNT(*) AS total_rows,
+                    SUM(CASE WHEN extraction_status = 'completed' OR extraction_status IS NULL THEN 1 ELSE 0 END) AS completed_rows,
+                    SUM(CASE WHEN extraction_status = 'failed' THEN 1 ELSE 0 END) AS failed_rows,
+                    SUM(CASE WHEN extraction_status = 'queued' THEN 1 ELSE 0 END) AS queued_rows,
+                    SUM(CASE WHEN extraction_status = 'processing' THEN 1 ELSE 0 END) AS processing_rows
                 FROM quarterly_results
                 WHERE DATE(created_at) = ?
             """, (today,))
             row = await cursor.fetchone()
 
+            # Unique stock-level counts (what user cares about)
+            stock_cursor = await db.execute("""
+                SELECT
+                    COUNT(DISTINCT stock_symbol) AS total_stocks,
+                    COUNT(DISTINCT CASE WHEN extraction_status = 'completed' OR extraction_status IS NULL THEN stock_symbol END) AS completed_stocks,
+                    COUNT(DISTINCT CASE WHEN extraction_status = 'failed' THEN stock_symbol END) AS failed_stocks,
+                    COUNT(DISTINCT CASE WHEN extraction_status = 'queued' THEN stock_symbol END) AS queued_stocks,
+                    COUNT(DISTINCT CASE WHEN extraction_status = 'processing' THEN stock_symbol END) AS processing_stocks
+                FROM quarterly_results
+                WHERE DATE(created_at) = ?
+            """, (today,))
+            stock_row = await stock_cursor.fetchone()
+
+            # Failed details
             failed_cursor = await db.execute("""
                 SELECT stock_symbol, extraction_error, COALESCE(source_pdf_url, source_pdf_url_tracking) AS pdf_url, exchange
                 FROM quarterly_results
@@ -4919,20 +5034,27 @@ async def get_extraction_status():
             """, (today,))
             failed_rows = await failed_cursor.fetchall()
             failed_details = [
-                {"stock_symbol": f[0], "error": f[1], "pdf_url": f[2], "exchange": f[3]}
+                {"stock_symbol": f["stock_symbol"], "error": f["extraction_error"], "pdf_url": f["pdf_url"], "exchange": f["exchange"]}
                 for f in failed_rows
             ]
 
         return {
             "success": True,
             "date": today,
-            "in_memory": extraction_stats,
-            "db": {
-                "total": row[0] or 0,
-                "completed": row[1] or 0,
-                "failed": row[2] or 0,
-                "queued": row[3] or 0,
-                "processing": row[4] or 0,
+            "in_memory_session": extraction_stats,
+            "stocks": {
+                "total": stock_row["total_stocks"] or 0,
+                "completed": stock_row["completed_stocks"] or 0,
+                "failed": stock_row["failed_stocks"] or 0,
+                "queued": stock_row["queued_stocks"] or 0,
+                "processing": stock_row["processing_stocks"] or 0,
+            },
+            "rows": {
+                "total": row["total_rows"] or 0,
+                "completed": row["completed_rows"] or 0,
+                "failed": row["failed_rows"] or 0,
+                "queued": row["queued_rows"] or 0,
+                "processing": row["processing_rows"] or 0,
             },
             "failed_details": failed_details,
         }

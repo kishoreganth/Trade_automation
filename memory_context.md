@@ -5,6 +5,45 @@ Stock Trading Automation project with OCR capabilities for financial document pr
 
 ## Recent Changes
 
+### 2026-05-04: Show ALL BSE Result Announcements in PE Page
+
+**Problem**: Only extracted stocks showed in PE page (~31/42). Board meeting notices, no-attachment items, and already-deduped items were invisible.
+
+**Fix** (`nse_url_test.py`):
+- `process_bse_results_data`: Now ensures ALL announcements (regardless of NEWSID dedup) get a `quarterly_results` row. Dedup is only for telegram/dashboard messages.
+- Items with no attachment (`-`) get `extraction_status='failed'` with error "No attachment in BSE filing".
+- Extraction only triggers for new NEWSIDs with valid PDFs.
+- `_insert_extraction_placeholder`: Dedup simplified to `stock_symbol + DATE(created_at)` — one row per stock per day.
+- Quarter/FY derived from today's date (`get_ist_now()`) not announcement date.
+
+**Frontend** (`dashboard.js`):
+- Quarter and Year columns now show for pending/failed rows (not hidden).
+- Retry button only shown for failed rows that have a PDF file (not for "no attachment" items).
+
+### 2026-05-04: Fix extraction_status Endpoint — Show Unique Stock Counts
+
+**Problem**: `/api/extraction_status` showed raw row counts (186 completed) which was confusing — user expected stock counts. Also `in_memory` stats reset on restart, misleading.
+
+**Fix** (`nse_url_test.py`):
+- Added `stocks` section with `COUNT(DISTINCT stock_symbol)` for each status — shows actual number of unique stocks extracted/failed/queued today.
+- Kept `rows` section for detailed row-level breakdown.
+- Renamed `in_memory` → `in_memory_session` to clarify it's session-scoped.
+
+**Why 42 BSE results → 31 in PE page**: Not all 42 are actual result PDFs. ~7 are board meeting intimations (future dates), ~3 have no attachment, ~1-2 are earnings call audio. The system correctly extracts only actual financial result PDFs.
+
+### 2026-05-04: Fix Filter Dropdowns Clipped by Overflow Parents
+
+**Problem**: PE Analysis filter dropdowns (Year, Quarter, Exchange, Sector, Date Range) were clipped/hidden by parent containers with `overflow-y: auto` (`.content-area`, `.analytics-view`). When table had few rows, dropdowns weren't fully visible.
+
+**Fix** (CSS + JS):
+- Changed `.pe-multiselect-dropdown` from `position: absolute` to `position: fixed` — not clipped by overflow parents.
+- Added `_positionPeDropdown(wrap)` JS function that computes top/left from button's `getBoundingClientRect()`, with smart flip-up when insufficient space below.
+- Added scroll listener on `.content-area` to auto-close dropdowns on scroll.
+- Date dropdown gets `max-height: none; overflow: visible` override for calendar.
+- Removed redundant `#peColumnsToggle` position override.
+
+**Performance**: Dropdowns now render correctly regardless of table content height or scroll position.
+
 ### 2026-04-12: PE Analysis — Auto CMP Fetch After Extraction
 
 **Problem**: CMP/PE was never auto-computed after quarterly extraction. User had to manually click Fetch CMP. No error feedback when TOTP session was missing.
@@ -5063,7 +5102,8 @@ copy_trading/
 **Backend (`nse_url_test.py`)**:
 - `_FINANCIAL_KEYWORDS` expanded with `'quarter ended'`, `'year ended'`; `_MIN_KEYWORD_MATCHES` reduced from 3 to 2
 - New columns on `quarterly_results`: `extraction_status` (queued/processing/completed/failed), `extraction_error`, `source_pdf_url_tracking`
-- `_insert_extraction_placeholder()` — inserts row with status='queued' before extraction starts (both BSE and NSE flows)
+- `_quarter_fy_from_date(date_str)` — derives quarter (Q1-Q4) and financial year from announcement date using Indian FY calendar (Apr-Mar)
+- `_insert_extraction_placeholder()` — inserts row with proper quarter/FY derived from announcement date, status='queued', before extraction starts (both BSE and NSE flows)
 - `_update_extraction_status()` — updates status at each extraction stage (processing → completed/failed); on success deletes placeholder row (real data replaces it)
 - `run_quarterly_extraction()` — now calls `_update_extraction_status` at each stage
 - `process_bse_results_data()` and NSE quarterly flow — call `_insert_extraction_placeholder` before `run_quarterly_extraction`
@@ -5083,3 +5123,43 @@ copy_trading/
 - `tr.pe-row-pending` — dim row + red left border for pending/failed rows
 
 **Performance**: Improved financial page detection catches more PDFs (2 keyword matches instead of 3, plus "quarter ended"/"year ended"). All BSE/NSE result announcements now tracked end-to-end in database regardless of extraction outcome.
+
+---
+
+## 2026-05-04 — Stuck Extraction Recovery Fix
+
+**Problem**: 4 stocks stuck in `queued` extraction_status forever (NACL Industries, Gala Global Products, Aditya Birla Capital, IIFL Capital Services). PE page showed 35 instead of expected count.
+
+**Root Cause**: `process_bse_results_data()` only fires `run_quarterly_extraction()` when `is_new=True` (NEWSID not in CSV). Once NEWSID is in CSV, if extraction was lost (e.g. server restart mid-extraction), those stocks are never retried — placeholder stays `queued` permanently.
+
+**Fix 1 — BSE loop re-trigger** (`nse_url_test.py` line ~3475): For non-new BSE rows, check if `quarterly_results` still has a `queued`/`processing` row for that stock. If so, re-trigger `run_quarterly_extraction()`.
+
+**Fix 2 — Startup recovery** (`_recover_stuck_extractions()`): On server boot (in lifespan), queries all `queued`/`processing` rows with valid PDF URLs, resets `processing`→`queued`, and fires `run_quarterly_extraction()` for each. Called right after `init_db()`.
+
+**Fix 3 — Empty extraction = failed, not completed** (`run_quarterly_extraction` line ~2753): When OpenAI returns no periods/data, the extraction was being marked `completed` which DELETED the placeholder row — stock vanished from PE page. Now checks `result.stored` is non-empty; if empty, marks as `failed` with error "OpenAI returned no periods/data from PDF". Placeholder row kept with FAILED badge visible in UI for retry.
+
+**Fix 4 — Visible extraction status for ALL rows** (`dashboard.js`): Added `pe-ext-success` badge (green) for completed rows. Every row now shows extraction status badge on stock name: SUCCESS (green), FAILED (red), QUEUED (amber), EXTRACTING (blue spinner). Remark column: completed → valuation badge (PENDING/EXPENSIVE/CHEAP), failed → retry button, queued/processing → empty. CSS: `.pe-ext-success { background: rgba(34,197,94,0.15); color: #22c55e; }`.
+
+**Fix 5 — Every BSE filing gets its own PE row** (`_insert_extraction_placeholder`): Changed dedup from `stock_symbol + DATE(created_at)` to `stock_symbol + source_pdf_url_tracking`. Each unique PDF URL gets a separate row — same stock with multiple filings (results, con-call, dividend) all appear individually. BSE loop stuck-check also matches by PDF URL now.
+
+**Fix 6 — Upsert sets extraction_status = completed** (`_upsert_quarterly_result`): Added `extraction_status = 'completed', extraction_error = NULL` to the ON CONFLICT DO UPDATE SET clause. When real data upserts over a placeholder, status changes from 'queued' to 'completed' so `_update_extraction_status` won't delete the row with real data.
+
+**Performance**: Eliminates permanently stuck extractions. Server restart no longer causes extraction data loss. Empty-extraction stocks no longer silently vanish — they show as FAILED with retry option. Every BSE result filing now visible in PE page with clear status. No more filtered/skipped announcements.
+
+---
+
+## 2026-05-04 — Row Disappearing & UI Fix
+
+**Problem**: PE page stock count fluctuated (41→37→39→40). Once added, rows would disappear and reappear randomly.
+
+**Root Cause**: `_update_extraction_status('completed')` **DELETED** placeholder rows instead of updating them. When BSE loop re-ran, it re-triggered stuck extractions which re-created rows, causing count fluctuation. Also, `_insert_extraction_placeholder` derived `quarter`/`fy` from server time (`now.isoformat()`) instead of announcement date, causing `UNIQUE constraint failed` errors and filter mismatches.
+
+**Fix 1 — Stop deleting on completion** (`_update_extraction_status` line ~2718): Changed `DELETE FROM quarterly_results WHERE extraction_status IN ('queued','processing')` to `UPDATE quarterly_results SET extraction_status='completed', extraction_error=NULL`. Rows are NEVER deleted — once added, they stay forever.
+
+**Fix 2 — Use announcement_date for quarter/fy** (`_insert_extraction_placeholder` line ~2198): Changed `_quarter_fy_from_date(now.isoformat())` to `_quarter_fy_from_date(announcement_date if announcement_date else now.isoformat())`. Placeholder quarter/fy now matches the actual filing period, eliminating UNIQUE constraint failures and filter mismatches.
+
+**Fix 3 — Retry button moved to Edit column** (`dashboard.js`): Failed rows now show the Retry button in the Edit (pencil) column instead of the Remark column. Remark column always shows valuation badge (PENDING/EXPENSIVE/CHEAP) regardless of status. Edit column: failed → Retry button, others → pencil edit button.
+
+**Fix 4 — Removed red left border** (`styles.css`): Removed `tr.pe-row-pending td { border-left: 2px solid #ef4444; }`. Also removed `class="pe-row-pending"` from table rows. Pending/failed rows now only have slight opacity reduction (0.85), no distracting borders.
+
+**Performance**: PE page count is now stable — rows never disappear. All 42 BSE announcements visible consistently. No more DELETE operations on quarterly_results for status changes.

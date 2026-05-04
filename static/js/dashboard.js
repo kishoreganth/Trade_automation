@@ -455,6 +455,7 @@ function renderBoardMeetingResults() {
         if (isFailed) statusBadge = ' <span class="pe-ext-badge pe-ext-failed">FAILED</span>';
         else if (isQueued) statusBadge = ' <span class="pe-ext-badge pe-ext-queued">QUEUED</span>';
         else if (isProc) statusBadge = ' <span class="pe-ext-badge pe-ext-processing"><span class="pe-ext-spinner"></span></span>';
+        else statusBadge = ' <span class="pe-ext-badge pe-ext-success">SUCCESS</span>';
         const retryCell = isFailed
             ? `<button class="pe-retry-btn" onclick="peRetryExtraction('${r.stock_symbol}', this)"><i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Retry</button>`
             : '';
@@ -2473,6 +2474,28 @@ function peToggleColumn(key, visible) {
     peInitColumnsToggle();
 }
 
+function _positionPeDropdown(wrap) {
+    const btn = wrap.querySelector('.pe-multiselect-btn');
+    const dd = wrap.querySelector('.pe-multiselect-dropdown');
+    if (!btn || !dd) return;
+    const rect = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const ddHeight = Math.min(dd.scrollHeight || 260, 260);
+    if (spaceBelow < ddHeight && rect.top > ddHeight) {
+        dd.style.top = (rect.top - ddHeight - 4) + 'px';
+    } else {
+        dd.style.top = (rect.bottom + 4) + 'px';
+    }
+    const spaceRight = window.innerWidth - rect.left;
+    if (spaceRight < 200) {
+        dd.style.left = 'auto';
+        dd.style.right = (window.innerWidth - rect.right) + 'px';
+    } else {
+        dd.style.left = rect.left + 'px';
+        dd.style.right = 'auto';
+    }
+}
+
 function peInitMultiselects() {
     document.querySelectorAll('.pe-multiselect').forEach(wrap => {
         const btn = wrap.querySelector('.pe-multiselect-btn');
@@ -2480,12 +2503,21 @@ function peInitMultiselects() {
             e.stopPropagation();
             const wasOpen = wrap.classList.contains('open');
             document.querySelectorAll('.pe-multiselect.open').forEach(el => el.classList.remove('open'));
-            if (!wasOpen) wrap.classList.add('open');
+            if (!wasOpen) {
+                wrap.classList.add('open');
+                _positionPeDropdown(wrap);
+            }
         });
     });
     document.addEventListener('click', () => {
         document.querySelectorAll('.pe-multiselect.open').forEach(el => el.classList.remove('open'));
     });
+    const scrollParent = document.querySelector('.content-area') || document.querySelector('.analytics-view');
+    if (scrollParent) {
+        scrollParent.addEventListener('scroll', () => {
+            document.querySelectorAll('.pe-multiselect.open').forEach(el => el.classList.remove('open'));
+        }, { passive: true });
+    }
     document.querySelectorAll('.pe-multiselect-dropdown').forEach(dd => {
         dd.addEventListener('click', e => e.stopPropagation());
     });
@@ -3026,6 +3058,7 @@ function renderPEAnalysis() {
         const isFailed = extStatus === 'failed';
         const isQueued = extStatus === 'queued';
         const isProcessing = extStatus === 'processing';
+        const isCompleted = extStatus === 'completed';
         const isPending = isFailed || isQueued || isProcessing;
         let extBadge = '';
         if (isFailed) {
@@ -3034,8 +3067,11 @@ function renderPEAnalysis() {
             extBadge = '<span class="pe-ext-badge pe-ext-queued">QUEUED</span>';
         } else if (isProcessing) {
             extBadge = '<span class="pe-ext-badge pe-ext-processing"><span class="pe-ext-spinner"></span> EXTRACTING</span>';
+        } else if (isCompleted) {
+            extBadge = '<span class="pe-ext-badge pe-ext-success">SUCCESS</span>';
         }
-        const retryBtn = isFailed ? `<button class="pe-retry-btn" data-symbol="${sym}" onclick="peRetryExtraction('${sym}', this)" title="Retry extraction"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Retry</button>` : '';
+        const hasFile = !!r.source_pdf_url;
+        const retryBtn = (isFailed && hasFile) ? `<button class="pe-retry-btn" data-symbol="${sym}" onclick="peRetryExtraction('${sym}', this)" title="Retry extraction"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Retry</button>` : '';
 
         const qe = r.quarters_eps || {};
         const q = (r.quarter || '').toUpperCase();
@@ -3107,19 +3143,21 @@ function renderPEAnalysis() {
             const exchBadge = (r.exchange || 'NSE').toUpperCase() === 'BSE'
                 ? '<span class="pe-exch-badge pe-exch-bse">BSE</span>'
                 : '<span class="pe-exch-badge pe-exch-nse">NSE</span>';
-            const remarkBadge = r.valuation === 'EXPENSIVE' ? '<span class="pe-val-badge pe-val-expensive">EXPENSIVE</span>'
+            const valBadge = r.valuation === 'EXPENSIVE' ? '<span class="pe-val-badge pe-val-expensive">EXPENSIVE</span>'
                 : r.valuation === 'CHEAP' ? '<span class="pe-val-badge pe-val-cheap">CHEAP</span>'
                 : r.valuation ? `<span class="pe-val-badge pe-val-custom">${r.valuation}</span>`
                 : '<span class="pe-val-badge pe-val-pending">PENDING</span>';
+            let remarkContent = valBadge;
+            const editOrRetry = isFailed ? retryBtn : (isPending ? '' : editBtnInner);
             const commentText = r.comments ? `<span class="pe-comment-text" title="${(r.comments || '').replace(/"/g, '&quot;')}">${r.comments}</span>` : '';
 
             if (rowCount === 1) {
-                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}" ${isPending ? 'class="pe-row-pending"' : ''}>
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
                     <td class="pvc-date">${updated}</td>
                     <td class="pvc-stock">${stockCell}${extBadge ? '<br>' + extBadge : ''}</td>
                     <td class="pvc-exch pe-col-exch">${exchBadge}</td>
-                    <td class="pvc-quarter pe-col-quarter">${isPending ? '' : (r.quarter || '')}</td>
-                    <td class="pvc-year pe-col-year">${isPending ? '' : yearDisplay}</td>
+                    <td class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
+                    <td class="pvc-year pe-col-year">${yearDisplay}</td>
                     <td class="pvc-qtreps pe-col-qtreps">${isPending ? '' : fmt(qtrEps) + basisBadge}</td>
                     <td class="pvc-epsqoq">${isPending ? '' : qoqCell}</td>
                     <td class="pvc-epsyoy">${isPending ? '' : yoyCell}</td>
@@ -3130,18 +3168,18 @@ function renderPEAnalysis() {
                     <td class="pvc-cmp pe-col-cmp">${isPending ? '' : (cmp ? '₹' + fmt(cmp) : '')}</td>
                     <td class="pvc-pe pe-col-pe ${isPending ? '' : peClassFor(computedPe)}" style="font-weight:600">${isPending ? '' : peVal}</td>
                     <td class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td class="pvc-remark">${isPending ? retryBtn : remarkBadge}</td>
+                    <td class="pvc-remark">${remarkContent}</td>
                     <td class="pvc-comments">${isPending ? `<small style="color:#ef4444">${r.extraction_error || ''}</small>` : commentText}</td>
                     <td class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td class="pvc-edit" style="text-align:center">${isPending ? '' : editBtnInner}</td>
+                    <td class="pvc-edit" style="text-align:center">${editOrRetry}</td>
                 </tr>`;
             } else if (isFirst) {
-                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}" ${isPending ? 'class="pe-row-pending"' : ''}>
+                html += `<tr data-pe-sym="${sym}" data-pe-q="${r.quarter}" data-pe-fy="${fy}" data-pe-basis="${r.eps_basis || 'C'}">
                     <td rowspan="${rowCount}" class="pvc-date">${updated}</td>
                     <td rowspan="${rowCount}" class="pvc-stock">${stockCell}${extBadge ? '<br>' + extBadge : ''}</td>
                     <td rowspan="${rowCount}" class="pvc-exch pe-col-exch">${exchBadge}</td>
-                    <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${isPending ? '' : (r.quarter || '')}</td>
-                    <td rowspan="${rowCount}" class="pvc-year pe-col-year">${isPending ? '' : yearDisplay}</td>
+                    <td rowspan="${rowCount}" class="pvc-quarter pe-col-quarter">${r.quarter || ''}</td>
+                    <td rowspan="${rowCount}" class="pvc-year pe-col-year">${yearDisplay}</td>
                     <td rowspan="${rowCount}" class="pvc-qtreps pe-col-qtreps">${isPending ? '' : fmt(qtrEps) + basisBadge}</td>
                     <td rowspan="${rowCount}" class="pvc-epsqoq">${isPending ? '' : qoqCell}</td>
                     <td rowspan="${rowCount}" class="pvc-epsyoy">${isPending ? '' : yoyCell}</td>
@@ -3152,10 +3190,10 @@ function renderPEAnalysis() {
                     <td rowspan="${rowCount}" class="pvc-cmp pe-col-cmp">${isPending ? '' : (cmp ? '₹' + fmt(cmp) : '')}</td>
                     <td class="pvc-pe ${isPending ? '' : peClassFor(computedPe)}" style="font-weight:600">${isPending ? '' : peVal}</td>
                     <td rowspan="${rowCount}" class="pvc-sector pe-col-sector"><small>${r.sector || ''}</small></td>
-                    <td rowspan="${rowCount}" class="pvc-remark">${isPending ? retryBtn : remarkBadge}</td>
+                    <td rowspan="${rowCount}" class="pvc-remark">${remarkContent}</td>
                     <td rowspan="${rowCount}" class="pvc-comments">${isPending ? `<small style="color:#ef4444">${r.extraction_error || ''}</small>` : commentText}</td>
                     <td rowspan="${rowCount}" class="pvc-file" style="text-align:center">${fileLink}</td>
-                    <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${isPending ? '' : editBtnInner}</td>
+                    <td rowspan="${rowCount}" class="pvc-edit" style="text-align:center">${editOrRetry}</td>
                 </tr>`;
             } else {
                 html += `<tr${rowClass}>
