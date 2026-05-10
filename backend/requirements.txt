@@ -31,6 +31,12 @@ openai
 pyotp
 itsdangerous
 
+# Google Sheets write-back (used by legacy get_quote.py to update sheet)
+gspread
+oauth2client
+google-auth
+google-auth-oauthlib
+
 # Testing
 pytest
 pytest-asyncio
