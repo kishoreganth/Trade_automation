@@ -62,6 +62,24 @@ def parse_datetime_str(val: str) -> datetime:
     raise ValueError(f"Cannot parse datetime: {val!r}")
 
 
+def _parse_numeric_str(val: str):
+    """Parse a numeric value that may be stored as string, including accounting
+    notation '(0.13)' meaning -0.13. Returns None if unparseable."""
+    s = val.strip()
+    if not s:
+        return None
+    neg = False
+    if s.startswith("(") and s.endswith(")"):
+        neg = True
+        s = s[1:-1].strip()
+    s = s.replace(",", "")
+    try:
+        n = float(s)
+        return -n if neg else n
+    except ValueError:
+        return None
+
+
 def coerce_value(val, pg_type: str):
     """Convert SQLite values to proper Python types for asyncpg."""
     if val is None:
@@ -81,6 +99,9 @@ def coerce_value(val, pg_type: str):
         if isinstance(val, int):
             return bool(val)
         return val
+    if pg_type in ("double precision", "real", "numeric") and isinstance(val, str):
+        parsed = _parse_numeric_str(val)
+        return parsed
     return val
 
 
@@ -117,8 +138,15 @@ async def migrate_table(sqlite_db_path: str, table: str, pg_table: str, column_m
 
         async with aiosqlite.connect(sqlite_db_path) as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute(f"SELECT * FROM {table}")
-            rows = await cursor.fetchall()
+            try:
+                cursor = await db.execute(f"SELECT * FROM {table}")
+                rows = await cursor.fetchall()
+            except Exception as e:
+                msg = str(e).lower()
+                if "no such table" in msg:
+                    print(f"  SKIP: table '{table}' not found in {sqlite_db_path}")
+                    return 0
+                raise
 
         if not rows:
             print(f"  {table}: 0 rows (empty)")
