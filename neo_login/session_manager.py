@@ -76,14 +76,27 @@ class KotakSessionManager:
                     "full_response": session_data
                 }
             
-            # Write to file atomically
-            temp_file = self.session_file.with_suffix('.tmp')
-            with open(temp_file, 'w') as f:
-                json.dump(session_info, f, indent=2)
-            
-            # Atomic rename
-            temp_file.replace(self.session_file)
-            
+            # Try atomic rename first (works on regular FS); fall back to direct
+            # write if the destination is a bind-mounted file (Docker), where
+            # cross-inode rename fails with EBUSY.
+            try:
+                temp_file = self.session_file.with_suffix('.tmp')
+                with open(temp_file, 'w') as f:
+                    json.dump(session_info, f, indent=2)
+                temp_file.replace(self.session_file)
+            except OSError as rename_err:
+                # EBUSY (16) or EXDEV (18): direct overwrite into the mounted file.
+                logger.warning(
+                    f"Atomic rename failed ({rename_err}); writing directly to {self.session_file}"
+                )
+                try:
+                    if temp_file.exists():
+                        temp_file.unlink()
+                except Exception:
+                    pass
+                with open(self.session_file, 'w') as f:
+                    json.dump(session_info, f, indent=2)
+
             self._session_data = session_info
             logger.info(f"Session saved successfully to {self.session_file}")
             return True
