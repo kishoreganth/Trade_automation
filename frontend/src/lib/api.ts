@@ -1,0 +1,199 @@
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "/api",
+  headers: { "Content-Type": "application/json" },
+  timeout: 30_000,
+});
+
+api.interceptors.request.use((config) => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
+  if (token) {
+    config.headers["X-Session-Token"] = token;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const status = error.response?.status;
+    if (status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("session_token");
+    }
+    if (status === 429) {
+      const retryAfter = Number(error.response.headers?.["retry-after"]) || 5;
+      error.retryAfterMs = retryAfter * 1000;
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// ─── Health ───
+
+export async function fetchHealth() {
+  const { data } = await axios.get("/health", { timeout: 5_000 });
+  return data;
+}
+
+// ─── Messages ───
+
+export async function fetchMessages(
+  page = 1,
+  perPage = 50,
+  option = "all",
+  filters: { exchange?: string; sector?: string; search?: string } = {}
+) {
+  const params: Record<string, unknown> = { page, per_page: perPage, option };
+  if (filters.exchange) params.exchange = filters.exchange;
+  if (filters.sector) params.sector = filters.sector;
+  if (filters.search) params.search = filters.search;
+  const { data } = await api.get("/messages", { params });
+  return data;
+}
+
+export async function fetchMessageStats() {
+  const { data } = await api.get("/messages/stats");
+  return data;
+}
+
+export async function fetchSectors() {
+  const { data } = await api.get("/sectors");
+  return data;
+}
+
+// ─── PE Analysis ───
+
+export async function fetchPEAnalysis(params: {
+  page?: number;
+  per_page?: number;
+  valuation_filter?: string;
+  year?: string;
+  quarter?: string;
+  exchange?: string;
+  sector?: string;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}) {
+  const { data } = await api.get("/pe_analysis", { params });
+  return data;
+}
+
+export async function fetchPEFilters() {
+  const { data } = await api.get("/pe_analysis/filters");
+  return data;
+}
+
+export async function fetchReportSummary() {
+  const { data } = await api.get("/pe_analysis/report_summary");
+  return data;
+}
+
+export async function deletePEAnalysis(symbol: string) {
+  const { data } = await api.delete(`/pe_analysis/${symbol}`);
+  return data;
+}
+
+export async function updatePEAnalysis(symbol: string, body: Record<string, unknown>) {
+  const { data } = await api.put(`/pe_analysis/${symbol}`, body);
+  return data;
+}
+
+export async function retriggerPEExtraction(symbol: string, rowId?: number) {
+  const params = rowId ? { row_id: rowId } : undefined;
+  const { data } = await api.post(`/pe_analysis/${symbol}/retrigger`, null, { params });
+  return data;
+}
+
+export async function fetchValuationOptions() {
+  const { data } = await api.get("/pe_analysis/valuation_options");
+  return data;
+}
+
+export async function createCustomValuation(value: string, label?: string, tone?: string) {
+  const { data } = await api.post("/pe_analysis/valuation_options", {
+    value,
+    label: label || value,
+    tone: tone || "neutral",
+  });
+  return data;
+}
+
+export async function deleteCustomValuation(value: string) {
+  const { data } = await api.delete(`/pe_analysis/valuation_options/${encodeURIComponent(value)}`);
+  return data;
+}
+
+// ─── PE Formulas ───
+
+export async function fetchPEFormulas() {
+  const { data } = await api.get("/pe_formulas");
+  return data;
+}
+
+export async function createPEFormula(body: { name: string; q1_expr: string; q2_expr: string; q3_expr: string; q4_expr: string }) {
+  const { data } = await api.post("/pe_formulas", body);
+  return data;
+}
+
+export async function activatePEFormula(formulaId: number) {
+  const { data } = await api.put(`/pe_formulas/${formulaId}/activate`);
+  return data;
+}
+
+// ─── Jobs ───
+
+export async function triggerJob(jobType: string) {
+  const { data } = await api.post(`/jobs/${jobType}/start`);
+  return data;
+}
+
+export async function fetchJobStatus(jobId: string) {
+  const { data } = await api.get(`/jobs/${jobId}/status`);
+  return data;
+}
+
+// ─── Orders / Place Order ───
+
+export async function fetchOrderSheet() {
+  const { data } = await api.get("/place_order/sheet");
+  return data;
+}
+
+export async function getSessionStatus() {
+  const { data } = await api.get("/place_order/session/status");
+  return data;
+}
+
+export async function authenticateTotp(totp: string) {
+  const { data } = await api.post("/place_order/session/authenticate", { totp });
+  return data;
+}
+
+export async function fetchQuotes() {
+  const { data } = await api.post("/place_order/quotes/fetch");
+  return data;
+}
+
+export async function placeAllOrders(ordersPerMinute = 185, maxConcurrent = 2) {
+  const { data } = await api.post("/place_order/execute/all", {
+    orders_per_minute: ordersPerMinute,
+    max_concurrent: maxConcurrent,
+  });
+  return data;
+}
+
+export async function executeOrder(order: { symbol: string; action: string; qty: number; price: number }) {
+  const { data } = await api.post("/place_order/execute", order);
+  return data;
+}
+
+// ─── Export ───
+
+export async function exportPEAnalysisCSV(params: Record<string, string>) {
+  const { data } = await api.get("/pe_analysis", { params: { ...params, per_page: "5000", page: "1" } });
+  return data;
+}

@@ -82,18 +82,18 @@ env/
 venv/
 ENV/
 
-# Python build and distribution
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
+# Python build and distribution (root-anchored so they don't shadow frontend/src/lib)
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
 *.egg-info/
 .installed.cfg
 *.egg 
