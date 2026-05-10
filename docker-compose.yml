@@ -108,8 +108,10 @@ services:
       - ./neo_login:/neo_login:ro
       - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
       - ./.env:/.env:ro
-      # Kotak session — writable so TOTP auth + refresh can persist across restarts
-      - ./kotak_session.json:/kotak_session.json
+      # Kotak session — writable so TOTP auth + refresh persist across restarts.
+      # Mounted at /app (the container WORKDIR) because session_manager.py uses
+      # the relative filename "kotak_session.json".
+      - ./kotak_session.json:/app/kotak_session.json
     networks:
       - trade_net
 
@@ -184,7 +186,7 @@ services:
       - ./neo_login:/neo_login:ro
       - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
       - ./.env:/.env:ro
-      - ./kotak_session.json:/kotak_session.json
+      - ./kotak_session.json:/app/kotak_session.json
     networks:
       - trade_net
 
@@ -217,7 +219,7 @@ services:
       - ./neo_login:/neo_login:ro
       - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
       - ./.env:/.env:ro
-      - ./kotak_session.json:/kotak_session.json
+      - ./kotak_session.json:/app/kotak_session.json
     networks:
       - trade_net
 
