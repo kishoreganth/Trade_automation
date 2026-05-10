@@ -98,6 +98,16 @@ services:
       start_period: 15s
     volumes:
       - ./downloads_concall:/app/downloads_concall
+      # Legacy root-level Python modules used by app/routers/orders.py
+      - ./gsheet_stock_get.py:/gsheet_stock_get.py:ro
+      - ./get_quote.py:/get_quote.py:ro
+      - ./place_order.py:/place_order.py:ro
+      - ./neo_main_login.py:/neo_main_login.py:ro
+      - ./neo_login:/neo_login:ro
+      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
+      - ./.env:/.env:ro
+      # Kotak session — writable so TOTP auth + refresh can persist across restarts
+      - ./kotak_session.json:/kotak_session.json
     networks:
       - trade_net
 
@@ -163,6 +173,14 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./downloads_concall:/app/downloads_concall
+      - ./gsheet_stock_get.py:/gsheet_stock_get.py:ro
+      - ./get_quote.py:/get_quote.py:ro
+      - ./place_order.py:/place_order.py:ro
+      - ./neo_main_login.py:/neo_main_login.py:ro
+      - ./neo_login:/neo_login:ro
+      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
+      - ./.env:/.env:ro
+      - ./kotak_session.json:/kotak_session.json
     networks:
       - trade_net
 
@@ -188,6 +206,14 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./downloads_concall:/app/downloads_concall
+      - ./gsheet_stock_get.py:/gsheet_stock_get.py:ro
+      - ./get_quote.py:/get_quote.py:ro
+      - ./place_order.py:/place_order.py:ro
+      - ./neo_main_login.py:/neo_main_login.py:ro
+      - ./neo_login:/neo_login:ro
+      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
+      - ./.env:/.env:ro
+      - ./kotak_session.json:/kotak_session.json
     networks:
       - trade_net
 
