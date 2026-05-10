@@ -106,8 +106,10 @@ services:
       - ./place_order.py:/place_order.py:ro
       - ./neo_main_login.py:/neo_main_login.py:ro
       - ./neo_login:/neo_login:ro
-      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
-      - ./.env:/.env:ro
+      # Mount creds at /app (WORKDIR) so legacy get_quote.py finds them via
+      # its relative path "google_sheets_credentials.json".
+      - ./google_sheets_credentials.json:/app/google_sheets_credentials.json:ro
+      - ./.env:/app/.env:ro
       # Kotak session — writable so TOTP auth + refresh persist across restarts.
       # Mounted at /app (the container WORKDIR) because session_manager.py uses
       # the relative filename "kotak_session.json".
@@ -184,8 +186,8 @@ services:
       - ./place_order.py:/place_order.py:ro
       - ./neo_main_login.py:/neo_main_login.py:ro
       - ./neo_login:/neo_login:ro
-      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
-      - ./.env:/.env:ro
+      - ./google_sheets_credentials.json:/app/google_sheets_credentials.json:ro
+      - ./.env:/app/.env:ro
       - ./kotak_session.json:/app/kotak_session.json
     networks:
       - trade_net
@@ -217,8 +219,8 @@ services:
       - ./place_order.py:/place_order.py:ro
       - ./neo_main_login.py:/neo_main_login.py:ro
       - ./neo_login:/neo_login:ro
-      - ./google_sheets_credentials.json:/google_sheets_credentials.json:ro
-      - ./.env:/.env:ro
+      - ./google_sheets_credentials.json:/app/google_sheets_credentials.json:ro
+      - ./.env:/app/.env:ro
       - ./kotak_session.json:/app/kotak_session.json
     networks:
       - trade_net
