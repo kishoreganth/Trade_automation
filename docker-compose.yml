@@ -60,7 +60,7 @@ services:
       LEGACY_SQLITE_DIR: /legacy
     volumes:
       - ./scripts:/app/scripts:ro
-      - ./legacy_data:/legacy:ro
+      - ./legacy_data:/legacy
     depends_on:
       postgres:
         condition: service_healthy
