@@ -376,7 +376,7 @@ export default function PlaceOrderPage() {
                 onKeyDown={(e) => e.key === "Enter" && handleAuthenticate()}
               />
               <button
-                onClick={handleAuthenticate}
+                onClick={() => handleAuthenticate()}
                 disabled={authenticating || totpCode.length < 6}
                 className="px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-xs font-medium transition-colors"
               >
