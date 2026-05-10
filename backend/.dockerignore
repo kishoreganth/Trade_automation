@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+.env
+.git
+.gitignore
+*.db
+*.log
+.venv
+venv
+node_modules
+downloads_concall
+.pytest_cache
+.mypy_cache

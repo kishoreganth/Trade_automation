@@ -1,0 +1,8 @@
+* text=auto
+
+# Shell scripts MUST use LF — they are executed by /bin/sh inside Linux containers.
+# Without this, Git on Windows can convert to CRLF and break the entrypoint.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf

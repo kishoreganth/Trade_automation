@@ -1,0 +1,42 @@
+# Core
+fastapi
+uvicorn[standard]
+gunicorn
+pydantic
+pydantic-settings
+
+# PostgreSQL (async + sync for Alembic)
+asyncpg
+psycopg2-binary
+sqlalchemy[asyncio]
+alembic
+
+# One-time SQLite -> Postgres data import (used by entrypoint on first boot only)
+aiosqlite
+
+# Redis
+redis[hiredis]
+
+# Celery (Phase 3)
+celery[redis]
+
+# Existing dependencies carried forward
+aiohttp
+aiofiles
+httpx
+pandas
+python-dotenv
+python-multipart
+openai
+pyotp
+itsdangerous
+
+# Testing
+pytest
+pytest-asyncio
+
+# Monitoring (optional)
+sentry-sdk[fastapi]
+
+# Load testing (dev only)
+locust

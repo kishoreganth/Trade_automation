@@ -1,0 +1,762 @@
+"""
+PE Analysis API router.
+Extracted from: nse_url_test.py (/api/pe_analysis, /api/pe_analysis/filters, 
+    /api/pe_analysis/report_summary, DELETE/PUT endpoints)
+"""
+
+import re
+from datetime import datetime
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from typing import Optional
+
+from ..database import get_db
+from ..cache import cached, cache_get, cache_set
+from ..cache_keys import invalidate_pe_analysis
+from ..constants import (
+    VALUATION_OPTIONS, VALUATION_VALUES, canonicalize_valuation, valuation_tone,
+    VALUATION_TONE_BULLISH, VALUATION_TONE_BEARISH,
+)
+
+router = APIRouter(prefix="/api", tags=["pe_analysis"])
+
+
+def _quarter_index(q: str) -> int:
+    return {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}.get(q, 0)
+
+
+def _fy_to_year(fy: str) -> int:
+    """Normalize any financial_year format to ending calendar year number.
+    '2026'->2026, 'FY26'->2026, 'FY2025-26'->2026, '2025-26'->2026."""
+    if not fy:
+        return 0
+    fy = fy.strip()
+    if fy.isdigit():
+        y = int(fy)
+        return y if y > 100 else 2000 + y
+    m = re.match(r"FY(\d{2})$", fy)
+    if m:
+        return 2000 + int(m.group(1))
+    m = re.match(r"FY(\d{4})-(\d{2})$", fy)
+    if m:
+        return 2000 + int(m.group(2))
+    m = re.match(r"(\d{4})-(\d{2})$", fy)
+    if m:
+        return 2000 + int(m.group(2))
+    m = re.match(r"FY(\d{4})$", fy)
+    if m:
+        return int(m.group(1))
+    return 0
+
+
+def _dedup_history(history: list[dict]) -> list[dict]:
+    """Keep only the latest row per (quarter, normalized_fy) combo."""
+    seen: dict[tuple, dict] = {}
+    for h in history:
+        key = (h.get("quarter"), _fy_to_year(h.get("financial_year", "")))
+        existing = seen.get(key)
+        if existing is None or h.get("id", 0) > existing.get("id", 0):
+            seen[key] = h
+    return list(seen.values())
+
+
+def _compute_derived_fields(row: dict, history: list[dict]) -> dict:
+    """Compute EPS Q/Q, Y/Y, Cum EPS, Cum Prev FY, Prev FY EPS, FY EPS Est with labels."""
+    qtr = row.get("quarter", "")
+    fy = row.get("financial_year", "")
+    qi = _quarter_index(qtr)
+    fy_year = _fy_to_year(fy)
+
+    deduped = _dedup_history(history)
+
+    same_fy = [h for h in deduped if _fy_to_year(h.get("financial_year", "")) == fy_year]
+    same_fy_sorted = sorted(same_fy, key=lambda x: _quarter_index(x.get("quarter", "")))
+
+    prev_fy_year = fy_year - 1 if fy_year > 0 else 0
+    prev_fy_rows = [h for h in deduped if _fy_to_year(h.get("financial_year", "")) == prev_fy_year]
+    prev_fy_sorted = sorted(prev_fy_rows, key=lambda x: _quarter_index(x.get("quarter", "")))
+
+    # EPS Q/Q: raw EPS value of previous quarter in same FY
+    eps_qoq = None
+    eps_qoq_label = ""
+    if qi > 1:
+        prev_q = f"Q{qi - 1}"
+        prev_row = next((h for h in same_fy if h.get("quarter") == prev_q), None)
+        if prev_row and prev_row.get("qtr_eps") is not None:
+            eps_qoq = round(prev_row["qtr_eps"], 2)
+            eps_qoq_label = prev_q
+
+    # EPS Y/Y: raw EPS value of same quarter in prev FY
+    eps_yoy = None
+    eps_yoy_label = ""
+    if prev_fy_year > 0:
+        same_q_prev = next((h for h in prev_fy_rows if h.get("quarter") == qtr), None)
+        if same_q_prev and same_q_prev.get("qtr_eps") is not None:
+            eps_yoy = round(same_q_prev["qtr_eps"], 2)
+            eps_yoy_label = f"Prev {qtr}"
+
+    # Cumulative EPS: for Q1-Q3 use stored cum_eps; for Q4 use FY row or sum Q1-Q4
+    cum_eps = None
+    cum_eps_label = ""
+    if qi > 0 and qi < 4:
+        stored_cum = row.get("cum_eps_stored")
+        if stored_cum is not None:
+            cum_eps = round(stored_cum, 2)
+        else:
+            cur_q_hist = next((h for h in same_fy if h.get("quarter") == qtr), None)
+            if cur_q_hist and cur_q_hist.get("cum_eps") is not None:
+                cum_eps = round(cur_q_hist["cum_eps"], 2)
+            else:
+                vals = [h.get("qtr_eps") for h in same_fy_sorted
+                        if _quarter_index(h.get("quarter", "")) <= qi and h.get("qtr_eps") is not None]
+                if vals:
+                    cum_eps = round(sum(vals), 2)
+        cum_eps_label = f"N{qi * 3}"
+    elif qi == 4:
+        fy_row = next((h for h in same_fy if h.get("quarter") == "FY"), None)
+        if fy_row and fy_row.get("qtr_eps") is not None:
+            cum_eps = round(fy_row["qtr_eps"], 2)
+        else:
+            vals = [h.get("qtr_eps") for h in same_fy_sorted
+                    if h.get("quarter") in ("Q1", "Q2", "Q3", "Q4") and h.get("qtr_eps") is not None]
+            if len(vals) == 4:
+                cum_eps = round(sum(vals), 2)
+        cum_eps_label = "N12"
+
+    # Cumulative Prev FY: for Q1-Q3 use stored cum_eps from prev FY history; for Q4 use FY row or sum
+    cum_prev_fy = None
+    cum_prev_fy_label = ""
+    if qi > 0 and prev_fy_rows:
+        if qi < 4:
+            prev_q_match = next((h for h in prev_fy_rows if h.get("quarter") == qtr), None)
+            if prev_q_match and prev_q_match.get("cum_eps") is not None:
+                cum_prev_fy = round(prev_q_match["cum_eps"], 2)
+            else:
+                vals = [h.get("qtr_eps") for h in prev_fy_sorted
+                        if _quarter_index(h.get("quarter", "")) <= qi and h.get("qtr_eps") is not None]
+                if vals:
+                    cum_prev_fy = round(sum(vals), 2)
+            cum_prev_fy_label = f"Prev N{qi * 3}"
+        else:
+            fy_row_prev = next((h for h in prev_fy_rows if h.get("quarter") == "FY"), None)
+            if fy_row_prev and fy_row_prev.get("qtr_eps") is not None:
+                cum_prev_fy = round(fy_row_prev["qtr_eps"], 2)
+            else:
+                vals = [h.get("qtr_eps") for h in prev_fy_sorted
+                        if h.get("quarter") in ("Q1", "Q2", "Q3", "Q4") and h.get("qtr_eps") is not None]
+                if len(vals) == 4:
+                    cum_prev_fy = round(sum(vals), 2)
+            cum_prev_fy_label = "Prev N12"
+
+    # Prev FY EPS: full year sum of previous FY
+    prev_fy_eps = None
+    prev_fy_eps_label = "Prev FY"
+    if prev_fy_sorted:
+        # Check if there's an FY row with stored cum_eps
+        fy_row = next((h for h in prev_fy_rows if h.get("quarter") == "FY"), None)
+        if fy_row and fy_row.get("qtr_eps") is not None:
+            prev_fy_eps = round(fy_row["qtr_eps"], 2)
+        else:
+            vals = [h.get("qtr_eps") for h in prev_fy_sorted
+                    if h.get("quarter") in ("Q1", "Q2", "Q3", "Q4") and h.get("qtr_eps") is not None]
+            if len(vals) == 4:
+                prev_fy_eps = round(sum(vals), 2)
+
+    # FY EPS Estimated: use stored fy_eps_stored if available, else compute using formula
+    fy_eps_est = None
+    has_consolidated = row.get("fy_from_consolidated", False) or row.get("eps_diluted_consolidated") is not None or row.get("eps_basic_consolidated") is not None
+    fy_eps_est_label = "FY (C)" if has_consolidated else "FY (S)"
+    stored_fy = row.get("fy_eps_stored")
+    if stored_fy is not None:
+        fy_eps_est = round(stored_fy, 2)
+    elif qi > 0:
+        # Compute using best available cumulative: prefer N9*4/3, then N6*2, then N3*4, then N12
+        n9_row = next((h for h in same_fy if h.get("quarter") == "Q3"), None)
+        n6_row = next((h for h in same_fy if h.get("quarter") == "Q2"), None)
+        n3_row = next((h for h in same_fy if h.get("quarter") == "Q1"), None)
+
+        if qi >= 3 and n9_row and n9_row.get("cum_eps") is not None:
+            fy_eps_est = round(n9_row["cum_eps"] * 4 / 3, 2)
+        elif qi >= 2 and n6_row and n6_row.get("cum_eps") is not None:
+            fy_eps_est = round(n6_row["cum_eps"] * 2, 2)
+        elif n3_row and n3_row.get("cum_eps") is not None:
+            fy_eps_est = round(n3_row["cum_eps"] * 4, 2)
+        elif cum_eps is not None:
+            if qi == 1:
+                fy_eps_est = round(cum_eps * 4, 2)
+            elif qi == 2:
+                fy_eps_est = round(cum_eps * 2, 2)
+            elif qi == 3:
+                fy_eps_est = round(cum_eps * 4 / 3, 2)
+            elif qi == 4:
+                fy_eps_est = cum_eps
+
+    row["eps_qoq"] = eps_qoq
+    row["eps_qoq_label"] = eps_qoq_label
+    row["eps_yoy"] = eps_yoy
+    row["eps_yoy_label"] = eps_yoy_label
+    row["cum_eps"] = cum_eps
+    row["cum_eps_label"] = cum_eps_label
+    row["cum_prev_fy"] = cum_prev_fy
+    row["cum_prev_fy_label"] = cum_prev_fy_label
+    row["prev_fy_eps"] = prev_fy_eps
+    row["prev_fy_eps_label"] = prev_fy_eps_label
+    row["fy_eps_estimated"] = fy_eps_est
+    row["fy_eps_est_label"] = fy_eps_est_label
+    return row
+
+
+@router.get("/pe_analysis")
+async def get_pe_analysis(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=5000),
+    valuation_filter: str = Query("pending"),
+    year: Optional[str] = None,
+    quarter: Optional[str] = None,
+    exchange: Optional[str] = None,
+    sector: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Paginated PE analysis results with computed fields."""
+    cache_key = f"pe:list:{valuation_filter}:{page}:{per_page}:{year}:{quarter}:{exchange}:{sector}:{search}:{date_from}:{date_to}"
+    cached_result = await cache_get(cache_key)
+    if cached_result:
+        return cached_result
+
+    offset = (page - 1) * per_page
+    conditions = []
+    params = {"limit": per_page, "offset": offset}
+
+    if valuation_filter == "pending":
+        conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
+    elif valuation_filter == "reviewed":
+        conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
+        conditions.append("qr.extraction_status = 'completed'")
+    elif valuation_filter == "failed":
+        conditions.append("qr.extraction_status IN ('failed', 'error')")
+
+    if year:
+        year_num = _fy_to_year(year)
+        if year_num:
+            yr_short = str(year_num % 100).zfill(2)
+            conditions.append("qr.financial_year LIKE :year_pattern")
+            params["year_pattern"] = f"%{yr_short}%"
+        else:
+            conditions.append("qr.financial_year = :year")
+            params["year"] = year
+    if quarter:
+        conditions.append("qr.quarter = :quarter")
+        params["quarter"] = quarter
+    if exchange:
+        conditions.append("qr.exchange = :exchange")
+        params["exchange"] = exchange
+    if sector:
+        conditions.append("s.sector = :sector")
+        params["sector"] = sector
+    if search:
+        conditions.append("(qr.stock_symbol ILIKE :search OR qr.company_name ILIKE :search)")
+        params["search"] = f"%{search}%"
+    if date_from:
+        try:
+            df_dt = datetime.strptime(date_from[:10], "%Y-%m-%d")
+            conditions.append("COALESCE(qr.announcement_date, qr.created_at) >= :date_from")
+            params["date_from"] = df_dt
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_dt = datetime.strptime(date_to[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999000)
+            conditions.append("COALESCE(qr.announcement_date, qr.created_at) <= :date_to")
+            params["date_to"] = dt_dt
+        except ValueError:
+            pass
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # Window-function dedup: ONE row per stock_symbol (latest FY+Quarter, prefer completed).
+    # NOTE: previous version had two correlated subqueries that walked
+    # quarterly_results to find consolidated FY EPS via "same company_name from
+    # a different stock_symbol". That made PE Pending O(N^2) and dominated
+    # latency past ~1500 rows. Using only local row data here — the cross-symbol
+    # fallback is rare enough that it's fine to handle at write time, not read time.
+    dedup_cte = f"""
+        WITH ranked AS (
+          SELECT qr.*,
+            COALESCE(qr.eps_diluted_consolidated, qr.eps_basic_consolidated,
+                     qr.eps_diluted_standalone, qr.eps_basic_standalone) AS qtr_eps,
+            COALESCE(qr.cumulative_eps_diluted_consolidated, qr.cumulative_eps_basic_consolidated,
+                     qr.cumulative_eps_diluted_standalone, qr.cumulative_eps_basic_standalone) AS cum_eps_stored,
+            COALESCE(
+              qr.fy_eps_diluted_consolidated, qr.fy_eps_basic_consolidated,
+              qr.fy_eps_diluted_standalone, qr.fy_eps_basic_standalone
+            ) AS fy_eps_stored,
+            (qr.fy_eps_diluted_consolidated IS NOT NULL
+             OR qr.fy_eps_basic_consolidated IS NOT NULL) AS fy_from_consolidated,
+            s.sector, s.sub_sector,
+            ROW_NUMBER() OVER (
+              PARTITION BY qr.stock_symbol
+              ORDER BY qr.financial_year DESC, qr.quarter DESC,
+                CASE WHEN qr.extraction_status = 'completed' THEN 0 ELSE 1 END,
+                qr.id DESC
+            ) AS rn
+          FROM quarterly_results qr
+          LEFT JOIN stocks s ON qr.stock_symbol = s.symbol
+          {where}
+        )
+    """
+
+    count_sql = f"""
+        {dedup_cte}
+        SELECT COUNT(*) FROM ranked WHERE rn = 1
+    """
+    count_row = await db.execute(text(count_sql), params)
+    total = count_row.scalar()
+
+    data_sql = f"""
+        {dedup_cte}
+        SELECT * FROM ranked WHERE rn = 1
+        ORDER BY COALESCE(announcement_date, created_at) DESC
+        LIMIT :limit OFFSET :offset
+    """
+    rows = await db.execute(text(data_sql), params)
+    results = [dict(r._mapping) for r in rows.fetchall()]
+
+    # Fetch history for all symbols in this page to compute derived fields
+    symbols = list({r["stock_symbol"] for r in results if r.get("stock_symbol")})
+    history_map: dict[str, list[dict]] = {s: [] for s in symbols}
+
+    if symbols:
+        hist_rows = await db.execute(text("""
+            SELECT id, stock_symbol, quarter, financial_year,
+              COALESCE(eps_diluted_consolidated, eps_basic_consolidated,
+                       eps_diluted_standalone, eps_basic_standalone) AS qtr_eps,
+              COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
+                       cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
+            FROM quarterly_results
+            WHERE stock_symbol = ANY(:syms) AND extraction_status = 'completed'
+            ORDER BY stock_symbol, financial_year, quarter, id
+        """), {"syms": symbols})
+        for h in hist_rows.fetchall():
+            hd = dict(h._mapping)
+            if hd.get("qtr_eps") is not None:
+                history_map.setdefault(hd["stock_symbol"], []).append(hd)
+
+    for row in results:
+        sym = row.get("stock_symbol", "")
+        _compute_derived_fields(row, history_map.get(sym, []))
+
+    response = {
+        "results": results,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+    }
+
+    await cache_set(cache_key, response, ttl=15)
+    return response
+
+
+_VALUATION_VALUE_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,49}$")
+
+
+def _normalize_custom_value(raw: str) -> str:
+    """Coerce free-form input ('under valued', 'My Tag', 'TEST 1') to a canonical
+    UPPER_SNAKE_CASE value that can live alongside the built-in options."""
+    s = (raw or "").strip().upper()
+    s = re.sub(r"[^A-Z0-9]+", "_", s).strip("_")
+    return s
+
+
+@router.get("/pe_analysis/valuation_options")
+async def get_valuation_options(db: AsyncSession = Depends(get_db)):
+    """
+    Returns the merged valuation list (built-in + user-created custom).
+    Each item carries `is_custom` so the UI can show a delete affordance only
+    for custom rows. Built-ins are defined in `app.constants.VALUATION_OPTIONS`
+    and CANNOT be deleted.
+    """
+    custom_rows = await db.execute(text(
+        "SELECT id, value, label, tone FROM custom_valuations ORDER BY created_at"
+    ))
+    custom = [
+        {"value": r.value, "label": r.label, "tone": r.tone, "is_custom": True, "id": r.id}
+        for r in custom_rows.fetchall()
+    ]
+
+    builtins = [{**opt, "is_custom": False} for opt in VALUATION_OPTIONS]
+
+    # Drop any custom entries that collide with a built-in value (shouldn't happen
+    # because POST blocks it, but defensive).
+    builtin_values = {b["value"] for b in builtins}
+    custom = [c for c in custom if c["value"] not in builtin_values]
+
+    return {"options": builtins + custom}
+
+
+@router.post("/pe_analysis/valuation_options")
+async def create_custom_valuation(body: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Create a new custom valuation remark. Auto-normalizes the input string
+    (e.g. 'My Tag' -> 'MY_TAG'). Rejects collisions with built-in values
+    or existing customs.
+    """
+    raw = (body.get("value") or body.get("label") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="value or label is required")
+
+    value = _normalize_custom_value(raw)
+    if not _VALUATION_VALUE_RE.match(value):
+        raise HTTPException(
+            status_code=400,
+            detail="Value must start with a letter and be 2-50 chars (A-Z, 0-9, _).",
+        )
+    if value in VALUATION_VALUES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{value}' is a built-in remark and cannot be added as custom.",
+        )
+
+    label = (body.get("label") or raw).strip()[:60]
+    tone = (body.get("tone") or "neutral").strip().lower()
+    if tone not in ("bullish", "neutral", "bearish", "ignored"):
+        tone = "neutral"
+
+    try:
+        result = await db.execute(text("""
+            INSERT INTO custom_valuations (value, label, tone)
+            VALUES (:v, :l, :t)
+            RETURNING id, value, label, tone
+        """), {"v": value, "l": label, "t": tone})
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
+            raise HTTPException(status_code=409, detail=f"'{value}' already exists.")
+        raise
+
+    row = result.first()
+    await invalidate_pe_analysis()
+    return {
+        "value": row.value,
+        "label": row.label,
+        "tone": row.tone,
+        "is_custom": True,
+        "id": row.id,
+    }
+
+
+@router.delete("/pe_analysis/valuation_options/{value}")
+async def delete_custom_valuation(value: str, db: AsyncSession = Depends(get_db)):
+    """
+    Delete a custom valuation. Built-in remarks cannot be deleted (returns 403).
+    Existing rows in `quarterly_results` that reference the deleted value are
+    LEFT INTACT — they continue to display as the (now-orphan) string until
+    the user edits them. We don't cascade-update because that would silently
+    rewrite user data.
+    """
+    canon = _normalize_custom_value(value)
+    if canon in VALUATION_VALUES:
+        raise HTTPException(status_code=403, detail="Built-in remarks cannot be deleted.")
+
+    result = await db.execute(text(
+        "DELETE FROM custom_valuations WHERE value = :v RETURNING id"
+    ), {"v": canon})
+    await db.commit()
+    if result.first() is None:
+        raise HTTPException(status_code=404, detail=f"Custom remark '{canon}' not found.")
+
+    # Count rows still using it so the UI can warn the user.
+    used = await db.execute(text(
+        "SELECT COUNT(*) FROM quarterly_results WHERE valuation = :v"
+    ), {"v": canon})
+    await invalidate_pe_analysis()
+    return {"success": True, "value": canon, "rows_still_using": int(used.scalar() or 0)}
+
+
+@router.get("/pe_analysis/filters")
+async def get_pe_filters(db: AsyncSession = Depends(get_db)):
+    """Get available filter options for PE analysis page."""
+    cached_result = await cache_get("pe:filters")
+    if cached_result:
+        return cached_result
+
+    years = await db.execute(text(
+        "SELECT DISTINCT financial_year FROM quarterly_results WHERE financial_year IS NOT NULL ORDER BY financial_year DESC"
+    ))
+    quarters = await db.execute(text(
+        "SELECT DISTINCT quarter FROM quarterly_results WHERE quarter IS NOT NULL ORDER BY quarter"
+    ))
+    exchanges = await db.execute(text(
+        "SELECT DISTINCT exchange FROM quarterly_results WHERE exchange IS NOT NULL ORDER BY exchange"
+    ))
+    sectors = await db.execute(text(
+        "SELECT DISTINCT sector FROM stocks WHERE sector IS NOT NULL AND sector != '' ORDER BY sector"
+    ))
+
+    result = {
+        "years": [r[0] for r in years.fetchall()],
+        "quarters": [r[0] for r in quarters.fetchall()],
+        "exchanges": [r[0] for r in exchanges.fetchall()],
+        "sectors": [r[0] for r in sectors.fetchall()],
+    }
+
+    await cache_set("pe:filters", result, ttl=60)
+    return result
+
+
+@router.get("/pe_analysis/report_summary")
+async def get_report_summary(db: AsyncSession = Depends(get_db)):
+    """Aggregated analytics report — all computation server-side."""
+    cached_result = await cache_get("report:summary")
+    if cached_result:
+        return cached_result
+
+    # Get all reviewed results (deduplicated to best-per-stock)
+    rows = await db.execute(text("""
+        SELECT DISTINCT ON (stock_symbol)
+            stock_symbol, pe, cmp, valuation, recommendation, target_price,
+            financial_year, quarter, exchange
+        FROM quarterly_results
+        WHERE valuation IS NOT NULL AND valuation != '' AND extraction_status = 'completed'
+        ORDER BY stock_symbol, financial_year DESC, quarter DESC
+    """))
+    data = [dict(r._mapping) for r in rows.fetchall()]
+
+    if not data:
+        return {"summary": {}, "pe_distribution": [], "valuation_counts": {},
+                "sector_summary": [], "top_cheapest": [], "top_expensive": []}
+
+    # Compute aggregations
+    pe_values = [r["pe"] for r in data if r["pe"] and r["pe"] > 0]
+    avg_pe = sum(pe_values) / len(pe_values) if pe_values else 0
+    sorted_pe = sorted(pe_values)
+    median_pe = sorted_pe[len(sorted_pe) // 2] if sorted_pe else 0
+
+    valuation_counts: dict = {}
+    for r in data:
+        v = canonicalize_valuation(r.get("valuation")) or "UNKNOWN"
+        valuation_counts[v] = valuation_counts.get(v, 0) + 1
+
+    # PE distribution buckets
+    buckets = [(0, 10), (10, 20), (20, 30), (30, 50), (50, 100), (100, 9999)]
+    pe_distribution = []
+    for lo, hi in buckets:
+        label = f"{lo}-{hi}" if hi < 9999 else f"{lo}+"
+        count = sum(1 for p in pe_values if lo <= p < hi)
+        pe_distribution.append({"range": label, "count": count})
+
+    # Sector summary — `cheap` = bullish-tone (CHEAP + UNDER_VALUED), `expensive` = bearish-tone.
+    sector_map: dict = {}
+    for r in data:
+        sector = r.get("sector") or "Unknown"
+        if sector not in sector_map:
+            sector_map[sector] = {"sector": sector, "count": 0, "pe_sum": 0, "cheap": 0, "expensive": 0}
+        sector_map[sector]["count"] += 1
+        if r["pe"]:
+            sector_map[sector]["pe_sum"] += r["pe"]
+        tone = valuation_tone(r.get("valuation"))
+        if tone == VALUATION_TONE_BULLISH:
+            sector_map[sector]["cheap"] += 1
+        elif tone == VALUATION_TONE_BEARISH:
+            sector_map[sector]["expensive"] += 1
+
+    sector_summary = []
+    for s in sector_map.values():
+        s["avg_pe"] = s["pe_sum"] / s["count"] if s["count"] else 0
+        del s["pe_sum"]
+        sector_summary.append(s)
+    sector_summary.sort(key=lambda x: x["count"], reverse=True)
+
+    # Top 10
+    with_pe = [r for r in data if r["pe"] and r["pe"] > 0]
+    top_cheapest = sorted(with_pe, key=lambda x: x["pe"])[:10]
+    top_expensive = sorted(with_pe, key=lambda x: x["pe"], reverse=True)[:10]
+
+    result = {
+        "summary": {"total": len(data), "avg_pe": avg_pe, "median_pe": median_pe},
+        "pe_distribution": pe_distribution,
+        "valuation_counts": valuation_counts,
+        "sector_summary": sector_summary,
+        "top_cheapest": top_cheapest,
+        "top_expensive": top_expensive,
+    }
+
+    await cache_set("report:summary", result, ttl=30)
+    return result
+
+
+@router.get("/pe_formulas")
+async def get_pe_formulas(db: AsyncSession = Depends(get_db)):
+    """Get all PE formulas."""
+    rows = await db.execute(text("SELECT * FROM pe_formulas ORDER BY is_default DESC, name"))
+    return {"formulas": [dict(r._mapping) for r in rows.fetchall()]}
+
+
+@router.post("/pe_formulas")
+async def create_pe_formula(body: dict, db: AsyncSession = Depends(get_db)):
+    """Create a new PE formula."""
+    result = await db.execute(text("""
+        INSERT INTO pe_formulas (name, q1_expr, q2_expr, q3_expr, q4_expr, is_default)
+        VALUES (:name, :q1, :q2, :q3, :q4, false)
+        RETURNING id
+    """), {
+        "name": body["name"],
+        "q1": body.get("q1_expr", "Q1*4"),
+        "q2": body.get("q2_expr", "(Q1+Q2)*2"),
+        "q3": body.get("q3_expr", "(Q1+Q2+Q3)*4/3"),
+        "q4": body.get("q4_expr", "FY"),
+    })
+    await db.commit()
+    return {"success": True, "id": result.scalar()}
+
+
+@router.put("/pe_formulas/{formula_id}/activate")
+async def activate_formula(formula_id: int, db: AsyncSession = Depends(get_db)):
+    """Set a formula as the default."""
+    await db.execute(text("UPDATE pe_formulas SET is_default = false"))
+    await db.execute(text("UPDATE pe_formulas SET is_default = true WHERE id = :id"), {"id": formula_id})
+    await db.commit()
+    await invalidate_pe_analysis()
+    return {"success": True}
+
+
+@router.post("/pe_analysis/{symbol}/retrigger")
+async def retrigger_pe_extraction(
+    symbol: str,
+    row_id: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-queue PDF extraction for a stock row.
+
+    - With ?row_id=N: retriggers that exact row.
+    - Without row_id: retriggers the latest row for that stock_symbol.
+
+    Marks the row as 'pending', clears the previous error, and dispatches a fresh
+    Celery task. Useful when an extraction failed (OpenAI quota, parse error, network)
+    or returned partial data.
+    """
+    if row_id is not None:
+        row = await db.execute(text("""
+            SELECT id, stock_symbol, source_pdf_url, exchange, company_name, announcement_date
+            FROM quarterly_results
+            WHERE id = :rid AND stock_symbol = :sym
+            LIMIT 1
+        """), {"rid": row_id, "sym": symbol})
+    else:
+        row = await db.execute(text("""
+            SELECT id, stock_symbol, source_pdf_url, exchange, company_name, announcement_date
+            FROM quarterly_results
+            WHERE stock_symbol = :sym
+            ORDER BY COALESCE(announcement_date, created_at) DESC, id DESC
+            LIMIT 1
+        """), {"sym": symbol})
+
+    found = row.first()
+    if not found:
+        raise HTTPException(status_code=404, detail=f"No row found for {symbol}")
+    if not found.source_pdf_url:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{symbol} has no source PDF URL — cannot retrigger; upload PDF manually.",
+        )
+
+    # Mark current row as pending, clear previous error, kick off the task.
+    await db.execute(text("""
+        UPDATE quarterly_results
+        SET extraction_status = 'pending',
+            extraction_error = NULL,
+            updated_at = NOW()
+        WHERE id = :rid
+    """), {"rid": found.id})
+    await db.commit()
+
+    from worker.tasks.extraction import run_quarterly_extraction
+    task = run_quarterly_extraction.delay(
+        stock_symbol=found.stock_symbol,
+        pdf_url=found.source_pdf_url,
+        exchange=found.exchange or "BSE",
+        company_name=found.company_name or "",
+        announcement_date=str(found.announcement_date) if found.announcement_date else None,
+    )
+
+    await invalidate_pe_analysis()
+
+    return {
+        "success": True,
+        "row_id": found.id,
+        "symbol": found.stock_symbol,
+        "task_id": task.id,
+        "status": "queued",
+    }
+
+
+@router.delete("/pe_analysis/{symbol}")
+async def delete_pe_analysis(symbol: str, db: AsyncSession = Depends(get_db)):
+    """Delete all quarterly results for a stock."""
+    result = await db.execute(
+        text("DELETE FROM quarterly_results WHERE stock_symbol = :sym"),
+        {"sym": symbol},
+    )
+    await db.commit()
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+
+    await invalidate_pe_analysis()
+    return {"success": True, "deleted": result.rowcount}
+
+
+@router.put("/pe_analysis/{symbol}")
+async def update_pe_analysis(symbol: str, body: dict, db: AsyncSession = Depends(get_db)):
+    """Update valuation/recommendation/comments/cmp/pe etc for a stock."""
+    allowed_fields = [
+        "valuation", "recommendation", "comments", "target_price",
+        "manual_fy_eps", "manual_fy_eps_formula", "cmp", "pe",
+    ]
+    updates = {k: v for k, v in body.items() if k in allowed_fields and v is not None}
+
+    if "valuation" in updates and updates["valuation"]:
+        canon = canonicalize_valuation(str(updates["valuation"]))
+        if canon and canon not in VALUATION_VALUES:
+            # Allow if it matches a user-defined custom remark.
+            row = await db.execute(text(
+                "SELECT 1 FROM custom_valuations WHERE value = :v"
+            ), {"v": canon})
+            if row.first() is None:
+                allowed = sorted(VALUATION_VALUES)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid valuation '{updates['valuation']}'. "
+                           f"Allowed built-ins: {allowed}, or any registered custom remark.",
+                )
+        updates["valuation"] = canon
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["sym"] = symbol
+
+    await db.execute(text(f"""
+        UPDATE quarterly_results SET {set_clause}, updated_at = NOW()
+        WHERE stock_symbol = :sym
+        AND id = (SELECT id FROM quarterly_results WHERE stock_symbol = :sym ORDER BY financial_year DESC, quarter DESC LIMIT 1)
+    """), updates)
+    await db.commit()
+
+    # Update sector/sub_sector in stocks table if provided
+    stock_updates = {k: v for k, v in body.items() if k in ("sector", "sub_sector") and v is not None}
+    if stock_updates:
+        set_stock = ", ".join(f"{k} = :{k}" for k in stock_updates)
+        stock_updates["sym"] = symbol
+        await db.execute(text(f"UPDATE stocks SET {set_stock} WHERE symbol = :sym"), stock_updates)
+        await db.commit()
+
+    await invalidate_pe_analysis()
+    return {"success": True}

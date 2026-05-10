@@ -1,0 +1,99 @@
+# Environment variables and secrets
+.env
+*.env
+kotak_session.json
+google_sheets_credentials.json
+
+# Database files
+messages.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Persistent data directory for Docker
+data/
+
+# Generated folders (runtime data — PDFs, images, uploads)
+files/
+images/
+images_concall/
+images_test/
+downloads/
+downloads_concall/
+downloads_test/
+temp_uploads/
+
+# Exclude log files
+app.log
+*.log
+
+# Exclude cookies and runtime state files
+cookies.txt
+config.json
+last_actions.json
+financial_extraction_pymupdf_output.json
+
+# Exclude documentation and context files
+memory_context.md
+async_architecture_explained.md
+google_sheets_setup.md
+session_auth_summary.md
+timezone_fix_summary.md
+AUTH_README.md
+SESSION_AUTH_SUMMARY.md
+TIMEZONE_FIX_SUMMARY.md
+ASYNC_ARCHITECTURE_EXPLAINED.md
+GOOGLE_SHEETS_SETUP.md
+
+# Exclude specific Python files
+older_final_nse_alerts.py
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Dev tools (Postman collections, API docs)
+postman/
+kotak_neo_new_api_postman_collection.json
+
+# Node.js / Next.js
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+
+# Python virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python build and distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg 

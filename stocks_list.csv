@@ -1,0 +1,3481 @@
+id,symbol,company_name,exchange,sector
+3272,21STCENMGM,21st Century Management Services Limited,NSE,Capital Markets
+3273,360ONE,360 ONE WAM LIMITED,NSE,Capital Markets
+3274,3MINDIA,3M India Limited,NSE,Diversified
+3275,500002,ABB India Ltd,BSE,Capital Goods
+3276,500008,Amara Raja Energy & Mobility Ltd,BSE,Auto Ancillaries
+3277,500020,Bombay Dyeing & Manufacturing Company Ltd,BSE,Textiles
+3278,500023,Asian Hotels (North) Ltd,BSE,Hospitality / Leisure
+3279,500031,Bajaj Electricals Ltd-$,BSE,Consumer Durables
+3280,500032,Bajaj Hindusthan Sugar Ltd,BSE,FMCG
+3281,500033,Force Motors Ltd-$,BSE,Automobiles
+3282,500034,Bajaj Finance Ltd,BSE,NBFC & Financial Services
+3283,500038,Balrampur Chini Mills Ltd,BSE,FMCG
+3284,500040,Aditya Birla Real Estate Ltd,BSE,Paper
+3285,500042,BASF India Ltd,BSE,Chemicals
+3286,500049,Bharat Electronics Ltd,BSE,Defence
+3287,500052,Bhansali Engineering Polymers Ltd-$,BSE,Chemicals
+3288,500058,Bihar Sponge Iron Ltd,BSE,Metals
+3289,500067,Blue Star Ltd,BSE,Consumer Durables
+3290,500074,BPL Ltd,BSE,
+3291,500078,Oriental Aromatics Ltd-$,BSE,Chemicals
+3292,500083,Century Extrusions Ltd,BSE,
+3293,500084,CESC Ltd,BSE,Power
+3294,500085,Chambal Fertilisers & Chemicals Ltd,BSE,Chemicals
+3295,500086,Exide Industries Ltd,BSE,Auto Ancillaries
+3296,500087,Cipla Ltd,BSE,Pharma
+3297,500089,DIC India Ltd,BSE,Chemicals
+3298,500092,CRISIL Ltd,BSE,
+3299,500093,CG Power and Industrial Solutions Ltd,BSE,Capital Goods
+3300,500096,Dabur India Ltd,BSE,FMCG
+3301,500097,Dalmia Bharat Sugar and Industries Ltd,BSE,FMCG
+3302,500103,Bharat Heavy Electricals Ltd,BSE,Capital Goods
+3303,500104,Hindustan Petroleum Corporation Ltd,BSE,Oil & Gas
+3304,500108,Mahanagar Telephone Nigam Ltd,BSE,Telecom
+3305,500109,Mangalore Refinery and Petrochemicals Ltd,BSE,Oil & Gas
+3306,500110,Chennai Petroleum Corporation Ltd,BSE,Oil & Gas
+3307,500112,State Bank of India,BSE,Banks
+3308,500113,Steel Authority of India Ltd,BSE,Metals
+3309,500114,Titan Company Ltd,BSE,Consumer Durables
+3310,500117,DCW Ltd,BSE,Chemicals
+3311,500119,Dhampur Sugar Mills Ltd,BSE,
+3312,500123,Elantas Beck India Ltd-$,BSE,
+3313,500124,Dr Reddys Laboratories Ltd,BSE,
+3314,500125,EID Parry India Ltd,BSE,FMCG
+3315,500135,EPL Ltd,BSE,Capital Goods
+3316,500136,Ester Industries Ltd,BSE,Capital Goods
+3317,500142,FGP Ltd,BSE,NBFC & Financial Services
+3318,500143,PH Capital Ltd,BSE,NBFC & Financial Services
+3319,500147,John Cockerill India Ltd-$,BSE,
+3320,500148,Uflex Ltd,BSE,Capital Goods
+3321,500150,Foseco India Ltd,BSE,Chemicals
+3322,500163,Godfrey Phillips India Ltd,BSE,FMCG
+3323,500164,Godrej Industries Ltd,BSE,Diversified
+3324,500165,Kansai Nerolac Paints Ltd,BSE,Consumer Durables
+3325,500166,Goodricke Group Ltd,BSE,FMCG
+3326,500171,GHCL Ltd,BSE,Chemicals
+3327,500178,Harig Crankshafts Ltd,BSE,Auto Ancillaries
+3328,500179,HCL Infosystems Ltd,BSE,IT  Hardware
+3329,500180,HDFC Bank Ltd,BSE,
+3330,500182,Hero MotoCorp Ltd,BSE,Automobiles
+3331,500183,HFCL Ltd,BSE,Telecom
+3332,500184,Himadri Speciality Chemical Ltd,BSE,Chemicals
+3333,500185,Hindustan Construction Company Ltd,BSE,
+3334,500186,Hindustan Oil Exploration Company Ltd,BSE,Oil & Gas
+3335,500187,Agi Greenpac Ltd,BSE,Capital Goods
+3336,500188,Hindustan Zinc Ltd,BSE,Metals
+3337,500192,Prag Bosimi Synthetics Ltd,BSE,
+3338,500193,HLV Ltd,BSE,Hospitality / Leisure
+3339,500201,India Glycols Ltd,BSE,FMCG
+3340,500202,India Lease Development Ltd,BSE,NBFC & Financial Services
+3341,500207,Indo Rama Synthetics (India) Ltd,BSE,Textiles
+3342,500209,Infosys Ltd,BSE,IT  Software
+3343,500213,International Travel House Ltd-$,BSE,Hospitality / Leisure
+3344,500220,Jasch Industries Ltd,BSE,Textiles
+3345,500228,JSW Steel Ltd,BSE,Metals
+3346,500238,Whirlpool of India Ltd,BSE,
+3347,500239,KG Denim Ltd,BSE,Textiles
+3348,500240,Kinetic Engineering Ltd,BSE,
+3349,500243,Kirloskar Industries Ltd,BSE,Capital Goods
+3350,500245,Kirloskar Ferrous Industries Ltd,BSE,Metals
+3351,500246,Envair Electrodyne Ltd,BSE,Capital Goods
+3352,500247,Kotak Mahindra Bank Ltd,BSE,Banks
+3353,500248,Krishna Filament Industries Ltd,BSE,Capital Goods
+3354,500249,KSB Ltd,BSE,Capital Goods
+3355,500250,LG Balakrishnan & Bros Ltd,BSE,Auto Ancillaries
+3356,500251,Trent Ltd,BSE,Retail
+3357,500252,LMW Ltd,BSE,Capital Goods
+3358,500253,LIC Housing Finance Ltd,BSE,NBFC & Financial Services
+3359,500257,Lupin Ltd,BSE,Pharma
+3360,500260,The Ramco Cements Ltd,BSE,Cement & Mining
+3361,500264,Mafatlal Industries Ltd-$,BSE,Textiles
+3362,500266,Maharashtra Scooters Ltd,BSE,NBFC & Financial Services
+3363,500268,Manali Petrochemicals Ltd,BSE,Chemicals
+3364,500271,Max Financial Services Ltd,BSE,Insurance
+3365,500277,Mid India Industries Ltd,BSE,Textiles
+3366,500280,Century Enka Ltd,BSE,Textiles
+3367,500282,Modern Thread India Ltd,BSE,Textiles
+3368,500288,Morepen Laboratories Ltd,BSE,
+3369,500294,NCC Ltd,BSE,Construction & Infra
+3370,500295,Vedanta Ltd,BSE,Metals
+3371,500298,Naperol Investments Ltd,BSE,NBFC & Financial Services
+3372,500300,Grasim Industries Ltd,BSE,Cement & Mining
+3373,500304,NIIT Ltd,BSE,Consumer Services
+3374,500306,Jaykay Enterprises Ltd,BSE,Defence
+3375,500307,Nirlon Ltd,BSE,Business Services
+3376,500312,Oil and Natural Gas Corporation Ltd,BSE,Oil & Gas
+3377,500314,Oriental Hotels Ltd,BSE,Hospitality / Leisure
+3378,500317,Oswal Agro Mills Ltd,BSE,
+3379,500319,Indian Sucrose Ltd,BSE,FMCG
+3380,500322,Panyam Cements & Mineral Industries Ltd,BSE,
+3381,500330,Raymond Ltd,BSE,Real Estate
+3382,500331,Pidilite Industries Ltd,BSE,Chemicals
+3383,500335,Birla Corporation Ltd,BSE,Cement & Mining
+3384,500336,Surya Roshni Ltd,BSE,Capital Goods
+3385,500339,Rain Industries Ltd,BSE,Chemicals
+3386,500350,RSWM Ltd,BSE,Textiles
+3387,500355,Rallis India Ltd,BSE,Chemicals
+3388,500360,Rapicut Carbides Ltd,BSE,
+3389,500365,Welspun Specialty Solutions Ltd,BSE,Capital Goods
+3390,500368,Patanjali Foods Ltd,BSE,FMCG
+3391,500378,Jindal Saw Ltd,BSE,Capital Goods
+3392,500380,JK Lakshmi Cement Ltd,BSE,
+3393,500387,Shree Cement Ltd,BSE,Cement & Mining
+3394,500389,Silverline Technologies Ltd,BSE,IT  Software
+3395,500400,Tata Power Company Ltd,BSE,Power
+3396,500402,SPML Infra Ltd,BSE,Construction & Infra
+3397,500403,Sundram Fasteners Ltd,BSE,Auto Ancillaries
+3398,500404,Sunflag Iron & Steel Company Ltd,BSE,Capital Goods
+3399,500405,Supreme Petrochem Ltd,BSE,
+3400,500407,Swaraj Engines Ltd,BSE,
+3401,500408,Tata Elxsi Ltd,BSE,IT  Software
+3402,500410,ACC Ltd,BSE,Cement & Mining
+3403,500411,Thermax Ltd,BSE,Capital Goods
+3404,500413,Thomas Cook (India) Ltd,BSE,Hospitality / Leisure
+3405,500422,Transchem Ltd-$,BSE,Pharma
+3406,500425,Ambuja Cements Ltd,BSE,Cement & Mining
+3407,500439,Vardhman Holdings Ltd,BSE,NBFC & Financial Services
+3408,500444,West Coast Paper Mills Ltd,BSE,Paper
+3409,500449,Hindustan Organic Chemicals Ltd,BSE,
+3410,500463,Black Box Ltd,BSE,IT  Services
+3411,500464,Ucal  Ltd,BSE,Auto Ancillaries
+3412,500469,Federal Bank Ltd,BSE,Banks
+3413,500470,Tata Steel Ltd,BSE,Metals
+3414,500477,Ashok Leyland Ltd,BSE,Automobiles
+3415,500480,Cummins India Ltd,BSE,Capital Goods
+3416,500490,Bajaj Holdings & Investment Ltd,BSE,NBFC & Financial Services
+3417,500493,Bharat Forge Ltd,BSE,Auto Ancillaries
+3418,500495,Escorts Kubota Ltd,BSE,Automobiles
+3419,500500,Hindustan Motors Ltd,BSE,Automobiles
+3420,500510,Larsen & Toubro Ltd,BSE,Construction & Infra
+3421,500520,Mahindra & Mahindra Ltd,BSE,Automobiles
+3422,500547,Bharat Petroleum Corporation Ltd,BSE,Oil & Gas
+3423,500570,Tata Motors Passenger Vehicles Ltd,BSE,Automobiles
+3424,500575,Voltas Ltd,BSE,
+3425,500645,Deepak Fertilisers & Petrochemicals Corporation Ltd,BSE,
+3426,500650,Excel Industries Ltd,BSE,
+3427,500655,Garware Hi-Tech Films Ltd,BSE,Capital Goods
+3428,500660,GlaxoSmithKline Pharmaceuticals Ltd,BSE,
+3429,500670,Gujarat Narmada Valley Fertilizers & Chemicals Ltd,BSE,Chemicals
+3430,500674,Sanofi India Ltd,BSE,Pharma
+3431,500680,Pfizer Ltd,BSE,Pharma
+3432,500690,Gujarat State Fertilizers & Chemicals Ltd,BSE,Chemicals
+3433,500696,Hindustan Unilever Ltd,BSE,FMCG
+3434,500710,JSW Dulux Ltd,BSE,Consumer Durables
+3435,500730,NOCIL Ltd,BSE,Chemicals
+3436,500770,Tata Chemicals Ltd,BSE,Chemicals
+3437,500777,Tamilnadu Petroproducts Ltd,BSE,Chemicals
+3438,500780,Zuari Industries Ltd,BSE,
+3439,500790,Nestle India Ltd,BSE,
+3440,500800,Tata Consumer Products Ltd,BSE,FMCG
+3441,500820,Asian Paints Ltd,BSE,
+3442,500825,Britannia Industries Ltd,BSE,FMCG
+3443,500840,EIH Ltd,BSE,Hospitality / Leisure
+3444,500850,Indian Hotels Company Ltd,BSE,Hospitality / Leisure
+3445,500870,Castrol India Ltd,BSE,Oil & Gas
+3446,500875,ITC Ltd,BSE,
+3447,500877,Apollo Tyres Ltd,BSE,Auto Ancillaries
+3448,500878,Ceat Ltd,BSE,Auto Ancillaries
+3449,501150,Centrum Capital Ltd,BSE,NBFC & Financial Services
+3450,501151,Kartik Investments Trust Ltd,BSE,NBFC & Financial Services
+3451,501261,Lords Mark Industries Ltd,BSE,
+3452,501298,Industrial & Prudential Investment Company Ltd,BSE,NBFC & Financial Services
+3453,501311,Jayabharat Credit Ltd-$,BSE,NBFC & Financial Services
+3454,501314,Prismx Global Ventures Ltd,BSE,Business Services
+3455,501343,Motor & General Finance Ltd,BSE,Business Services
+3456,501370,Walchand Peoplefirst Ltd,BSE,Business Services
+3457,501455,Greaves Cotton Ltd,BSE,Capital Goods
+3458,501622,Amalgamated Electricity Company Ltd,BSE,Business Services
+3459,501945,Dhenu Buildcon Infra Ltd,BSE,
+3460,502015,ASI Industries Ltd,BSE,Metals & Mining
+3461,502090,Sagar Cements Ltd-$,BSE,Cement & Mining
+3462,502137,Deccan Cements Ltd-$,BSE,Cement & Mining
+3463,502157,Mangalam Cement Ltd,BSE,Cement & Mining
+3464,502168,NCL Industries Ltd-$,BSE,Cement & Mining
+3465,502180,Shree Digvijay Cement Company Ltd-$,BSE,Cement & Mining
+3466,502216,Bombay Potteries & Tiles Ltd,BSE,
+3467,502219,Borosil Renewables Ltd,BSE,Capital Goods
+3468,502250,Lerthai Finance Ltd,BSE,
+3469,502271,Raasi Refractories Ltd-$,BSE,
+3470,502294,Nilachal Refractories Ltd,BSE,Capital Goods
+3471,502330,Andhra Paper Ltd,BSE,Paper
+3472,502355,Balkrishna Industries Ltd-$,BSE,Auto Ancillaries
+3473,502448,Rollatainers Ltd,BSE,Capital Goods
+3474,502820,DCM Ltd,BSE,IT  Services
+3475,502901,Jamshri Realty Ltd-$,BSE,Real Estate
+3476,502937,Kesoram Industries Ltd,BSE,Cement & Mining
+3477,502986,Vardhman Textiles Ltd,BSE,Textiles
+3478,503100,The Phoenix Mills Ltd,BSE,
+3479,503101,Marathon Nextgen Realty Ltd,BSE,Real Estate
+3480,503162,Reliance Chemotex Industries Ltd-$,BSE,
+3481,503169,Ruby Mills Ltd,BSE,Textiles
+3482,503229,Simplex Realty Ltd,BSE,Real Estate
+3483,503624,Svaraj Trading & Agencies Ltd ,BSE,NBFC & Financial Services
+3484,503626,Kshitij Investments Ltd,BSE,
+3485,503639,Indsoya Ltd,BSE,Business Services
+3486,503641,Zodiac Ventures Ltd,BSE,
+3487,503663,Tilak Ventures Ltd,BSE,
+3488,503691,Sahara One Media & Entertainment Ltd-$,BSE,
+3489,503722,Banswara Syntex Ltd-$,BSE,Textiles
+3490,503776,Modipon Ltd,BSE,Real Estate
+3491,503804,Shri Dinesh Mills Ltd-$,BSE,
+3492,503806,SRF Ltd,BSE,Chemicals
+3493,504000,Elpro International Ltd,BSE,Real Estate
+3494,504028,GEE Ltd,BSE,Capital Goods
+3495,504058,Indo National Ltd,BSE,FMCG
+3496,504067,Zensar Technologies Ltd,BSE,IT  Software
+3497,504080,JSL Industries Ltd,BSE,Capital Goods
+3498,504092,Indokem Ltd,BSE,Chemicals
+3499,504112,Nelco Ltd,BSE,
+3500,504132,Permanent Magnets Ltd-$,BSE,Capital Goods
+3501,504212,Universal Cables Ltd,BSE,Capital Goods
+3502,504220,W. S. Industries (India) Ltd-$,BSE,Construction & Infra
+3503,504286,Delta Manufacturing Ltd,BSE,Capital Goods
+3504,504341,Ravindra Energy Ltd,BSE,Capital Goods
+3505,504365,Ridhi Synthetics Ltd,BSE,
+3506,504370,Ardi Investments & Trading Company Ltd,BSE,
+3507,504375,Softbpo Global Services Ltd,BSE,IT  Software
+3508,504378,Nyssa Corporation Ltd,BSE,
+3509,504380,Flomic Global Logistics Ltd,BSE,Logistics
+3510,504392,Krishna Ventures Ltd,BSE,Real Estate
+3511,504398,SJ Corporation Ltd,BSE,
+3512,504605,Uni Abex Alloy Products Ltd,BSE,
+3513,504648,Bombay Wire Ropes Ltd,BSE,
+3514,504697,Galada Power & Telecommunication Ltd,BSE,
+3515,504741,Indian Hume Pipe Company Ltd,BSE,Capital Goods
+3516,504786,Investment & Precision Castings Ltd,BSE,Capital Goods
+3517,504840,Kaira Can Company Ltd,BSE,Capital Goods
+3518,504903,Rathi Steel & Power Ltd-$,BSE,
+3519,504918,Sandur Manganese & Iron Ores Ltd,BSE,Oil & Gas
+3520,504959,Stovec Industries Ltd,BSE,
+3521,504961,Tayo Rolls Ltd-$,BSE,
+3522,504998,Western Ministil Ltd,BSE,
+3523,505029,Atlas Cycles (Haryana) Ltd,BSE,Consumer Durables
+3524,505032,Automobile Products of India Ltd,BSE,
+3525,505036,Automobile Corporation of Goa Ltd-$,BSE,Auto Ancillaries
+3526,505075,Setco Automotive Ltd,BSE,
+3527,505163,ZF Steering Gear India Ltd-$,BSE,Auto Ancillaries
+3528,505192,SML Mahindra Ltd,BSE,Automobiles
+3529,505196,TIL Ltd,BSE,
+3530,505200,Eicher Motors Ltd,BSE,Automobiles
+3531,505250,G. G. Dandekar Properties Ltd,BSE,Capital Goods
+3532,505283,Kirloskar Pneumatic Company Ltd,BSE,Capital Goods
+3533,505320,Lynx Machinery & Commercials Ltd,BSE,Capital Goods
+3534,505412,Wendt (India) Ltd,BSE,Capital Goods
+3535,505504,GHV Infra Projects Ltd,BSE,Construction & Infra
+3536,505509,Responsive Industries Ltd,BSE,Consumer Durables
+3537,505520,Hem Holdings & Trading Ltd,BSE,
+3538,505526,Dolat Algotech Ltd,BSE,Capital Markets
+3539,505693,La Tim Metal & Industries Ltd,BSE,Metals & Mining
+3540,505700,Elecon Engineering Company Ltd,BSE,Capital Goods
+3541,505703,Satani Bearings Ltd,BSE,
+3542,505712,Him Teknoforge Ltd,BSE,
+3543,505720,Hercules Investments Ltd,BSE,Capital Goods
+3544,505750,Josts Engineering Company Ltd,BSE,
+3545,505790,Schaeffler India Ltd,BSE,Auto Ancillaries
+3546,505800,Rane Holdings Ltd,BSE,NBFC & Financial Services
+3547,505807,Rolcon Engineering Company Ltd,BSE,Capital Goods
+3548,505827,SNL Bearings Ltd,BSE,Auto Ancillaries
+3549,505850,Mangal Credit and Fincorp Ltd,BSE,NBFC & Financial Services
+3550,505854,TRF Ltd-$,BSE,
+3551,505872,WPIL Ltd,BSE,
+3552,505890,Kennametal India Ltd-$,BSE,Capital Goods
+3553,505978,Triton Valves Ltd,BSE,Auto Ancillaries
+3554,506024,Hariyana Ventures Ltd,BSE,
+3555,506042,Prabhu Steel Industries Ltd,BSE,
+3556,506074,Arshiya Ltd,BSE,Logistics
+3557,506076,Grindwell Norton Ltd-$,BSE,Capital Goods
+3558,506109,Genesys International Corporation Ltd,BSE,IT  Services
+3559,506166,Apis India Ltd,BSE,FMCG
+3560,506197,Bliss GVS Pharma Ltd,BSE,Pharma
+3561,506260,Anuh Pharma Ltd,BSE,Pharma
+3562,506285,Bayer CropScience Ltd,BSE,Chemicals
+3563,506390,Sudarshan Colorants India Ltd,BSE,Chemicals
+3564,506395,Coromandel International Ltd,BSE,Chemicals
+3565,506401,Deepak Nitrite Ltd-$,BSE,Chemicals
+3566,506405,DMCC Speciality Chemicals Ltd,BSE,Chemicals
+3567,506520,Jayshree Chemicals Ltd,BSE,Chemicals
+3568,506532,Nitta Gelatin India Ltd-$,BSE,Chemicals
+3569,506605,Polychem Ltd,BSE,
+3570,506618,Punjab Chemicals & Crop Protection Ltd-$,BSE,Chemicals
+3571,506642,Sadhana Nitro Chem Ltd,BSE,Chemicals
+3572,506767,Alkyl Amines Chemicals Ltd-$,BSE,Chemicals
+3573,506808,Tuticorin Alkali Chemicals And Fertilizers Ltd,BSE,Chemicals
+3574,506820,AstraZeneca Pharma India Ltd,BSE,Pharma
+3575,506852,Primo Chemicals Ltd,BSE,Chemicals
+3576,506854,TANFAC Industries Ltd-$,BSE,
+3577,506879,Gujarat Themis Biosyn Ltd,BSE,Pharma
+3578,506906,Saptak Chem And Business Ltd,BSE,
+3579,506919,Makers Laboratories Ltd-$,BSE,Pharma
+3580,506943,JB Chemicals & Pharmaceuticals Ltd,BSE,Pharma
+3581,506947,Advance Petrochemicals Ltd,BSE,Chemicals
+3582,506979,Apt Packaging Ltd,BSE,Capital Goods
+3583,506981,Bluechip Tex Industries Ltd,BSE,Textiles
+3584,507205,Tilaknagar Industries Ltd-$,BSE,
+3585,507315,Sakthi Sugars Ltd,BSE,FMCG
+3586,507438,IFB Agro Industries Ltd,BSE,FMCG
+3587,507442,Dharani Sugars & Chemicals Ltd,BSE,
+3588,507486,Caprolactam Chemicals Ltd,BSE,Chemicals
+3589,507515,CJ Gelatine Products Ltd,BSE,
+3590,507526,Associated Alcohols & Breweries Ltd,BSE,FMCG
+3591,507528,Kundan Minerals And Metals Ltd,BSE,
+3592,507552,Foods & Inns Ltd,BSE,
+3593,507598,Kovilpatti Lakshmi Roller Flour Mills Ltd,BSE,
+3594,507621,Milkfood Ltd,BSE,FMCG
+3595,507663,Signature Green Corporation Ltd,BSE,
+3596,507685,Wipro Ltd,BSE,IT  Software
+3597,507690,Orient Beverages Ltd,BSE,FMCG
+3598,507779,Kanpur Plastipack Ltd,BSE,Capital Goods
+3599,507789,Jagsonpal Pharmaceuticals Ltd,BSE,Pharma
+3600,507794,Khaitan Chemicals & Fertilizers Ltd,BSE,Chemicals
+3601,507813,National Oxygen Ltd,BSE,Chemicals
+3602,507836,Mac Charles India Ltd,BSE,Hospitality / Leisure
+3603,507878,Unitech Ltd,BSE,Real Estate
+3604,507880,VIP Industries Ltd-$,BSE,Consumer Durables
+3605,507910,Fiberweb India Ltd,BSE,Textiles
+3606,507912,LKP Finance Ltd,BSE,
+3607,507917,East Buildtech Ltd,BSE,
+3608,507948,Key Corporation Ltd,BSE,NBFC & Financial Services
+3609,507966,Ras Resorts & Apart Hotels Ltd,BSE,Hospitality / Leisure
+3610,507970,Paramount Cosmetics India Ltd,BSE,FMCG
+3611,508136,B & A Ltd,BSE,FMCG
+3612,508494,Warren Tea Ltd-$,BSE,FMCG
+3613,508867,New Markets Advisory Ltd,BSE,
+3614,508869,Apollo Hospitals Enterprise Ltd,BSE,Healthcare
+3615,508905,Nexome Capital Markets Ltd,BSE,NBFC & Financial Services
+3616,508906,Everest Industries Ltd,BSE,
+3617,508941,Panasonic Carbon India Company Ltd-$,BSE,Capital Goods
+3618,508954,Finkurve Financial Services Ltd,BSE,NBFC & Financial Services
+3619,508956,HB Leasing & Finance Company Ltd,BSE,NBFC & Financial Services
+3620,508963,Trustwave Securities Ltd,BSE,NBFC & Financial Services
+3621,508969,Sulabh Engineers & Services Ltd,BSE,
+3622,508980,Frontier Capital Ltd,BSE,
+3623,509015,Thakral Services India Ltd,BSE,Capital Goods
+3624,509020,Ruchi Infrastructure Ltd,BSE,Business Services
+3625,509024,Golden Legand Leasing & finance Ltd,BSE,
+3626,509038,Voltaire Leasing & Finance Ltd ,BSE,
+3627,509040,Netlink Solutions India Ltd,BSE,IT  Software
+3628,509048,Lancor Holdings Ltd,BSE,
+3629,509053,Banas Finance Ltd,BSE,
+3630,509055,Visaka Industries Ltd,BSE,Cement & Mining
+3631,509073,Hathway Bhawani Cabletel & Datacom Ltd,BSE,
+3632,509084,Photon Capital Advisors Ltd,BSE,Business Services
+3633,509438,Benares Hotels Ltd,BSE,Hospitality / Leisure
+3634,509449,Bhagawati Oxygen Ltd,BSE,
+3635,509480,Berger Paints India Ltd,BSE,Consumer Durables
+3636,509496,Cemindia Projects Ltd,BSE,Construction & Infra
+3637,509525,Empire Industries Ltd,BSE,Diversified
+3638,509546,Graviss Hospitality Ltd,BSE,Hospitality / Leisure
+3639,509557,Garware Technical Fibres Ltd,BSE,Textiles
+3640,509563,Garware Marine Industries Ltd,BSE,Textiles
+3641,509567,Goa Carbon Ltd-$,BSE,
+3642,509631,HEG Ltd,BSE,Capital Goods
+3643,509635,Hindustan Composites Ltd,BSE,
+3644,509675,Birlanu Ltd,BSE,Consumer Durables
+3645,509692,Indian Card Clothing Company Ltd,BSE,
+3646,509709,International Conveyors Ltd,BSE,Capital Goods
+3647,509820,Huhtamaki India Ltd,BSE,
+3648,509845,RJ Shah & Company Ltd,BSE,
+3649,509895,Hindoostan Mills Ltd,BSE,Textiles
+3650,509930,Supreme Industries Ltd,BSE,Capital Goods
+3651,509966,VST Industries Ltd,BSE,FMCG
+3652,511000,Madhusudan Securities Ltd,BSE,
+3653,511016,Premier Capital Services Ltd,BSE,Capital Goods
+3654,511034,Jindal Drilling & Industries Ltd,BSE,Oil & Gas
+3655,511038,Arco Leasing Ltd,BSE,
+3656,511060,Jumbo Finance Ltd,BSE,
+3657,511116,Quadrant Televentures Ltd-$,BSE,Telecom
+3658,511131,Kamanwala Housing Construction Ltd,BSE,
+3659,511196,Can Fin Homes Ltd,BSE,NBFC & Financial Services
+3660,511218,Shriram Finance Ltd,BSE,NBFC & Financial Services
+3661,511243,Cholamandalam Investment and Finance Company Ltd,BSE,NBFC & Financial Services
+3662,511333,VLS Finance Ltd,BSE,
+3663,511355,India Cements Capital Ltd,BSE,
+3664,511359,Ad-Manum Finance Ltd,BSE,NBFC & Financial Services
+3665,511377,Mehta Integrated Finance Ltd,BSE,
+3666,511413,Crest Ventures Ltd,BSE,
+3667,511441,Gujarat Credit Corporation Ltd,BSE,
+3668,511501,Bharat Bhushan Finance & Commodity Brokers Ltd,BSE,NBFC & Financial Services
+3669,511507,Ushakiran Finance Ltd,BSE,
+3670,511525,Pan India Corporation Ltd,BSE,NBFC & Financial Services
+3671,511533,Sahara Housingfina Corporation Ltd,BSE,NBFC & Financial Services
+3672,511549,Morarka Finance Ltd,BSE,NBFC & Financial Services
+3673,511551,Monarch Networth Capital Ltd,BSE,Capital Markets
+3674,511557,Pro Fin Capital Services Ltd,BSE,
+3675,511559,Team India Guaranty Ltd,BSE,NBFC & Financial Services
+3676,511571,Crescentis Capital Ltd,BSE,NBFC & Financial Services
+3677,511577,Mantra Capital Ltd,BSE,NBFC & Financial Services
+3678,511609,ISL Consulting Ltd,BSE,NBFC & Financial Services
+3679,511611,DCM Financial Services Ltd,BSE,NBFC & Financial Services
+3680,511626,RR Financial Consultants Ltd,BSE,NBFC & Financial Services
+3681,511630,Sambhaav Media Ltd,BSE,Media
+3682,511632,Olympic Management & Financial Services Ltd,BSE,
+3683,511636,DJS Stock & Shares Ltd,BSE,NBFC & Financial Services
+3684,511660,Premium Capital Market & Investments Ltd,BSE,NBFC & Financial Services
+3685,511672,Scan Steels Ltd,BSE,Metals
+3686,511700,Standard Capital Markets Ltd,BSE,NBFC & Financial Services
+3687,511702,YOGI Ltd,BSE,NBFC & Financial Services
+3688,511724,Baid Finserv Ltd,BSE,NBFC & Financial Services
+3689,511730,Avasara Finance Ltd,BSE,
+3690,511740,Ruparel Food Products Ltd,BSE,
+3691,511742,Ugro Capital Ltd,BSE,NBFC & Financial Services
+3692,511754,Shalibhadra Finance Ltd,BSE,NBFC & Financial Services
+3693,511766,Muthoot Capital Services Ltd,BSE,NBFC & Financial Services
+3694,512008,EFC (I) Ltd,BSE,Business Services
+3695,512014,Sobhagya Mercantile Ltd,BSE,Business Services
+3696,512022,Winro Commercial India Ltd,BSE,
+3697,512025,Asgard Alcobev Ltd,BSE,Business Services
+3698,512026,Vega Jewellers Ltd,BSE,Business Services
+3699,512062,Sanmitra Commercial Ltd,BSE,Business Services
+3700,512065,Mrugesh Trading Ltd,BSE,NBFC & Financial Services
+3701,512068,Deccan Gold Mines Ltd,BSE,Metals
+3702,512070,UPL Ltd,BSE,Chemicals
+3703,512097,Saianand Commercial Ltd,BSE,Business Services
+3704,512115,Rose Merc Ltd,BSE,Business Services
+3705,512131,Signet Industries Ltd,BSE,
+3706,512165,Abans Enterprises Ltd,BSE,Metals & Mining
+3707,512179,Sunteck Realty Ltd,BSE,
+3708,512217,Prism Medico and Pharmacy Ltd,BSE,NBFC & Financial Services
+3709,512221,SPV Global Trading Ltd,BSE,
+3710,512237,Jai Corp Ltd,BSE,Capital Goods
+3711,512296,Bhagyanagar India Ltd,BSE,Metals
+3712,512297,Shantai Industries Ltd,BSE,
+3713,512329,SG Mart Ltd,BSE,Metals & Mining
+3714,512344,Aravali Securities & Finance Ltd,BSE,Business Services
+3715,512345,Yash Trading & Finance Ltd,BSE,NBFC & Financial Services
+3716,512361,Cupid Breweries And Distilleries Ltd,BSE,FMCG
+3717,512404,Bengal Steel Industries Ltd,BSE,
+3718,512433,Asutosh Enterprise Ltd,BSE,
+3719,512437,Apollo Finvest India Ltd,BSE,NBFC & Financial Services
+3720,512441,Enbee Trade & Finance Ltd,BSE,Business Services
+3721,512443,Ganon Products Ltd,BSE,
+3722,512455,Lloyds Metals and Energy Ltd,BSE,Metals & Mining
+3723,512463,Lloyds Enterprises Ltd,BSE,Metals & Mining
+3724,512489,Oasis Securities Ltd,BSE,NBFC & Financial Services
+3725,512517,Vinayak Vanijya Ltd,BSE,
+3726,512527,Super Sales India Ltd-$,BSE,
+3727,512573,Avanti Feeds Ltd-$,BSE,FMCG
+3728,512587,Zodiac-JRD-MKJ Ltd,BSE,Consumer Durables
+3729,512599,Adani Enterprises Ltd,BSE,Metals & Mining
+3730,512608,Bhandari Hosiery Exports Ltd,BSE,
+3731,512626,Orbit Exports Ltd,BSE,Textiles
+3732,512634,Savera Industries Ltd,BSE,Hospitality / Leisure
+3733,513023,Nava Ltd,BSE,Power
+3734,513039,Hindusthan Udyog Ltd,BSE,
+3735,513097,Shivalik Bimetal Controls Ltd,BSE,
+3736,513119,Onix Solar Energy Ltd,BSE,Metals
+3737,513121,Oricon Enterprises Ltd-$,BSE,
+3738,513149,Acrow India Ltd,BSE,
+3739,513250,Jyoti Structures Ltd,BSE,Capital Goods
+3740,513262,Steel Strips Wheels Ltd-$,BSE,Auto Ancillaries
+3741,513295,Imec Services Ltd,BSE,Business Services
+3742,513303,Modern Steels Ltd-$,BSE,Capital Goods
+3743,513337,Gujarat Toolroom Ltd,BSE,Capital Goods
+3744,513343,Grand Foundry Ltd,BSE,Capital Goods
+3745,513361,India Homes Ltd,BSE,Capital Goods
+3746,513375,Carborundum Universal Ltd,BSE,Capital Goods
+3747,513377,MMTC Ltd,BSE,Business Services
+3748,513401,Ashiana Ispat Ltd,BSE,
+3749,513452,Elango Industries Ltd,BSE,Capital Goods
+3750,513472,Simplex Castings Ltd,BSE,Capital Goods
+3751,513498,Southern Magnesium & Chemicals Ltd,BSE,Metals & Mining
+3752,513507,Gujarat Containers Ltd,BSE,Capital Goods
+3753,513511,Panchmahal Steel Ltd,BSE,Capital Goods
+3754,513554,Mahamaya Steel Industries Ltd,BSE,Capital Goods
+3755,513575,Sterling Powergensys Ltd,BSE,
+3756,513579,Foundry Fuel Products Ltd,BSE,
+3757,513599,Hindustan Copper Ltd,BSE,Metals
+3758,513683,NLC India Ltd,BSE,Power
+3759,513721,MFS Intercorp Ltd,BSE,Capital Goods
+3760,513729,Aro Granite Industries Ltd-$,BSE,Consumer Durables
+3761,514030,Deepak Spinners Ltd-$,BSE,Textiles
+3762,514045,BSL Ltd,BSE,Textiles
+3763,514087,PBM Polytex Ltd-$,BSE,Textiles
+3764,514175,Vardhman Polytex Ltd,BSE,Textiles
+3765,514177,Rishab Special Yarns Ltd,BSE,Textiles
+3766,514234,Sangam India Ltd,BSE,Textiles
+3767,514240,Kush Industries Ltd,BSE,Textiles
+3768,514260,Surbhi Industries Ltd,BSE,Textiles
+3769,514264,Seasons Textiles Ltd-$,BSE,Textiles
+3770,514274,Varvee Global Ltd,BSE,Textiles
+3771,514318,Jattashankar Industries Ltd,BSE,Textiles
+3772,514322,Kamadgiri Fashion Ltd-$,BSE,Textiles
+3773,514326,Patspin India Ltd,BSE,Textiles
+3774,514332,Neo Infracon Ltd,BSE,Real Estate
+3775,514348,Winsome Yarns Ltd,BSE,
+3776,514358,Everlon Financials Ltd,BSE,NBFC & Financial Services
+3777,514360,K&R Rail Engineering Ltd,BSE,Construction & Infra
+3778,514378,Yarn Syndicate Ltd,BSE,Business Services
+3779,514402,Eco Hotels And Resorts Ltd,BSE,Hospitality / Leisure
+3780,514414,Oxford Industries Ltd,BSE,Textiles
+3781,514418,Mangalam Organics Ltd,BSE,
+3782,514428,Hindustan Adhesives Ltd,BSE,Capital Goods
+3783,514440,Blue Pearl Agriventures Ltd,BSE,Chemicals
+3784,514442,Sri KPR Industries Ltd,BSE,Capital Goods
+3785,514448,Jyoti Resins & Adhesives Ltd,BSE,Chemicals
+3786,515008,Modern Insulators Ltd,BSE,Capital Goods
+3787,515018,Regency Ceramics Ltd,BSE,
+3788,515030,Asahi India Glass Ltd,BSE,Auto Ancillaries
+3789,515037,Murudeshwar Ceramics Ltd,BSE,Consumer Durables
+3790,515043,Saint Gobain Sekurit India Ltd,BSE,Auto Ancillaries
+3791,515127,Ramasigns Industries Ltd,BSE,
+3792,515147,Haldyn Glass Ltd-$,BSE,Capital Goods
+3793,516030,Pakka Ltd-$,BSE,Paper
+3794,516032,Tahmar Enterprises Ltd,BSE,FMCG
+3795,516038,KS Smart Technologies Ltd,BSE,Paper
+3796,516072,Vishnu Chemicals Ltd,BSE,Chemicals
+3797,516082,NR Agarwal Industries Ltd,BSE,Paper
+3798,516096,Sangal Papers Ltd,BSE,Paper
+3799,517041,Ador Welding Ltd,BSE,Capital Goods
+3800,517059,Salzer Electronics Ltd-$,BSE,Capital Goods
+3801,517146,Usha Martin Ltd,BSE,Capital Goods
+3802,517172,Pervasive Commodities Ltd,BSE,
+3803,517214,Digispice Technologies Ltd-$,BSE,IT  Services
+3804,517236,Calcom Vision Ltd,BSE,Consumer Durables
+3805,517271,HBL Engineering Ltd-$,BSE,Capital Goods
+3806,517286,Rnit Ai Solutions Ltd,BSE,Auto Ancillaries
+3807,517288,Gujarat Poly Electronics Ltd,BSE,Capital Goods
+3808,517320,Magnus Steel and Infra Ltd,BSE,Capital Goods
+3809,517334,Samvardhana Motherson International Ltd,BSE,Auto Ancillaries
+3810,517344,Mindteck (India) Ltd,BSE,IT  Software
+3811,517360,SBEC Systems India Ltd,BSE,Business Services
+3812,517385,Symphony Ltd,BSE,
+3813,517393,Reganto Enterprises Ltd,BSE,IT  Hardware
+3814,517423,Integra Switchgear Ltd,BSE,Capital Goods
+3815,517437,Dutron Polymers Ltd-$,BSE,Capital Goods
+3816,517467,Marsons Ltd,BSE,
+3817,517477,Elnet Technologies Ltd-$,BSE,IT  Services
+3818,517494,Accel Ltd,BSE,IT  Software
+3819,517506,TTK Prestige Ltd,BSE,Consumer Durables
+3820,517514,D & H India Ltd-$,BSE,
+3821,517518,Leel Electricals Ltd,BSE,
+3822,517522,Rajratan Global Wire Ltd,BSE,
+3823,517536,Onward Technologies Ltd,BSE,IT  Services
+3824,517546,Alfa Transformers Ltd,BSE,Capital Goods
+3825,517556,PVP Ventures Ltd,BSE,
+3826,517569,KEI Industries Ltd,BSE,Capital Goods
+3827,518011,Keerthi Industries Ltd,BSE,Cement & Mining
+3828,518017,Bheema Cements Ltd,BSE,
+3829,519014,Prashant India Ltd,BSE,Textiles
+3830,519091,Tasty Bite Eatables Ltd,BSE,FMCG
+3831,519126,Hindustan Foods Ltd,BSE,
+3832,519156,Vadilal Industries Ltd-$,BSE,FMCG
+3833,519174,Ashiana Agro Industries Ltd,BSE,FMCG
+3834,519183,Adf Foods Ltd-$,BSE,FMCG
+3835,519191,Retro Green Revolution Ltd,BSE,FMCG
+3836,519216,Ajanta Soya Ltd,BSE,FMCG
+3837,519262,Prima Agro Ltd,BSE,FMCG
+3838,519287,Modern Dairies Ltd,BSE,FMCG
+3839,519295,Bambino Agro Industries Ltd,BSE,
+3840,519307,Vikas WSP Ltd,BSE,FMCG
+3841,519319,Jatalia Global Ventures Ltd,BSE,
+3842,519353,Bansisons Tea Industries Ltd,BSE,FMCG
+3843,519383,Anik Industries Ltd,BSE,Business Services
+3844,519421,KSE Ltd-$,BSE,FMCG
+3845,519477,CIAN Agro Industries & Infrastructure Ltd,BSE,
+3846,519500,BKV Industries Ltd,BSE,FMCG
+3847,519528,Norben Tea & Exports Ltd,BSE,FMCG
+3848,519532,Asian Tea & Exports Ltd-$,BSE,Business Services
+3849,519552,Heritage Foods Ltd,BSE,FMCG
+3850,519574,Hindustan Agrigenetics Ltd,BSE,
+3851,519600,CCL Products (India) Ltd,BSE,FMCG
+3852,519602,Kellton Tech Solutions Ltd,BSE,
+3853,519604,Suryo Foods & Industries Ltd,BSE,FMCG
+3854,520021,Omax Autos Ltd,BSE,Auto Ancillaries
+3855,520056,TVS Holdings Ltd,BSE,NBFC & Financial Services
+3856,520073,RACL Geartech Ltd,BSE,Auto Ancillaries
+3857,520081,Eastcoast Steel Ltd,BSE,
+3858,520086,Sical Logistics Ltd,BSE,
+3859,520113,Vesuvius India Ltd,BSE,Capital Goods
+3860,520119,Automotive Stampings and Assemblies Ltd,BSE,Auto Ancillaries
+3861,520121,Arcee Industries Ltd,BSE,Capital Goods
+3862,520151,Transworld Shipping Lines Ltd,BSE,Logistics
+3863,521003,Shiva Suitings Ltd,BSE,
+3864,521005,Titan Intech Ltd,BSE,IT  Services
+3865,521009,Niwas Spinning Mills Ltd,BSE,
+3866,521016,Indo Count Industries Ltd,BSE,
+3867,521018,Maral Overseas Ltd,BSE,Textiles
+3868,521113,Suditi Industries Ltd,BSE,Textiles
+3869,521131,Shree Bhavya Fabrics Ltd,BSE,
+3870,521163,Zodiac Clothing Company Ltd,BSE,Textiles
+3871,521167,Maxgrow India Ltd,BSE,Consumer Durables
+3872,521188,United Textiles Ltd,BSE,Textiles
+3873,521194,SIL Investments Ltd,BSE,NBFC & Financial Services
+3874,521220,Damodar Industries Ltd-$,BSE,Textiles
+3875,521226,Uniroyal Industries Ltd,BSE,Textiles
+3876,521242,Kandagiri Spinning Mills Ltd-$,BSE,Textiles
+3877,522014,United Drilling Tools Ltd,BSE,
+3878,522017,Fluidomat Ltd,BSE,Capital Goods
+3879,522027,EMA India Ltd,BSE,Capital Goods
+3880,522034,Shanthi Gears Ltd,BSE,Capital Goods
+3881,522073,The Hi-Tech Gears Ltd,BSE,Auto Ancillaries
+3882,522074,Elgi Equipments Ltd,BSE,
+3883,522101,Kilburn Engineering Ltd,BSE,
+3884,522108,Yuken India Ltd-$,BSE,
+3885,522113,Timken India Ltd,BSE,Capital Goods
+3886,522134,Artson Ltd,BSE,
+3887,522165,Indsil Hydro Power and Manganese Ltd-$,BSE,Metals
+3888,522171,TMT India Ltd,BSE,Capital Goods
+3889,522183,ITL Industries Ltd-$,BSE,Capital Goods
+3890,522205,Praj Industries Ltd,BSE,
+3891,522207,Rasandik Engineering Industries India Ltd-$,BSE,
+3892,522215,HLE Glascoat Ltd,BSE,Capital Goods
+3893,522217,Gujarat Apollo Industries Ltd,BSE,
+3894,522229,Taneja Aerospace & Aviation Ltd-$,BSE,Defence
+3895,522241,MM Forgings Ltd-$,BSE,
+3896,522245,Iykot Hitech Toolroom Ltd,BSE,Capital Goods
+3897,522261,Dolphin Offshore Enterprises (India) Ltd-$,BSE,Oil & Gas
+3898,522267,Veejay Lakshmi Engineering Works Ltd-$,BSE,Capital Goods
+3899,522275,GE Vernova T&D India Ltd,BSE,Capital Goods
+3900,522287,Kalpataru Projects International Ltd,BSE,Construction & Infra
+3901,522295,Control Print Ltd-$,BSE,
+3902,523007,Ansal Buildwell Ltd-$,BSE,
+3903,523019,BN Rathi Securities Ltd,BSE,NBFC & Financial Services
+3904,523023,Sinclairs Hotels Ltd-$,BSE,Hospitality / Leisure
+3905,523105,Cropster Agro Ltd,BSE,
+3906,523116,Sanco Trans Ltd,BSE,Logistics
+3907,523120,Thrive Future Habitats Ltd,BSE,FMCG
+3908,523144,Medi Caps Ltd-$,BSE,Pharma
+3909,523160,Foseco Crucible (India) Ltd,BSE,Capital Goods
+3910,523164,SIP Industries Ltd,BSE,
+3911,523204,Aban Offshore Ltd,BSE,Oil & Gas
+3912,523209,Nicco Uco Alliance Credit Ltd,BSE,
+3913,523222,SRM Energy Ltd,BSE,Power
+3914,523229,Bharat Seats Ltd-$,BSE,Auto Ancillaries
+3915,523242,NB Footwear Ltd,BSE,Consumer Durables
+3916,523248,Machino Plastics Ltd-$,BSE,Auto Ancillaries
+3917,523261,Venkys (India) Ltd,BSE,FMCG
+3918,523269,Advani Hotels & Resorts (India) Ltd,BSE,Hospitality / Leisure
+3919,523277,GV Films Ltd,BSE,Media
+3920,523309,Shri Gang Industries & Allied Products Ltd,BSE,FMCG
+3921,523319,Balmer Lawrie & Company Ltd,BSE,Diversified
+3922,523323,Kovai Medical Center & Hospital Ltd,BSE,
+3923,523367,DCM Shriram Ltd,BSE,Diversified
+3924,523369,DCM Shriram Industries Ltd-$,BSE,FMCG
+3925,523371,Mawana Sugars Ltd,BSE,FMCG
+3926,523373,Mini Diamonds India Ltd,BSE,Consumer Durables
+3927,523384,Maha Rashtra Apex Corporation Ltd,BSE,NBFC & Financial Services
+3928,523395,3M India Ltd,BSE,Diversified
+3929,523405,JM Financial Ltd-$,BSE,NBFC & Financial Services
+3930,523411,ADC India Communications Ltd-$,BSE,Telecom
+3931,523425,Sunraj Diamond Exports Ltd,BSE,
+3932,523449,Sharp India Ltd,BSE,Consumer Durables
+3933,523475,Lotus Chocolate Company Ltd,BSE,FMCG
+3934,523558,Swiss Military Consumer Goods Ltd,BSE,Consumer Durables
+3935,523586,Indian Toners & Developers Ltd-$,BSE,Chemicals
+3936,523594,Kunststoffe Industries Ltd,BSE,Capital Goods
+3937,523598,Shipping Corporation of India Ltd,BSE,Logistics
+3938,523618,Dredging Corporation of India Ltd,BSE,Capital Goods
+3939,523628,Poddar Housing and Development Ltd,BSE,
+3940,523630,National Fertilizers Ltd,BSE,Chemicals
+3941,523638,IP Rings Ltd-$,BSE,
+3942,523642,PI Industries Ltd,BSE,Chemicals
+3943,523650,Yash Innoventures Ltd,BSE,Business Services
+3944,523652,Kkalpana Plastick Ltd,BSE,Capital Goods
+3945,523660,Waterbase Ltd,BSE,
+3946,523672,Flex Foods Ltd-$,BSE,FMCG
+3947,523676,Golkunda Diamonds & Jewellery Ltd,BSE,Consumer Durables
+3948,523694,Apcotex Industries Ltd,BSE,Capital Goods
+3949,523704,Mastek Ltd,BSE,IT  Software
+3950,523708,Eimco Elecon (India) Ltd,BSE,
+3951,523710,Sayaji Hotels Ltd,BSE,Hospitality / Leisure
+3952,523712,JMG Corporation Ltd,BSE,
+3953,523716,Ashiana Housing Ltd-$,BSE,Real Estate
+3954,523754,Mahindra EPC Irrigation Ltd,BSE,Capital Goods
+3955,523796,Viceroy Hotels Ltd,BSE,
+3956,523828,Menon Bearings Ltd-$,BSE,Auto Ancillaries
+3957,523832,Mukat Pipes Ltd-$,BSE,Capital Goods
+3958,523888,VR Woodart Ltd,BSE,
+3959,523896,Avi Products India Ltd,BSE,Business Services
+3960,524000,Poonawalla Fincorp Ltd,BSE,NBFC & Financial Services
+3961,524031,Patidar Buildcon Ltd,BSE,Real Estate
+3962,524037,Rama Phosphates Ltd,BSE,Chemicals
+3963,524038,Venlon Enterprises Ltd,BSE,
+3964,524046,Pet Plastics Ltd,BSE,
+3965,524055,Panther Industrial Products Ltd,BSE,
+3966,524075,Albert David Ltd-$,BSE,Pharma
+3967,524164,IOL Chemicals & Pharmaceuticals Ltd,BSE,Pharma
+3968,524174,Kesar Petroproducts Ltd,BSE,
+3969,524200,Vinati Organics Ltd-$,BSE,Chemicals
+3970,524208,Aarti Industries Ltd,BSE,Chemicals
+3971,524212,Wanbury Ltd,BSE,Pharma
+3972,524226,Gujarat Ambuja Exports Ltd,BSE,FMCG
+3973,524230,Rashtriya Chemicals and Fertilizers Ltd,BSE,Chemicals
+3974,524280,Kopran Ltd,BSE,Pharma
+3975,524342,Indo Borax & Chemicals Ltd-$,BSE,Chemicals
+3976,524394,Vimta Labs Ltd-$,BSE,Healthcare
+3977,524396,Biofil Chemicals & Pharmaceuticals Ltd,BSE,Pharma
+3978,524404,Marksans Pharma Ltd,BSE,
+3979,524444,Evexia Lifecare Ltd,BSE,Chemicals
+3980,524470,Syncom Formulations India Ltd-$,BSE,Pharma
+3981,524480,Riddhi Siddhi Gluco Biols Ltd-$,BSE,
+3982,524494,Ipca Laboratories Ltd,BSE,Pharma
+3983,524502,Raaj Medisafe India Ltd,BSE,Capital Goods
+3984,524506,Coral Laboratories Ltd,BSE,Pharma
+3985,524516,Bacil Pharma Ltd,BSE,
+3986,524542,Sukhjit Starch & Chemicals Ltd-$,BSE,FMCG
+3987,524558,Neuland Laboratories Ltd,BSE,Pharma
+3988,524582,Tirupati Starch & Chemicals Ltd,BSE,FMCG
+3989,524592,Jaysynth Orgochem Ltd,BSE,
+3990,524606,Beryl Drugs Ltd,BSE,Pharma
+3991,524610,Rathi Graphic Technologies Ltd,BSE,
+3992,524622,iStreet Network Ltd,BSE,IT  Services
+3993,524628,Parker Agrochem Exports Ltd-$,BSE,
+3994,524632,Shukra Pharmaceuticals Ltd,BSE,Pharma
+3995,524640,Archit Organosys Ltd,BSE,Chemicals
+3996,524642,Sikozy Realtors Ltd,BSE,
+3997,524667,Savita Oil Technologies Ltd,BSE,Oil & Gas
+3998,524669,Hester Biosciences Ltd,BSE,Pharma
+3999,524703,Sandu Pharmaceuticals Ltd,BSE,Pharma
+4000,524709,NACL Industries Ltd,BSE,Chemicals
+4001,524715,Sun Pharmaceutical Industries Ltd,BSE,Pharma
+4002,524717,Titan Biotech Ltd,BSE,Chemicals
+4003,524723,Bijoy Hans Ltd,BSE,Business Services
+4004,524727,Span Divergent Ltd-$,BSE,Pharma
+4005,524731,Jenburkt Pharmaceuticals Ltd,BSE,Pharma
+4006,524735,Hikal Ltd,BSE,
+4007,524742,Caplin Point Laboratories Ltd,BSE,Pharma
+4008,524743,Fischer Medical Ventures Ltd,BSE,Healthcare
+4009,524752,Decipher Labs Ltd,BSE,Pharma
+4010,524764,Nutraplus India Ltd,BSE,
+4011,524768,Emmessar Biotech & Nutrition Ltd,BSE,Chemicals
+4012,524804,Aurobindo Pharma Ltd,BSE,Pharma
+4013,524820,Panama Petrochem Ltd,BSE,Oil & Gas
+4014,526027,Cubex Tubings Ltd,BSE,Capital Goods
+4015,526073,Galaxy Bearings Ltd,BSE,Capital Goods
+4016,526075,Rekvina Laboratories Ltd,BSE,
+4017,526137,Shetron Ltd,BSE,Capital Goods
+4018,526159,Nikhil Adhesives Ltd-$,BSE,
+4019,526173,Andrew Yule & Company Ltd,BSE,FMCG
+4020,526225,Bloom Dekor Ltd-$,BSE,Capital Goods
+4021,526227,Filatex India Ltd-$,BSE,Textiles
+4022,526231,Standard Surfactants Ltd,BSE,Chemicals
+4023,526247,Premier Explosives Ltd,BSE,Chemicals
+4024,526263,Mold-Tek Technologies Ltd,BSE,Construction & Infra
+4025,526269,Crestchem Ltd,BSE,Chemicals
+4026,526299,Mphasis Ltd,BSE,IT  Software
+4027,526335,Shreyas Intermediates Ltd,BSE,
+4028,526365,Swarnsarita Jewels India Ltd,BSE,Consumer Durables
+4029,526371,NMDC Ltd,BSE,Metals & Mining
+4030,526381,Patel Integrated Logistics Ltd-$,BSE,
+4031,526409,Kkalpana Industries (India) Ltd,BSE,Chemicals
+4032,526423,Kriti Industries India Ltd-$,BSE,Capital Goods
+4033,526433,ASM Technologies Ltd,BSE,IT  Software
+4034,526435,Perfectpac Ltd,BSE,Paper
+4035,526479,Sky Industries Ltd-$,BSE,Textiles
+4036,526490,Pratik Panels Ltd,BSE,Paper
+4037,526500,Sterling Green Woods Ltd,BSE,Hospitality / Leisure
+4038,526506,Systematix Corporate Services Ltd,BSE,Capital Markets
+4039,526530,IIRM Holdings India Ltd,BSE,Business Services
+4040,526532,Square Four Projects India Ltd,BSE,
+4041,526544,SGL Resources Ltd,BSE,
+4042,526576,Techindia Nirman Ltd,BSE,
+4043,526588,Photoquip India Ltd,BSE,
+4044,526608,Electrotherm (India) Ltd,BSE,Capital Goods
+4045,526612,Blue Dart Express Ltd,BSE,Logistics
+4046,526614,Expo Engineering And Projects Ltd,BSE,Capital Goods
+4047,526616,National Plastic Industries Ltd,BSE,Capital Goods
+4048,526638,Texel Industries Ltd,BSE,
+4049,526640,Royale Manor Hotels & Industries Ltd,BSE,
+4050,526650,Tourism Finance Corporation of India Ltd,BSE,NBFC & Financial Services
+4051,526675,Tirth Plastic Ltd,BSE,
+4052,526683,Univa Foods Ltd,BSE,
+4053,526703,Ecoplast Ltd-$,BSE,Capital Goods
+4054,526709,Bits Ltd,BSE,IT  Software
+4055,526717,HCP Plastene Bulkpack Ltd,BSE,Capital Goods
+4056,526721,Nicco Parks & Resorts Ltd-$,BSE,Hospitality / Leisure
+4057,526725,Sandesh Ltd,BSE,Media
+4058,526729,Goldiam International Ltd,BSE,Consumer Durables
+4059,526747,PG Foils Ltd,BSE,Metals
+4060,526755,Velan Hotels Ltd,BSE,Hospitality / Leisure
+4061,526797,Greenply Industries Ltd,BSE,Consumer Durables
+4062,526813,Raghunath International Ltd,BSE,FMCG
+4063,526823,Rajeswari Infrastructure Ltd,BSE,Real Estate
+4064,526829,Confidence Petroleum India Ltd,BSE,Oil & Gas
+4065,526841,Shakti Press Ltd,BSE,Media
+4066,526865,Jainco Projects India Ltd,BSE,Business Services
+4067,526869,Kumbhat Financial Services Ltd,BSE,NBFC & Financial Services
+4068,526881,63 Moons Technologies Ltd,BSE,IT  Software
+4069,526885,Sarla Performance Fibers Ltd-$,BSE,
+4070,526887,Indo Credit Capital Ltd,BSE,NBFC & Financial Services
+4071,526899,Himalaya Food International Ltd,BSE,FMCG
+4072,526935,Kalind Ltd,BSE,Business Services
+4073,526947,La Opala RG Ltd,BSE,Consumer Durables
+4074,526951,Stylam Industries Ltd,BSE,Consumer Durables
+4075,526953,Venus Remedies Ltd,BSE,Pharma
+4076,526965,Gujarat Craft Industries Ltd,BSE,Capital Goods
+4077,526967,Heera Ispat Ltd,BSE,Capital Goods
+4078,526971,Dhoot Industrial Finance Ltd,BSE,Business Services
+4079,526981,Shri Bajrang Alliance Ltd,BSE,
+4080,530001,Gujarat Alkalies and Chemicals Ltd,BSE,Chemicals
+4081,530005,India Cements Ltd,BSE,Cement & Mining
+4082,530007,JK Tyre & Industries Ltd,BSE,
+4083,530017,Standard Industries Ltd,BSE,Real Estate
+4084,530019,Jubilant Pharmova Ltd,BSE,
+4085,530023,The Investment Trust Of India Ltd,BSE,
+4086,530025,Samyak International Ltd,BSE,Business Services
+4087,530045,Titan Securities Ltd,BSE,NBFC & Financial Services
+4088,530055,Harmony Capital Service Ltd,BSE,Business Services
+4089,530057,Vivanza Biosciences Ltd,BSE,Pharma
+4090,530063,Yashraj Containeurs Ltd,BSE,
+4091,530065,Lords Ishwar Hotels Ltd,BSE,
+4092,530067,CSL Finance Ltd,BSE,NBFC & Financial Services
+4093,530073,Sanghvi Movers Ltd,BSE,Business Services
+4094,530075,Antelopus Selan Energy Ltd-$,BSE,Oil & Gas
+4095,530077,Puretrop Fruits  Ltd,BSE,FMCG
+4096,530093,ACE Edutrend Ltd,BSE,Consumer Services
+4097,530109,Anupam Finserv Ltd,BSE,NBFC & Financial Services
+4098,530117,Privi Speciality Chemicals Ltd,BSE,Chemicals
+4099,530119,Natraj Proteins Ltd,BSE,
+4100,530129,Nile Ltd,BSE,Metals & Mining
+4101,530135,Optiemus Infracom Ltd,BSE,Telecom
+4102,530139,Kreon Finnancial Services Ltd,BSE,NBFC & Financial Services
+4103,530145,Kisan Mouldings Ltd-$,BSE,Capital Goods
+4104,530167,Moongipa Capital Finance Ltd,BSE,NBFC & Financial Services
+4105,530173,Oscar Global Ltd,BSE,Consumer Durables
+4106,530175,Odyssey Technologies Ltd-$,BSE,IT  Software
+4107,530187,Atharv Enterprises Ltd,BSE,NBFC & Financial Services
+4108,530201,Kallam Textiles Ltd-$,BSE,Textiles
+4109,530215,Kings Infra Ventures Ltd,BSE,FMCG
+4110,530217,Swojas Foods Ltd,BSE,
+4111,530233,Auro Laboratories Ltd,BSE,Pharma
+4112,530235,KJMC Financial Services Ltd,BSE,NBFC & Financial Services
+4113,530239,Suven Life Sciences Ltd,BSE,Healthcare
+4114,530249,Bridge Securities Ltd,BSE,
+4115,530265,Sainik Finance & Industries Ltd,BSE,
+4116,530267,Arigato Universe Ltd,BSE,
+4117,530281,Quantum Digital Vision India Ltd,BSE,
+4118,530289,SP Capital Financing Ltd,BSE,Business Services
+4119,530313,Kimia Biosciences Ltd,BSE,
+4120,530331,Premco Global Ltd-$,BSE,Textiles
+4121,530355,Asian Energy Services Ltd,BSE,Oil & Gas
+4122,530363,Ugar Sugar Works Ltd-$,BSE,FMCG
+4123,530365,Orient Bell Ltd-$,BSE,
+4124,530377,Nila Infrastructures Ltd,BSE,Real Estate
+4125,530429,Ashish Polyplast Ltd,BSE,Capital Goods
+4126,530445,Sumeru Industries Ltd,BSE,Business Services
+4127,530449,Rungta Irrigation Ltd,BSE,Capital Goods
+4128,530461,Saboo Sodium Chloro Ltd,BSE,FMCG
+4129,530495,Stratmont Industries Ltd,BSE,Business Services
+4130,530517,Relaxo Footwears Ltd-$,BSE,Consumer Durables
+4131,530521,Virat Industries Ltd,BSE,
+4132,530581,Ekam Leasing & Finance Company Ltd,BSE,
+4133,530585,Swastika Investmart Ltd,BSE,Capital Markets
+4134,530589,Prima Plastics Ltd,BSE,Consumer Durables
+4135,530609,Carnation Industries Ltd,BSE,Capital Goods
+4136,530621,Akar Auto Industries Ltd,BSE,
+4137,530643,Eco Recycling Ltd,BSE,Utilities
+4138,530655,Goodluck India Ltd,BSE,
+4139,530689,Lykis Ltd,BSE,Business Services
+4140,530695,Prime Property Development Corporation Ltd-$,BSE,
+4141,530697,Zenlabs Ethica Ltd,BSE,Business Services
+4142,530733,Encode Packaging India Ltd,BSE,
+4143,530735,Super Bakers India Ltd,BSE,FMCG
+4144,530757,Shentracon Chemicals Ltd,BSE,Chemicals
+4145,530765,Agarwal Fortune India Ltd,BSE,Capital Goods
+4146,530771,KLG Capital Services Ltd,BSE,
+4147,530777,Infra Industries Ltd,BSE,
+4148,530795,Suncity Synthetics Ltd,BSE,Textiles
+4149,530797,Shree Ganesh Elastoplast Ltd,BSE,
+4150,530803,Bhageria Industries Ltd,BSE,Chemicals
+4151,530829,Cil Securities Ltd,BSE,
+4152,530843,Cupid Ltd-$,BSE,FMCG
+4153,530845,Sunshield Chemicals Ltd,BSE,
+4154,530871,Chembond Material Technologies Ltd-$,BSE,Chemicals
+4155,530881,Arunjyoti Bio Ventures Ltd,BSE,NBFC & Financial Services
+4156,530889,Alka India Ltd,BSE,Textiles
+4157,530899,Asia Pack Ltd,BSE,
+4158,530909,ERP Soft Systems Ltd,BSE,Business Services
+4159,530919,Remsons Industries Ltd,BSE,Auto Ancillaries
+4160,530921,Integrated Thermoplastics Ltd,BSE,
+4161,530925,Ramsons Projects Ltd,BSE,
+4162,530927,Haryana Financial Corporation Ltd,BSE,NBFC & Financial Services
+4163,530965,Indian Oil Corporation Ltd,BSE,Oil & Gas
+4164,530973,Alfa Ica India Ltd,BSE,
+4165,530979,India Home Loan Ltd,BSE,NBFC & Financial Services
+4166,530993,Sarthak Global Ltd,BSE,Business Services
+4167,530999,Balaji Amines Ltd-$,BSE,Chemicals
+4168,531015,Venmax Drugs and Pharmaceuticals Ltd,BSE,Pharma
+4169,531033,Regal Entertainment & Consultants Ltd,BSE,
+4170,531035,Eraaya Lifespaces Ltd,BSE,Automobiles
+4171,531039,Swadha Nature Ltd,BSE,Business Services
+4172,531069,Vijay Solvex Ltd,BSE,FMCG
+4173,531083,Nihar Info Global Ltd,BSE,IT  Software
+4174,531092,OM Infra Ltd,BSE,
+4175,531109,Ishan Dyes and Chemicals Ltd,BSE,
+4176,531112,Balu Forge Industries Ltd,BSE,
+4177,531120,Patel Engineering Ltd-$,BSE,Construction & Infra
+4178,531126,Kati Patang Lifestyle Ltd,BSE,FMCG
+4179,531137,Gemstone Investments Ltd,BSE,Business Services
+4180,531147,Alicon Castalloy Ltd,BSE,Auto Ancillaries
+4181,531162,Emami Ltd-$,BSE,FMCG
+4182,531169,SKP Securities Ltd,BSE,NBFC & Financial Services
+4183,531173,Syschem India Ltd,BSE,Pharma
+4184,531179,Arman Financial Services Ltd,BSE,NBFC & Financial Services
+4185,531190,Eforu Entertainment Ltd,BSE,Business Services
+4186,531191,Filtron Engineers Ltd,BSE,Business Services
+4187,531201,Shilchar Technologies Ltd,BSE,Capital Goods
+4188,531207,Cresanto Global Ltd,BSE,Pharma
+4189,531209,Nucleus Software Exports Ltd,BSE,IT  Software
+4190,531212,Nalin Lease Finance Ltd,BSE,NBFC & Financial Services
+4191,531213,Manappuram Finance Ltd,BSE,NBFC & Financial Services
+4192,531219,Shyama Computronics and Services Ltd,BSE,Pharma
+4193,531233,Rasi Electrodes Ltd,BSE,Capital Goods
+4194,531246,Prima Industries Ltd,BSE,FMCG
+4195,531257,Pratiksha Chemicals Ltd,BSE,Chemicals
+4196,531260,Refex Renewables & Infrastructure Ltd,BSE,Construction & Infra
+4197,531266,VST Tillers Tractors Ltd-$,BSE,Automobiles
+4198,531274,Kinetic Trust Ltd,BSE,NBFC & Financial Services
+4199,531279,Trishakti Industries Ltd,BSE,Business Services
+4200,531280,Pankaj Polymers Ltd,BSE,Capital Goods
+4201,531281,Marble City India Ltd,BSE,Construction & Infra
+4202,531286,Adhata Global Ltd,BSE,
+4203,531297,Artefact Projects Ltd,BSE,
+4204,531304,Nutech Global Ltd,BSE,Textiles
+4205,531306,DHP India Ltd,BSE,
+4206,531322,Sri Havisha Hospitality And Infrastructure Ltd,BSE,Hospitality / Leisure
+4207,531327,Charms Industries Ltd,BSE,
+4208,531335,Zydus Wellness Ltd-$,BSE,FMCG
+4209,531340,Bervin Investment & Leasing Ltd,BSE,
+4210,531343,India Infraspace Ltd,BSE,
+4211,531344,Container Corporation of India Ltd,BSE,Logistics
+4212,531358,Choice International Ltd,BSE,
+4213,531364,Ekansh Concepts Ltd,BSE,Business Services
+4214,531381,Arihant Foundations & Housing Ltd-$,BSE,
+4215,531390,Upsurge Investment & Finance Ltd,BSE,
+4216,531395,Padam Cotton Yarns Ltd,BSE,Textiles
+4217,531397,Polycon International Ltd,BSE,
+4218,531412,Radix Industries (India) Ltd,BSE,FMCG
+4219,531417,Mega Corporation Ltd,BSE,NBFC & Financial Services
+4220,531420,BMB Music & Magnetics Ltd,BSE,
+4221,531431,Shakti Pumps India Ltd-$,BSE,Capital Goods
+4222,531432,Systematix Securities Ltd,BSE,NBFC & Financial Services
+4223,531433,Sungold Capital Ltd,BSE,NBFC & Financial Services
+4224,531436,Saffron Industries Ltd,BSE,
+4225,531439,Aion-Tech Solutions Ltd,BSE,IT  Software
+4226,531449,GRM Overseas Ltd,BSE,FMCG
+4227,531471,Duke Offshore Ltd,BSE,
+4228,531486,Filmcity Media Ltd,BSE,Media
+4229,531495,Blue Coast Hotels Ltd,BSE,Hospitality / Leisure
+4230,531496,Omkar Overseas Ltd,BSE,Textiles
+4231,531497,Madhucon Projects Ltd-$,BSE,Construction & Infra
+4232,531503,Maris Spinners Ltd-$,BSE,Textiles
+4233,531506,Shukra Bullions Ltd,BSE,Business Services
+4234,531508,Eveready Industries India Ltd,BSE,FMCG
+4235,531512,Orient Tradelink Ltd,BSE,Media
+4236,531529,Softrak Venture Investment Ltd,BSE,NBFC & Financial Services
+4237,531531,Hatsun Agro Product Ltd,BSE,
+4238,531539,Rishabh Digha Steel & Allied Products Ltd-$,BSE,Capital Goods
+4239,531548,Somany Ceramics Ltd,BSE,Consumer Durables
+4240,531552,Raghunath Tobacco Company Ltd,BSE,
+4241,531562,Pushpsons Industries Ltd,BSE,
+4242,531569,Sanjivani Paranteral Ltd,BSE,Pharma
+4243,531572,Ranjit Securities Ltd,BSE,NBFC & Financial Services
+4244,531582,Beryl Securities Ltd,BSE,NBFC & Financial Services
+4245,531592,Genpharmasec Ltd,BSE,
+4246,531595,Capri Global Capital Ltd,BSE,NBFC & Financial Services
+4247,531597,Midland Polymers Ltd,BSE,
+4248,531600,Gogia Capital Growth Ltd,BSE,
+4249,531611,Aadhaar Ventures India Ltd,BSE,
+4250,531626,Orosil Smiths India Ltd-$,BSE,Consumer Durables
+4251,531628,Tejassvi Aaharam Ltd,BSE,Textiles
+4252,531633,Lincoln Pharmaceuticals Ltd,BSE,Pharma
+4253,531642,Marico Ltd,BSE,FMCG
+4254,531681,Amerise Biosciences Ltd,BSE,Capital Goods
+4255,531686,Advik Laboratories Ltd,BSE,Pharma
+4256,531688,Prithvi Exchange (India) Ltd,BSE,NBFC & Financial Services
+4257,531695,Veronica Production Ltd,BSE,
+4258,531719,Bhagiradha Chemicals & Industries Ltd,BSE,Chemicals
+4259,531723,GACM Technologies Ltd,BSE,NBFC & Financial Services
+4260,531727,Menon Pistons Ltd,BSE,Auto Ancillaries
+4261,531735,Prism Finance Ltd,BSE,
+4262,531752,Biogen Pharmachem Industries Ltd,BSE,NBFC & Financial Services
+4263,531758,GK Consultants Ltd,BSE,
+4264,531762,Unjha Formulations Ltd,BSE,Pharma
+4265,531768,Poly Medicure Ltd,BSE,Healthcare
+4266,531769,PFL Infotech Ltd,BSE,
+4267,531771,Shraddha Prime Projects Ltd,BSE,
+4268,531779,Padmanabh Alloys & Polymers Ltd,BSE,
+4269,531780,Kaiser Corporation Ltd,BSE,Business Services
+4270,531784,KCL Infra Projects Ltd,BSE,
+4271,531794,Seshachal Technologies Ltd,BSE,IT  Software
+4272,531795,Atul Auto Ltd-$,BSE,
+4273,531814,Tirupati Sarjan Ltd,BSE,Real Estate
+4274,531825,RCC Cements Ltd,BSE,
+4275,531855,Prabhav Industries Ltd,BSE,
+4276,531859,Oriental Rail Infrastructure Ltd,BSE,Capital Goods
+4277,531862,Bharat Agri Fert & Realty Ltd,BSE,Chemicals
+4278,531869,Sacheta Metals Ltd,BSE,Metals
+4279,531885,SVA India Ltd,BSE,
+4280,531887,Tacent Projects Ltd,BSE,Consumer Durables
+4281,531889,Nurture Well Industries Ltd,BSE,
+4282,531898,Sanguine Media Ltd,BSE,
+4283,531902,Gallops Enterprise Ltd,BSE,Real Estate
+4284,531909,Croissance Ltd,BSE,Real Estate
+4285,531910,Madhuveer Com 18 Network Ltd,BSE,
+4286,531911,Galaxy Agrico Exports Ltd,BSE,Capital Goods
+4287,531913,Gopal Iron & Steels Company Gujarat Ltd,BSE,Capital Goods
+4288,531918,Hindustan Appliances Ltd,BSE,Business Services
+4289,531921,Agarwal Industrial Corporation Ltd,BSE,Chemicals
+4290,531923,Dhampure Specialty Sugars Ltd,BSE,FMCG
+4291,531928,Golden Carpets Ltd,BSE,
+4292,531930,Sarthak Industries Ltd,BSE,Business Services
+4293,531931,Sai Capital Ltd,BSE,Business Services
+4294,531944,Lexoraa Industries Ltd,BSE,
+4295,531950,Vertex Securities Ltd,BSE,NBFC & Financial Services
+4296,531952,Riba Textiles Ltd,BSE,Textiles
+4297,531960,Kashyap Tele-Medicines Ltd,BSE,IT  Services
+4298,531971,Hari Govind International Ltd,BSE,Textiles
+4299,531978,Ambika Cotton Mills Ltd,BSE,
+4300,531991,Amraworld Agrico Ltd,BSE,Textiles
+4301,532005,Sam Industries Ltd,BSE,
+4302,532011,Vashu Bhagnani Industries Ltd,BSE,Media
+4303,532015,Gravity India Ltd-$,BSE,Textiles
+4304,532016,Espire Hospitality Limited,BSE,Hospitality / Leisure
+4305,532019,LCC Infotech Ltd,BSE,
+4306,532041,Hindustan Bio Sciences Ltd,BSE,
+4307,532056,Trustedge Capital Ltd,BSE,NBFC & Financial Services
+4308,532070,Sumuka Agro Industries Ltd,BSE,FMCG
+4309,532078,Monind Ltd,BSE,Capital Goods
+4310,532090,Atvo Enterprises Ltd,BSE,Textiles
+4311,532092,Epuja Spiritech Ltd,BSE,NBFC & Financial Services
+4312,532100,Indo City Infotech Ltd-$,BSE,IT  Software
+4313,532102,SBEC Sugar Ltd,BSE,FMCG
+4314,532134,Bank of Baroda,BSE,Banks
+4315,532139,G-Tech Info-Training Ltd,BSE,
+4316,532141,Andhra Cements Ltd,BSE,Cement & Mining
+4317,532144,Welspun Corp Ltd,BSE,Capital Goods
+4318,532145,H S India Ltd,BSE,Hospitality / Leisure
+4319,532149,Bank of India,BSE,Banks
+4320,532155,Gail (India) Ltd,BSE,Oil & Gas
+4321,532156,Vaibhav Global Ltd,BSE,Consumer Durables
+4322,532159,Trescon Ltd,BSE,Real Estate
+4323,532160,Gujarat State Financial Corporation,BSE,NBFC & Financial Services
+4324,532163,Saregama India Ltd,BSE,Media
+4325,532174,ICICI Bank Ltd,BSE,Banks
+4326,532175,Cyient Ltd,BSE,IT  Services
+4327,532178,Engineers India Ltd,BSE,Construction & Infra
+4328,532183,Gayatri Sugars Ltd,BSE,FMCG
+4329,532187,Indusind Bank Ltd,BSE,Banks
+4330,532209,Jammu & Kashmir Bank Ltd,BSE,Banks
+4331,532210,City Union Bank Ltd,BSE,Banks
+4332,532212,Archies Ltd,BSE,Consumer Durables
+4333,532215,AXIS Bank Ltd,BSE,Banks
+4334,532218,South Indian Bank Ltd,BSE,Banks
+4335,532219,Energy Development Company Ltd,BSE,
+4336,532221,Sonata Software Ltd,BSE,IT  Software
+4337,532230,Bengal Tea & Fabrics Ltd,BSE,
+4338,532234,National Aluminium Company Ltd,BSE,Metals
+4339,532281,HCL Technologies Ltd,BSE,IT  Software
+4340,532285,Geojit Financial Services Ltd,BSE,Capital Markets
+4341,532286,Jindal Steel Ltd,BSE,Metals
+4342,532290,BLB Ltd,BSE,NBFC & Financial Services
+4343,532296,Glenmark Pharmaceuticals Ltd,BSE,
+4344,532300,Wockhardt Ltd,BSE,Pharma
+4345,532305,Ind-Swift Laboratories Ltd,BSE,Pharma
+4346,532309,GE Power India Ltd,BSE,Capital Goods
+4347,532321,Zydus Lifesciences Ltd,BSE,Pharma
+4348,532323,Shiva Cement Ltd,BSE,Cement & Mining
+4349,532324,Cinevista Ltd,BSE,Media
+4350,532331,Ajanta Pharma Ltd,BSE,Pharma
+4351,532332,Cura Technologies Ltd,BSE,IT  Software
+4352,532336,Baron Infotech Ltd,BSE,IT  Software
+4353,532343,TVS Motor Company Ltd,BSE,Automobiles
+4354,532348,Subex Ltd,BSE,IT  Software
+4355,532349,Transport Corporation of India Ltd,BSE,Logistics
+4356,532354,Virgo Global Ltd,BSE,IT  Software
+4357,532355,Picturehouse Media Ltd,BSE,
+4358,532365,Dynacons Systems & Solutions Ltd,BSE,IT  Services
+4359,532366,PNB Gilts Ltd,BSE,NBFC & Financial Services
+4360,532368,Brightcom Group Ltd,BSE,IT  Services
+4361,532369,Ramco Industries Ltd,BSE,Construction & Infra
+4362,532370,Ramco Systems Ltd,BSE,IT  Software
+4363,532371,Tata Teleservices (Maharashtra) Ltd,BSE,Telecom
+4364,532373,WEP Solutions Ltd,BSE,IT  Services
+4365,532374,Sterlite Technologies Ltd,BSE,Telecom
+4366,532375,Tips Music Ltd,BSE,Media
+4367,532376,Umiya Buildcon Ltd,BSE,
+4368,532379,First Fintec Ltd,BSE,
+4369,532386,California Software Company Ltd,BSE,IT  Software
+4370,532387,Pritish Nandy Communications Ltd,BSE,Media
+4371,532388,Indian Overseas Bank,BSE,Banks
+4372,532400,Birlasoft Ltd,BSE,IT  Software
+4373,532402,USG Tech Solutions Ltd,BSE,IT  Services
+4374,532406,Avantel Ltd,BSE,Defence
+4375,532407,Moschip Technologies Ltd,BSE,
+4376,532408,Sigma Advanced Systems Ltd,BSE,Telecom
+4377,532419,Smartlink Holdings Ltd,BSE,IT  Hardware
+4378,532424,Godrej Consumer Products Ltd,BSE,FMCG
+4379,532430,BF Utilities Ltd-$,BSE,Infrastructure
+4380,532432,United Spirits Ltd,BSE,FMCG
+4381,532439,Olectra Greentech Ltd,BSE,Automobiles
+4382,532440,MPS Ltd,BSE,Consumer Services
+4383,532444,T Spiritual World Ltd,BSE,IT  Software
+4384,532454,Bharti Airtel Ltd,BSE,Telecom
+4385,532461,Punjab National Bank,BSE,Banks
+4386,532466,Oracle Financial Services Software Ltd,BSE,
+4387,532468,Kama Holdings Ltd-$,BSE,NBFC & Financial Services
+4388,532475,Aptech Ltd,BSE,Consumer Services
+4389,532477,Union Bank of India,BSE,
+4390,532478,United Breweries Ltd-$,BSE,FMCG
+4391,532481,Noida Toll Bridge Company Ltd,BSE,Infrastructure
+4392,532482,Granules India Ltd-$,BSE,Pharma
+4393,532483,Canara Bank,BSE,Banks
+4394,532485,Balmer Lawrie Investments Ltd,BSE,NBFC & Financial Services
+4395,532486,Pokarna Ltd,BSE,Consumer Durables
+4396,532493,Astra Microwave Products Ltd,BSE,Defence
+4397,532497,Radico Khaitan Ltd,BSE,FMCG
+4398,532500,Maruti Suzuki India Ltd,BSE,Automobiles
+4399,532503,Rajapalayam Mills Ltd-$,BSE,Textiles
+4400,532504,Navin Fluorine International Ltd-$,BSE,Chemicals
+4401,532505,UCO Bank,BSE,Banks
+4402,532507,B.A.G. Films and Media Ltd,BSE,Media
+4403,532508,Jindal Stainless Ltd,BSE,Metals
+4404,532509,Suprajit Engineering Ltd-$,BSE,Auto Ancillaries
+4405,532513,TVS Electronics Ltd,BSE,IT  Hardware
+4406,532514,Indraprastha Gas Ltd,BSE,Oil & Gas
+4407,532522,Petronet LNG Ltd,BSE,Oil & Gas
+4408,532523,Biocon Ltd,BSE,Pharma
+4409,532524,PTC India Ltd,BSE,Power
+4410,532525,Bank of Maharashtra,BSE,Banks
+4411,532527,Ramkrishna Forgings Ltd,BSE,Auto Ancillaries
+4412,532532,Jaiprakash Associates Ltd,BSE,Construction & Infra
+4413,532538,UltraTech Cement Ltd,BSE,
+4414,532539,UNO Minda Ltd-$,BSE,Auto Ancillaries
+4415,532540,Tata Consultancy Services Ltd,BSE,IT  Software
+4416,532541,Coforge Ltd,BSE,IT  Software
+4417,532543,GP Petroleums Ltd,BSE,Oil & Gas
+4418,532548,Century Plyboards (India) Ltd-$,BSE,Consumer Durables
+4419,532555,NTPC Ltd,BSE,Power
+4420,532604,S.A.L. Steel Ltd,BSE,Metals
+4421,532610,Dwarikesh Sugar Industries Ltd,BSE,FMCG
+4422,532626,Pondy Oxides & Chemicals Ltd,BSE,Metals
+4423,532627,Jaiprakash Power Ventures Ltd,BSE,Power
+4424,532630,Gokaldas Exports Ltd,BSE,
+4425,532633,Alldigi Tech Ltd,BSE,Business Services
+4426,532636,IIFL Finance Ltd,BSE,NBFC & Financial Services
+4427,532638,Shoppers Stop Ltd,BSE,Retail
+4428,532640,Cyber Media India Ltd,BSE,Media
+4429,532648,Yes Bank Ltd,BSE,
+4430,532649,Nectar Lifesciences Ltd,BSE,Pharma
+4431,532650,MSP Steel & Power Ltd,BSE,Capital Goods
+4432,532661,Rane (Madras) Ltd,BSE,Auto Ancillaries
+4433,532663,Sasken Technologies Ltd,BSE,IT  Services
+4434,532673,K M Sugar Mills Ltd,BSE,FMCG
+4435,532674,Bannari Amman Spinning Mills Ltd,BSE,Textiles
+4436,532689,PVR Inox Ltd,BSE,Media
+4437,532692,Radha Madhav Corporation Ltd,BSE,
+4438,532693,Punj Lloyd Ltd,BSE,
+4439,532694,Bartronics India Ltd,BSE,IT  Services
+4440,532696,Educomp Solutions Ltd,BSE,
+4441,532699,Royal Orchid Hotels Ltd,BSE,Hospitality / Leisure
+4442,532700,Entertainment Network (India) Ltd,BSE,Media
+4443,532702,Gujarat State Petronet Ltd,BSE,Oil & Gas
+4444,532705,Jagran Prakashan Ltd,BSE,Media
+4445,532714,KEC International Ltd,BSE,Construction & Infra
+4446,532716,Gillanders Arbuthnot & Company Ltd,BSE,FMCG
+4447,532717,Indo Tech Transformers Ltd,BSE,
+4448,532719,B. L. Kashyap and Sons Ltd,BSE,Construction & Infra
+4449,532720,Mahindra & Mahindra Financial Services Ltd,BSE,NBFC & Financial Services
+4450,532722,Nitco Ltd,BSE,Consumer Durables
+4451,532723,MPDL Ltd,BSE,Real Estate
+4452,532725,Solar Industries India Ltd,BSE,
+4453,532726,Gallantt Ispat Ltd,BSE,Capital Goods
+4454,532729,Uttam Sugar Mills Ltd,BSE,FMCG
+4455,532732,Kewal Kiran Clothing Ltd,BSE,Textiles
+4456,532734,Godawari Power and Ispat Ltd,BSE,Capital Goods
+4457,532735,R Systems International Ltd,BSE,IT  Services
+4458,532738,Twamev Construction And Infrastructure Ltd,BSE,
+4459,532740,Lokesh Machines Ltd,BSE,Capital Goods
+4460,532741,Kamdhenu Ltd,BSE,Capital Goods
+4461,532742,Paushak Ltd,BSE,Chemicals
+4462,532744,GTN Textiles Ltd,BSE,Textiles
+4463,532755,Tech Mahindra Ltd,BSE,IT  Software
+4464,532756,CIE Automotive India Ltd,BSE,Auto Ancillaries
+4465,532757,Voltamp Transformers Ltd,BSE,Capital Goods
+4466,532759,Atlantaa Ltd,BSE,Construction & Infra
+4467,532761,HandsOn Global Management (HGM)Ltd,BSE,IT  Services
+4468,532767,Gayatri Projects Ltd,BSE,Construction & Infra
+4469,532772,DCB Bank Ltd,BSE,Banks
+4470,532775,GTL Infrastructure Ltd,BSE,Telecom
+4471,532777,Info Edge (India) Ltd,BSE,Retail
+4472,532779,Torrent Power Ltd,BSE,Power
+4473,532782,Sutlej Textiles and Industries Ltd,BSE,Textiles
+4474,532784,Sobha Ltd,BSE,Real Estate
+4475,532790,Tanla Platforms Ltd,BSE,IT  Software
+4476,532794,Zee Media Corporation Ltd,BSE,Media
+4477,532799,Hubtown Ltd,BSE,Real Estate
+4478,532801,Cambridge Technology Enterprises Ltd,BSE,IT  Software
+4479,532804,Technocraft Industries (India) Ltd,BSE,
+4480,532805,Redington Ltd,BSE,
+4481,532807,Cineline India Ltd,BSE,Media
+4482,532809,Firstsource Solutions Ltd,BSE,Business Services
+4483,532810,Power Finance Corporation Ltd,BSE,NBFC & Financial Services
+4484,532811,Ahluwalia Contracts (India) Ltd,BSE,
+4485,532814,Indian Bank,BSE,Banks
+4486,532815,SMS Pharmaceuticals Ltd,BSE,Pharma
+4487,532822,Vodafone Idea Ltd,BSE,Telecom
+4488,532826,Raj Television Network Ltd,BSE,Media
+4489,532827,Page Industries Ltd,BSE,Textiles
+4490,532829,Lehar Footwears Ltd,BSE,Consumer Durables
+4491,532830,Astral Ltd,BSE,Capital Goods
+4492,532831,Abhishek Corporation Ltd,BSE,
+4493,532832,Embassy Developments Ltd,BSE,Real Estate
+4494,532834,Camlin Fine Sciences Ltd,BSE,Chemicals
+4495,532835,ICRA Ltd,BSE,Capital Markets
+4496,532839,Dish TV India Ltd,BSE,Media
+4497,532841,Sahyadri Industries Ltd,BSE,Construction & Infra
+4498,532843,Fortis Healthcare Ltd,BSE,
+4499,532850,MIC Electronics Ltd,BSE,Capital Goods
+4500,532854,Nitin Fire Protection Industries Ltd,BSE,
+4501,532864,Nelcast Ltd,BSE,Capital Goods
+4502,532867,V2 Retail Ltd,BSE,Retail
+4503,532868,DLF Ltd,BSE,Real Estate
+4504,532880,Omaxe Ltd,BSE,Real Estate
+4505,532884,Refex Industries Ltd,BSE,Chemicals
+4506,532885,Central Bank of India,BSE,Banks
+4507,532888,Asian Granito India Ltd,BSE,
+4508,532889,K.P.R. Mill Limited,BSE,Textiles
+4509,532890,Take Solutions Ltd,BSE,
+4510,532891,Puravankara Ltd,BSE,Real Estate
+4511,532892,Motilal Oswal Financial Services Ltd,BSE,Capital Markets
+4512,532895,Nagreeka Capital & Infrastructure Ltd,BSE,NBFC & Financial Services
+4513,532898,Power Grid Corporation of India Ltd,BSE,Power
+4514,532900,Paisalo Digital Ltd,BSE,NBFC & Financial Services
+4515,532902,Consolidated Construction Consortium Ltd,BSE,Real Estate
+4516,532907,IL&FS Engineering and Construction Company Ltd,BSE,Construction & Infra
+4517,532915,Religare Enterprises Ltd,BSE,NBFC & Financial Services
+4518,532921,Adani Ports and Special Economic Zone Ltd,BSE,Infrastructure
+4519,532922,Edelweiss Financial Services Ltd,BSE,NBFC & Financial Services
+4520,532923,Renaissance Global Ltd,BSE,Consumer Durables
+4521,532924,Kolte-Patil Developers Ltd,BSE,Real Estate
+4522,532926,Jyothy Labs Ltd,BSE,FMCG
+4523,532927,eClerx Services Ltd,BSE,
+4524,532928,Transformers and Rectifiers (India) Ltd,BSE,Capital Goods
+4525,532929,Brigade Enterprises Ltd,BSE,Real Estate
+4526,532933,Porwal Auto Components Ltd,BSE,Auto Ancillaries
+4527,532934,PPAP Automotive Ltd,BSE,Auto Ancillaries
+4528,532940,J. Kumar Infraprojects Ltd,BSE,Construction & Infra
+4529,532942,KNR Constructions Ltd,BSE,
+4530,532944,OnMobile Global Ltd,BSE,Media
+4531,532945,SEPC Ltd,BSE,Construction & Infra
+4532,532946,Bang Overseas Ltd,BSE,
+4533,532951,GSS Infotech Ltd,BSE,
+4534,532952,Nahar Capital and Financial Services Ltd,BSE,NBFC & Financial Services
+4535,532953,V-Guard Industries Ltd,BSE,Consumer Durables
+4536,532955,REC Ltd,BSE,NBFC & Financial Services
+4537,532966,Titagarh Rail Systems Ltd,BSE,
+4538,532974,Aditya Birla Money Ltd-$,BSE,
+4539,532977,Bajaj Auto Ltd,BSE,Automobiles
+4540,532978,Bajaj Finserv Ltd,BSE,NBFC & Financial Services
+4541,532993,Sejal Glass Ltd,BSE,Capital Goods
+4542,533001,Somi Conveyor Beltings Ltd,BSE,Capital Goods
+4543,533007,LGB Forge Ltd,BSE,Auto Ancillaries
+4544,533014,Sicagen India Ltd,BSE,Business Services
+4545,533018,Simplex Mills Company Ltd,BSE,Textiles
+4546,533019,Simplex Papers Ltd,BSE,Paper
+4547,533023,ZF Commercial Vehicle Control Systems India Ltd,BSE,Auto Ancillaries
+4548,533056,VEDAVAAG Systems Ltd,BSE,IT  Services
+4549,533080,Mold-Tek Packaging Ltd,BSE,Capital Goods
+4550,533088,Mahindra Holidays & Resorts India Ltd,BSE,Hospitality / Leisure
+4551,533096,Adani Power Ltd,BSE,Power
+4552,533098,NHPC Ltd,BSE,Power
+4553,533100,Premier Energy and Infrastructure Ltd,BSE,Power
+4554,533101,Suryaamba Spinning Mills Ltd,BSE,
+4555,533106,Oil India Ltd,BSE,Oil & Gas
+4556,533121,Expleo Solutions Ltd,BSE,IT  Services
+4557,533122,RattanIndia Power Ltd,BSE,Power
+4558,533148,JSW Energy Ltd,BSE,Power
+4559,533149,Yunik Managing Advisors Ltd,BSE,NBFC & Financial Services
+4560,533150,Godrej Properties Ltd,BSE,Real Estate
+4561,533151,D. B. Corp Ltd,BSE,Media
+4562,533155,Jubilant FoodWorks Ltd,BSE,
+4563,533156,Vascon Engineers Ltd,BSE,Real Estate
+4564,533161,Emmbi Industries Ltd,BSE,Capital Goods
+4565,533169,Man Infraconstruction Ltd,BSE,
+4566,533179,Persistent Systems Ltd,BSE,IT  Software
+4567,533192,KCP Sugar & Industries Corporation Ltd,BSE,FMCG
+4568,533200,Talwalkars Better Value Fitness Ltd,BSE,
+4569,533206,SJVN Ltd,BSE,Power
+4570,533210,Kriti Nutrients Ltd,BSE,FMCG
+4571,533212,GKB Ophthalmics Ltd,BSE,Healthcare
+4572,533218,Emami Realty Ltd,BSE,
+4573,533227,Asian Hotels (East) Ltd,BSE,
+4574,533229,Bajaj Consumer Care Ltd,BSE,
+4575,533248,Gujarat Pipavav Port Ltd,BSE,Infrastructure
+4576,533261,Eros International Media Ltd,BSE,
+4577,533262,Ramky Infrastructure Ltd,BSE,Construction & Infra
+4578,533263,Orient Green Power Company Ltd,BSE,Power
+4579,533269,VA Tech Wabag Ltd,BSE,
+4580,533270,Bedmutha Industries Ltd,BSE,Capital Goods
+4581,533272,Jupiter Wagons Ltd,BSE,Capital Goods
+4582,533273,Oberoi Realty Ltd,BSE,Real Estate
+4583,533274,Prestige Estates Projects Ltd,BSE,
+4584,533275,Shah Metacorp Ltd,BSE,Capital Goods
+4585,533278,Coal India Ltd,BSE,Oil & Gas
+4586,533282,Gravita India Ltd,BSE,Metals & Mining
+4587,533286,Moil Ltd,BSE,Metals & Mining
+4588,533287,Zee Learn Ltd,BSE,Consumer Services
+4589,533289,Kesar Terminals & Infrastructure Ltd,BSE,Logistics
+4590,533292,A2Z Infra Engineering Ltd,BSE,Construction & Infra
+4591,533293,Kirloskar Oil Engines Ltd,BSE,
+4592,533295,Punjab & Sind Bank,BSE,
+4593,533303,BF Investment Ltd,BSE,NBFC & Financial Services
+4594,533315,Innovassynth Technologies (India) Ltd,BSE,NBFC & Financial Services
+4595,533317,Omkar Speciality Chemicals Ltd,BSE,
+4596,533326,Texmaco Rail & Engineering Ltd,BSE,
+4597,533339,ZEN Technologies Ltd,BSE,Defence
+4598,533343,Lovable Lingerie Ltd,BSE,Textiles
+4599,533344,PTC India Financial Services Ltd,BSE,NBFC & Financial Services
+4600,533452,Delphi World Money Ltd,BSE,
+4601,533470,Rushil Decor Ltd,BSE,Consumer Durables
+4602,533477,Enkei Wheels (India) Ltd,BSE,Auto Ancillaries
+4603,533519,L&T Finance Ltd,BSE,NBFC & Financial Services
+4604,533540,Tree House Education & Accessories Ltd,BSE,Consumer Services
+4605,533553,TD Power Systems Ltd,BSE,Capital Goods
+4606,533573,Alembic Pharmaceuticals Ltd,BSE,Pharma
+4607,533581,PG Electroplast Ltd,BSE,Consumer Durables
+4608,533602,Lesha Industries Ltd,BSE,
+4609,533605,Setubandhan Infrastructure Ltd,BSE,
+4610,533629,Tijaria Polypipes Ltd,BSE,
+4611,533632,Onelife Capital Advisors Ltd,BSE,Capital Markets
+4612,533676,Indo Thai Securities Ltd,BSE,Capital Markets
+4613,533758,APL Apollo Tubes Ltd,BSE,Capital Goods
+4614,533896,Fervent Synergies Ltd,BSE,Business Services
+4615,533941,Thomas Scott (India) Ltd,BSE,
+4616,533982,Tera Software Ltd,BSE,
+4617,534063,Futuristic Solutions Ltd,BSE,NBFC & Financial Services
+4618,534139,Schneider Electric Infrastructure Ltd,BSE,Capital Goods
+4619,534309,NBCC (India) Ltd,BSE,Construction & Infra
+4620,534328,Hexa Tradex Ltd,BSE,NBFC & Financial Services
+4621,534338,Max heights Infrastucture Ltd,BSE,
+4622,534369,Tribhovandas Bhimji Zaveri Ltd,BSE,Consumer Durables
+4623,534392,Vardhman Special Steels Ltd,BSE,Capital Goods
+4624,534535,String Metaverse Ltd,BSE,IT  Services
+4625,534563,Max Alert Systems Ltd,BSE,
+4626,534597,Rattanindia Enterprises Ltd,BSE,Retail
+4627,534600,JTL Industries Ltd,BSE,Capital Goods
+4628,534615,North Eastern Carrying Corporation Ltd,BSE,Logistics
+4629,534623,Jupiter Infomedia Ltd,BSE,
+4630,534680,SRG Housing Finance Ltd,BSE,NBFC & Financial Services
+4631,534691,Comfort Commotrade Ltd,BSE,
+4632,534733,Aerpace Industries Ltd,BSE,Capital Goods
+4633,534741,Virtual Global Education Ltd,BSE,
+4634,534748,Steel Exchange India Ltd,BSE,Capital Goods
+4635,534758,Cigniti Technologies Ltd,BSE,IT  Services
+4636,534796,CDG Petchem Ltd,BSE,Capital Goods
+4637,534804,CARE Ratings Ltd,BSE,Capital Markets
+4638,534809,PC Jeweller Ltd,BSE,
+4639,534920,Covidh Technologies Ltd,BSE,IT  Software
+4640,535136,NIBE Ltd,BSE,Defence
+4641,535322,Repco Home Finance Ltd,BSE,NBFC & Financial Services
+4642,535467,Ashapura Intimates Fashion Ltd,BSE,
+4643,535621,S V Global Mill Ltd,BSE,
+4644,535648,Just Dial Ltd,BSE,Retail
+4645,535667,India Finsec Ltd,BSE,
+4646,535693,Brahmaputra Infrastructure Ltd,BSE,Construction & Infra
+4647,535754,Orient Cement Ltd,BSE,Cement & Mining
+4648,535789,Sammaan Capital Ltd,BSE,NBFC & Financial Services
+4649,535916,Alacrity Securities Ltd,BSE,NBFC & Financial Services
+4650,535958,Integra Essentia Ltd,BSE,
+4651,536565,Novelix Pharmaceuticals Ltd,BSE,Healthcare
+4652,536710,SRG Fingrow Finance Ltd,BSE,
+4653,536965,B. P. Capital Ltd,BSE,NBFC & Financial Services
+4654,537254,JTL Defence Ltd,BSE,
+4655,537291,Nath Bio-Genes (India) Ltd,BSE,FMCG
+4656,537326,Chemtech Industrial Valves Ltd,BSE,
+4657,537392,Taaza International Ltd,BSE,
+4658,537669,Laxmipati Engineering Works Ltd,BSE,
+4659,537707,Laddu Gopal Online Services Ltd,BSE,Real Estate
+4660,537784,Karnimata Cold Storage Ltd,BSE,
+4661,537800,Mangalam Industrial Finance Ltd,BSE,
+4662,537820,Viji Finance Ltd,BSE,NBFC & Financial Services
+4663,538119,R&B Denims Ltd,BSE,
+4664,538212,Sharp Investments Ltd,BSE,NBFC & Financial Services
+4665,538273,Response Informatics Ltd,BSE,
+4666,538382,West Leisure Resorts Ltd,BSE,
+4667,538401,Maestros Electronics & Telecommunications Systems Ltd,BSE,
+4668,538446,Moneyboxx Finance Ltd,BSE,NBFC & Financial Services
+4669,538452,Quasar India Ltd,BSE,
+4670,538465,Amarnath Securities Ltd,BSE,NBFC & Financial Services
+4671,538476,Capital Trade Links Ltd,BSE,NBFC & Financial Services
+4672,538539,Annvrridhhi  Ventures Ltd,BSE,FMCG
+4673,538562,Skipper Ltd,BSE,Capital Goods
+4674,538567,Gulf Oil Lubricants India Ltd,BSE,
+4675,538579,Zinema Media And Entertainment Ltd,BSE,
+4676,538597,TTI Enterprise Ltd,BSE,NBFC & Financial Services
+4677,538598,Vishal Fabrics Ltd,BSE,
+4678,538611,Real Touch Finance Ltd,BSE,NBFC & Financial Services
+4679,538635,Snowman Logistics Ltd,BSE,Logistics
+4680,538647,Purshottam Investofin Ltd,BSE,NBFC & Financial Services
+4681,538666,Sharda Cropchem Ltd,BSE,Chemicals
+4682,538667,Sirohia & Sons Ltd,BSE,
+4683,538708,Econo Trade (India) Ltd,BSE,NBFC & Financial Services
+4684,538713,Atishay Ltd,BSE,IT  Software
+4685,538731,Hanman Fit Ltd,BSE,
+4686,538733,Starlit Power Systems Ltd,BSE,
+4687,538772,Niyogin Fintech Ltd,BSE,NBFC & Financial Services
+4688,538777,Asia Capital Ltd,BSE,NBFC & Financial Services
+4689,538786,Citizen Infoline Ltd,BSE,Media
+4690,538787,Goenka Business & Finance Ltd,BSE,
+4691,538794,Jet Solar Ltd,BSE,Real Estate
+4692,538834,JMJ Fintech Ltd,BSE,NBFC & Financial Services
+4693,538835,Intellect Design Arena Ltd,BSE,IT  Software
+4694,538837,Jeevan Scientific Technology Ltd,BSE,
+4695,538838,Indo Cotspin Ltd,BSE,Textiles
+4696,538857,Scintilla Commercial & Credit Ltd,BSE,
+4697,538860,Panafic Industrials Ltd,BSE,NBFC & Financial Services
+4698,538868,Continental Securities Ltd,BSE,
+4699,538875,Sellwin Traders Ltd,BSE,Business Services
+4700,538882,Emerald Finance Ltd,BSE,NBFC & Financial Services
+4701,538890,M.K. Exim (India) Ltd,BSE,
+4702,538891,Magellanic Cloud Ltd,BSE,
+4703,538895,Mihika Industries Ltd,BSE,Business Services
+4704,538896,Kanchi Karpooram Ltd,BSE,Chemicals
+4705,538918,Vani Commercials Ltd,BSE,
+4706,538919,Skyline Ventures India Ltd,BSE,
+4707,538921,Raghuvansh Agrofarms Ltd,BSE,
+4708,538962,Minda Corporation Ltd,BSE,Auto Ancillaries
+4709,538970,Wardwizard Innovations & Mobility Ltd,BSE,Automobiles
+4710,538975,Shree Securities Ltd,BSE,NBFC & Financial Services
+4711,538979,Greenlam Industries Ltd,BSE,Consumer Durables
+4712,538993,Purohit Construction Ltd,BSE,Real Estate
+4713,539012,Megri Soft Ltd,BSE,
+4714,539014,Kalpa Commercial Ltd,BSE,Business Services
+4715,539017,Star Housing Finance Ltd,BSE,NBFC & Financial Services
+4716,539026,SSPN Finance Ltd,BSE,
+4717,539040,Tirupati Innovar Ltd,BSE,Auto Ancillaries
+4718,539042,AGI Infra Ltd,BSE,
+4719,539043,BKM Industries Ltd,BSE,
+4720,539056,Imagicaaworld Entertainment Ltd,BSE,Hospitality / Leisure
+4721,539115,Alan Scott Enterprises Ltd,BSE,
+4722,539132,Wardwizard Foods and Beverages Ltd,BSE,FMCG
+4723,539143,Panth Infinity Ltd,BSE,Diversified
+4724,539150,PNC Infratech Ltd,BSE,Construction & Infra
+4725,539151,Arfin India Ltd,BSE,Metals
+4726,539167,Virat Leasing Ltd,BSE,
+4727,539174,Helpage Finlease Ltd,BSE,
+4728,539175,Bluegod Entertainment Ltd,BSE,Media
+4729,539196,Amba Enterprises Ltd,BSE,Capital Goods
+4730,539198,Capfin India Ltd,BSE,NBFC & Financial Services
+4731,539200,Noble Polymers Ltd,BSE,
+4732,539201,Satia Industries Ltd,BSE,Paper
+4733,539206,Genomic Valley Biotech Ltd,BSE,
+4734,539216,Garment Mantra Lifestyle Ltd,BSE,Textiles
+4735,539220,Mishka Exim Ltd,BSE,
+4736,539222,Growington Ventures India Ltd,BSE,Business Services
+4737,539224,HCKK Ventures Ltd,BSE,Diversified
+4738,539226,Rudra Global Infra Products Ltd,BSE,Capital Goods
+4739,539227,Loyal Equipments Ltd,BSE,Capital Goods
+4740,539228,Gala Global Products Ltd,BSE,FMCG
+4741,539251,Balkrishna Paper Mills Ltd,BSE,
+4742,539254,Adani Energy Solutions Ltd,BSE,Power
+4743,539267,Samsrita Labs Ltd,BSE,
+4744,539268,Syngene International Ltd,BSE,Healthcare
+4745,539273,Pecos Hotels and Pubs Ltd,BSE,Hospitality / Leisure
+4746,539276,Kaya Ltd,BSE,Hospitality / Leisure
+4747,539288,AVI Polymers Ltd,BSE,Chemicals
+4748,539291,Vasudhagama Enterprises Ltd,BSE,FMCG
+4749,539301,Arvind SmartSpaces Ltd,BSE,Real Estate
+4750,539302,Power Mech Projects Ltd,BSE,Construction & Infra
+4751,539310,Thinkink Picturez Ltd,BSE,
+4752,539332,Navkar Corporation Ltd,BSE,Logistics
+4753,539336,Gujarat Gas Ltd,BSE,Oil & Gas
+4754,539352,P. B. Films Ltd,BSE,
+4755,539354,Polyspin Exports Ltd,BSE,Capital Goods
+4756,539359,Pritika Auto Industries Ltd,BSE,Auto Ancillaries
+4757,539391,Acme Resources Ltd,BSE,NBFC & Financial Services
+4758,539400,Mallcom (India) Ltd,BSE,
+4759,539404,Satin Creditcare Network Ltd,BSE,NBFC & Financial Services
+4760,539407,Generic Engineering Construction and Projects Ltd,BSE,Real Estate
+4761,539408,Kuber Udyog Ltd,BSE,NBFC & Financial Services
+4762,539410,Muzali Arts Ltd,BSE,
+4763,539435,Richfield Financial Services Ltd,BSE,
+4764,539437,IDFC First Bank Ltd,BSE,Banks
+4765,539448,InterGlobe Aviation Ltd,BSE,Logistics
+4766,539468,Typhoon Financial Services Ltd,BSE,NBFC & Financial Services
+4767,539469,Panorama Studios International Ltd,BSE,Media
+4768,539470,Shree Ganesh Biotech (India) Ltd,BSE,Pharma
+4769,539506,Adcon Capital Services Ltd,BSE,NBFC & Financial Services
+4770,539518,Uday Jewellery Industries Ltd,BSE,Consumer Durables
+4771,539519,Sattva Sukun Lifecare Ltd,BSE,
+4772,539521,Navigant Corporate Advisors Ltd,BSE,
+4773,539523,Alkem Laboratories Ltd,BSE,Pharma
+4774,539524,Dr. Lal PathLabs Ltd,BSE,Healthcare
+4775,539533,Elitecon International Ltd,BSE,FMCG
+4776,539543,Valley Magnesite Company Ltd,BSE,
+4777,539551,Narayana Hrudayalaya Ltd,BSE,Healthcare
+4778,539552,F Mec International Financial Services Ltd,BSE,NBFC & Financial Services
+4779,539559,Deep Health AI India Ltd,BSE,Consumer Durables
+4780,539593,Shivansh Finserve Ltd,BSE,NBFC & Financial Services
+4781,539596,Delta Industrial Resources Ltd,BSE,NBFC & Financial Services
+4782,539599,Kotia Enterprises Ltd,BSE,Retail
+4783,539607,Blue Cloud Softech Solutions Ltd,BSE,IT  Software
+4784,539620,Kanoria Energy & Infrastructure Ltd,BSE,Cement & Mining
+4785,539659,Vikram Kamats Hospitality Ltd,BSE,Hospitality / Leisure
+4786,539669,RGF Capital Markets Ltd,BSE,
+4787,539673,Radhagobind Commercial Ltd,BSE,
+4788,539679,Kapil Raj Finance Ltd,BSE,
+4789,539682,Mobavenue AI Tech Ltd,BSE,IT  Software
+4790,539686,K.P. Energy Ltd,BSE,Power
+4791,539691,Real Growth Corporation Ltd,BSE,
+4792,539724,Hypersoft Technologies Ltd,BSE,IT  Software
+4793,539742,Simbhaoli Sugars Ltd,BSE,
+4794,539761,Vantage Knowledge Academy Ltd,BSE,Consumer Services
+4795,539773,Advik Capital Ltd,BSE,NBFC & Financial Services
+4796,539785,Pudumjee Paper Products Ltd,BSE,Paper
+4797,539799,Bharat Wire Ropes Ltd,BSE,Capital Goods
+4798,539800,CHD Chemicals Ltd,BSE,Chemicals
+4799,539814,LE Lavoir Ltd,BSE,Business Services
+4800,539833,Shivom Investment & Consultancy Ltd,BSE,
+4801,539834,Balgopal Commercial Ltd,BSE,Business Services
+4802,539835,Superior Finlease Ltd,BSE,NBFC & Financial Services
+4803,539839,Franklin Leasing and Finance Ltd,BSE,
+4804,539841,Lancer Container Lines Ltd,BSE,Logistics
+4805,539864,Ghushine Fintrrade Ocean Ltd,BSE,Textiles
+4806,539871,Thyrocare Technologies Ltd,BSE,Healthcare
+4807,539876,Crompton Greaves Consumer Electricals Ltd,BSE,Consumer Durables
+4808,539889,Parag Milk Foods Ltd,BSE,FMCG
+4809,539894,Madhav Infra Projects Ltd,BSE,
+4810,539895,Spice Lounge Food Works Ltd,BSE,Hospitality / Leisure
+4811,539927,Likhami Consulting Ltd,BSE,
+4812,539946,Bazel International Ltd,BSE,
+4813,539947,Jindal Leasefin Ltd,BSE,NBFC & Financial Services
+4814,539957,Mahanagar Gas Ltd,BSE,Oil & Gas
+4815,539963,Zeal Aqua Ltd,BSE,
+4816,539978,Quess Corp Ltd,BSE,Business Services
+4817,539991,Confidence Futuristic Energetech Ltd,BSE,Business Services
+4818,539992,Lloyds Engineering Works Ltd,BSE,Capital Goods
+4819,540005,LTM Ltd,BSE,IT  Software
+4820,540025,Advanced Enzyme Technologies Ltd,BSE,Pharma
+4821,540027,Prabhat Technologies (India) Ltd,BSE,
+4822,540047,Dilip Buildcon Ltd,BSE,Construction & Infra
+4823,540062,Golden Crest Education & Services Ltd,BSE,
+4824,540063,ECS Biztech Ltd,BSE,IT  Software
+4825,540065,RBL Bank Ltd,BSE,Banks
+4826,540073,BLS International Services Ltd,BSE,
+4827,540078,Mitsu Chem Plast Ltd,BSE,Capital Goods
+4828,540080,Dhatre Udyog Ltd,BSE,
+4829,540083,TV Vision Ltd,BSE,
+4830,540097,Gamco Ltd,BSE,
+4831,540115,L&T Technology Services Ltd,BSE,IT  Services
+4832,540124,G N A Axles Ltd,BSE,
+4833,540133,ICICI Prudential Life Insurance Company Ltd,BSE,Insurance
+4834,540146,Aditya Consumer Marketing Ltd,BSE,Retail
+4835,540150,Mewar Hi-Tech Engineering Ltd,BSE,
+4836,540168,Supra Pacific Financial Services Ltd,BSE,NBFC & Financial Services
+4837,540173,PNB Housing Finance Ltd,BSE,NBFC & Financial Services
+4838,540175,Regency Fincorp Ltd,BSE,NBFC & Financial Services
+4839,540180,Varun Beverages Ltd,BSE,FMCG
+4840,540181,Salem Erode Investments Ltd,BSE,
+4841,540189,Unipro Technologies Ltd,BSE,IT  Services
+4842,540190,Franklin Industries Ltd,BSE,Business Services
+4843,540199,Corporate Merchant Bankers Ltd,BSE,NBFC & Financial Services
+4844,540205,Aditya Vision Ltd,BSE,Retail
+4845,540210,Heads UP Ventures Ltd,BSE,Textiles
+4846,540221,Shashank Traders Ltd,BSE,Business Services
+4847,540222,Laurus Labs Ltd,BSE,Pharma
+4848,540254,Marg Techno Projects Ltd,BSE,
+4849,540269,Super Fine Knitters Ltd,BSE,
+4850,540293,Pricol Ltd,BSE,Auto Ancillaries
+4851,540310,Classic Filaments Ltd,BSE,Textiles
+4852,540311,JITF Infralogistics Ltd,BSE,Utilities
+4853,540358,RMC Switchgears Ltd,BSE,Capital Goods
+4854,540359,Parmax Pharma Ltd,BSE,Pharma
+4855,540376,Avenue Supermarts Ltd,BSE,Retail
+4856,540385,KD Leisures Ltd,BSE,
+4857,540396,Manomay Tex India Ltd,BSE,Textiles
+4858,540425,Shankara Building Products Ltd,BSE,Retail
+4859,540481,Classic Leasing & Finance Ltd,BSE,
+4860,540492,Starlineps Enterprises Ltd,BSE,
+4861,540526,IRB InvIT Fund,BSE,
+4862,540544,PSP Projects Ltd,BSE,Construction & Infra
+4863,540550,Yug Decor Ltd,BSE,Chemicals
+4864,540565,IndiGrid Infrastructure Trust,BSE,Power
+4865,540590,Riddhi Corporate Services Ltd,BSE,IT  Services
+4866,540595,Tejas Networks Ltd,BSE,Telecom
+4867,540596,Eris Lifesciences Ltd,BSE,Pharma
+4868,540611,AU Small Finance Bank Ltd,BSE,Banks
+4869,540613,Gautam Exim Ltd,BSE,Business Services
+4870,540642,Salasar Techno Engineering Ltd,BSE,Capital Goods
+4871,540647,Ganges Securities Ltd,BSE,FMCG
+4872,540648,Palash Securities Ltd,BSE,FMCG
+4873,540649,Avadh Sugar & Energy Ltd,BSE,FMCG
+4874,540650,Magadh Sugar & Energy Ltd,BSE,FMCG
+4875,540651,Jigar Cables Ltd,BSE,
+4876,540673,SIS Ltd,BSE,Consumer Services
+4877,540678,Cochin Shipyard Ltd,BSE,Capital Goods
+4878,540686,Smruthi Organics Ltd,BSE,Pharma
+4879,540691,Aditya Birla Capital Ltd,BSE,NBFC & Financial Services
+4880,540699,Dixon Technologies (India) Ltd,BSE,Consumer Durables
+4881,540701,Dishman Carbogen Amcis Ltd,BSE,Pharma
+4882,540703,Pro Clb Global Ltd,BSE,Business Services
+4883,540704,Matrimony.com Ltd,BSE,Retail
+4884,540709,Reliance Home Finance Ltd,BSE,NBFC & Financial Services
+4885,540716,ICICI Lombard General Insurance Company Ltd,BSE,Insurance
+4886,540719,SBI Life Insurance Company Ltd,BSE,
+4887,540725,Share India Securities Ltd,BSE,
+4888,540727,Poojawestern Metaliks Ltd,BSE,Capital Goods
+4889,540728,Sayaji Industries Ltd,BSE,FMCG
+4890,540729,Vanta Bioscience Ltd,BSE,
+4891,540743,Godrej Agrovet Ltd,BSE,FMCG
+4892,540749,MAS Financial Services Ltd,BSE,NBFC & Financial Services
+4893,540750,Indian Energy Exchange Ltd,BSE,Capital Markets
+4894,540757,Sheetal Cool Products Ltd,BSE,FMCG
+4895,540762,Tube Investments of India Ltd,BSE,Auto Ancillaries
+4896,540767,Nippon Life India Asset Management Ltd,BSE,
+4897,540769,The New India Assurance Company Ltd,BSE,
+4898,540774,IFGL Refractories Ltd,BSE,Capital Goods
+4899,540775,Khadim India Ltd,BSE,
+4900,540776,5paisa Capital Ltd,BSE,Capital Markets
+4901,540782,Sanghvi Brands Ltd,BSE,
+4902,540786,Sharika Enterprises Ltd,BSE,Business Services
+4903,540795,Dynamic Cables Ltd,BSE,Capital Goods
+4904,540797,Shalby Ltd,BSE,Healthcare
+4905,540824,Astron Paper & Board Mill Ltd,BSE,Paper
+4906,540829,Chandrima Mercantiles Ltd,BSE,Business Services
+4907,540879,Apollo Micro Systems Ltd,BSE,
+4908,540900,Newgen Software Technologies Ltd,BSE,IT  Software
+4909,540901,Praxis Home Retail Ltd,BSE,Retail
+4910,540954,The Indian Wood Products Company Ltd,BSE,Paper
+4911,540956,Bhatia Communications & Retail (India) Ltd,BSE,
+4912,540961,Shiva Mills Ltd,BSE,Textiles
+4913,540975,Aster DM Healthcare Ltd,BSE,Healthcare
+4914,541005,Kanco Tea & Industries Ltd,BSE,FMCG
+4915,541083,Inflame Appliances Ltd,BSE,
+4916,541143,Bharat Dynamics Ltd,BSE,
+4917,541144,Active Clothing Co Ltd,BSE,Textiles
+4918,541152,Goyal Aluminiums Ltd,BSE,
+4919,541153,Bandhan Bank Ltd,BSE,Banks
+4920,541154,Hindustan Aeronautics Ltd,BSE,Defence
+4921,541161,Dharan Infra-EPC Ltd,BSE,
+4922,541163,Sandhar Technologies Ltd,BSE,Auto Ancillaries
+4923,541178,Benara Bearings and Pistons Ltd,BSE,Capital Goods
+4924,541195,Mishra Dhatu Nigam Ltd,BSE,Defence
+4925,541233,Lemon Tree Hotels Ltd,BSE,Hospitality / Leisure
+4926,541299,Dr Lalchandani Labs Ltd,BSE,Healthcare
+4927,541300,INTERISE TRUST,BSE,
+4928,541301,Orient Electric Ltd,BSE,Consumer Durables
+4929,541302,Dhruv Consultancy Services Ltd,BSE,Business Services
+4930,541347,Parvati Sweetners and Power Ltd,BSE,
+4931,541352,Megastar Foods Ltd,BSE,FMCG
+4932,541353,Innovators Facade Systems Ltd,BSE,Capital Goods
+4933,541358,Unifinz Capital India Ltd,BSE,NBFC & Financial Services
+4934,541402,Affordable Robotic & Automation Ltd,BSE,
+4935,541445,Waa Solar Ltd,BSE,
+4936,541450,Adani Green Energy Ltd,BSE,Power
+4937,541540,Solara Active Pharma Sciences Ltd,BSE,Pharma
+4938,541546,Gayatri Highways Ltd,BSE,Infrastructure
+4939,541556,RITES Ltd,BSE,Construction & Infra
+4940,541557,Fine Organic Industries Ltd,BSE,Chemicals
+4941,541578,Varroc Engineering Ltd,BSE,Auto Ancillaries
+4942,541627,Gujarat Winding Systems Ltd,BSE,Paper
+4943,541634,Raw Edge Industrial Solutions Ltd,BSE,Metals & Mining
+4944,541701,Supershakti Metaliks Ltd,BSE,Capital Goods
+4945,541703,Raconteur Global Resources Ltd,BSE,
+4946,541735,Vivanta Industries Ltd,BSE,Construction & Infra
+4947,541770,CreditAccess Grameen Ltd,BSE,NBFC & Financial Services
+4948,541799,Sungold Media and Entertainment Ltd,BSE,Media
+4949,541929,Synergy Green Industries Ltd,BSE,
+4950,541967,Sky Gold And Diamonds Ltd,BSE,Consumer Durables
+4951,541974,Manorama Industries Ltd,BSE,FMCG
+4952,541988,AAVAS Financiers Ltd,BSE,NBFC & Financial Services
+4953,542011,Garden Reach Shipbuilders & Engineers Ltd,BSE,Defence
+4954,542012,A-1 Ltd,BSE,Chemicals
+4955,542057,BCPL Railway Infrastructure Ltd,BSE,Construction & Infra
+4956,542066,Adani Total Gas Ltd,BSE,Oil & Gas
+4957,542123,The Phosphate Company Ltd,BSE,Chemicals
+4958,542146,Shree Krishna Infrastructure Ltd,BSE,
+4959,542216,Dalmia Bharat Ltd,BSE,
+4960,542323,KPI Green Energy Ltd,BSE,Power
+4961,542332,Hi-Klass Trading and Investment Ltd,BSE,NBFC & Financial Services
+4962,542333,RPSG Ventures Ltd,BSE,Business Services
+4963,542377,Aar Shyam India Investment Company Ltd,BSE,NBFC & Financial Services
+4964,542383,Ritco Logistics Ltd,BSE,Logistics
+4965,542399,Chalet Hotels Ltd,BSE,Hospitality / Leisure
+4966,542446,Jonjua Overseas Ltd,BSE,Business Services
+4967,542484,Arvind Fashions Ltd,BSE,Retail
+4968,542602,Embassy Office Parks REIT,BSE,Real Estate
+4969,542651,KPIT Technologies Ltd,BSE,IT  Software
+4970,542652,Polycab India Ltd,BSE,Capital Goods
+4971,542654,V R Films & Studios Ltd,BSE,Media
+4972,542667,White Organic Retail Ltd,BSE,
+4973,542669,BMW Industries Ltd,BSE,Capital Goods
+4974,542670,Artemis Electricals and Projects Ltd,BSE,Capital Goods
+4975,542678,Cian Healthcare Ltd,BSE,
+4976,542682,Harish Textile Engineers Ltd,BSE,
+4977,542684,Prakash Pipes Ltd,BSE,
+4978,542694,Parshva Enterprises Ltd,BSE,Business Services
+4979,542721,Anand Rayons Ltd,BSE,Textiles
+4980,542725,SBC Exports Ltd,BSE,Textiles
+4981,542726,IndiaMART InterMESH Ltd,BSE,
+4982,542729,DCM Nouvelle Ltd,BSE,Textiles
+4983,542752,Affle 3I Ltd,BSE,IT  Services
+4984,542759,Spandana Sphoorty Financial Ltd,BSE,NBFC & Financial Services
+4985,542760,Sterling and Wilson Renewable Energy Ltd,BSE,Construction & Infra
+4986,542772,360 ONE WAM LTD,BSE,Capital Markets
+4987,542773,IIFL Capital Services Ltd,BSE,Capital Markets
+4988,542802,Galactico Corporate Services Ltd,BSE,
+4989,542803,Vaxfab Enterprises Ltd,BSE,
+4990,542830,Indian Railway Catering and Tourism Corporation Ltd,BSE,
+4991,542850,Goblin India Ltd,BSE,Consumer Durables
+4992,542857,Greenpanel Industries Ltd,BSE,Consumer Durables
+4993,542866,Colab Platforms Ltd,BSE,NBFC & Financial Services
+4994,542867,CSB Bank Ltd,BSE,Banks
+4995,542904,Ujjivan Small Finance Bank Ltd,BSE,Banks
+4996,542905,Hindware Home Innovation Ltd,BSE,Consumer Durables
+4997,542907,Prince Pipes and Fittings Ltd,BSE,
+4998,542919,Artemis Medicare Services Ltd,BSE,Healthcare
+4999,543064,Cohance Lifesciences Ltd,BSE,Pharma
+5000,543065,SM Auto Stamping Ltd,BSE,
+5001,543066,SBI Cards and Payment Services Ltd,BSE,NBFC & Financial Services
+5002,543171,RO Jewels Ltd,BSE,
+5003,543207,Natural Biocon (India) Ltd,BSE,Chemicals
+5004,543210,Aarti Surfactants Ltd,BSE,Chemicals
+5005,543211,Bonlon Industries Ltd,BSE,Metals
+5006,543212,Borosil Ltd,BSE,Consumer Durables
+5007,543213,Rossari Biotech Ltd,BSE,Chemicals
+5008,543214,NDR Auto Components Ltd,BSE,Auto Ancillaries
+5009,543217,Mindspace Business Parks REIT,BSE,Real Estate
+5010,543220,Max Healthcare Institute Ltd,BSE,Healthcare
+5011,543225,Altius Telecom Infrastructure Trust,BSE,Telecom
+5012,543227,Happiest Minds Technologies Ltd,BSE,IT  Software
+5013,543228,Route Mobile Ltd,BSE,Telecom
+5014,543232,Computer Age Management Services Ltd,BSE,Capital Markets
+5015,543235,Angel One Ltd,BSE,Capital Markets
+5016,543237,Mazagon Dock Shipbuilders Ltd,BSE,Capital Goods
+5017,543238,UTI Asset Management Company Ltd,BSE,Capital Markets
+5018,543239,G M Polyplast Ltd,BSE,Capital Goods
+5019,543240,Likhitha Infrastructure Ltd,BSE,Construction & Infra
+5020,543243,Equitas Small Finance Bank Ltd,BSE,Banks
+5021,543245,Gland Pharma Ltd,BSE,Pharma
+5022,543249,Tarc Ltd,BSE,
+5023,543252,Fairchem Organics Ltd,BSE,Chemicals
+5024,543253,Mrs. Bectors Food Specialities Ltd,BSE,
+5025,543254,Antony Waste Handling Cell Ltd,BSE,Utilities
+5026,543256,Rita Finance and Leasing Ltd,BSE,
+5027,543257,Indian Railway Finance Corporation Ltd,BSE,
+5028,543259,Home First Finance Company India Ltd,BSE,NBFC & Financial Services
+5029,543260,Stove Kraft Ltd,BSE,Consumer Durables
+5030,543262,MRP Agro Ltd,BSE,
+5031,543263,SMC Global Securities Ltd,BSE,Capital Markets
+5032,543265,RailTel Corporation of India Ltd,BSE,Telecom
+5033,543269,Adjia Technologies Ltd,BSE,IT  Software
+5034,543270,MTAR Technologies Ltd,BSE,Defence
+5035,543271,Jubilant Ingrevia Ltd,BSE,Chemicals
+5036,543272,Easy Trip Planners Ltd,BSE,Hospitality / Leisure
+5037,543273,Knowledge Marine & Engineering Works Ltd,BSE,Capital Goods
+5038,543275,Anupam Rasayan India Ltd,BSE,Chemicals
+5039,543276,Craftsman Automation Ltd,BSE,Auto Ancillaries
+5040,543277,Laxmi Organic Industries Ltd,BSE,Chemicals
+5041,543280,Nazara Technologies Ltd,BSE,Media
+5042,543283,United Foodbrands Ltd,BSE,Hospitality / Leisure
+5043,543284,EKI Energy Services Ltd,BSE,Business Services
+5044,543286,Jetmall Spices and Masala Ltd,BSE,FMCG
+5045,543290,POWERGRID Infrastructure Investment Trust,BSE,
+5046,543299,Shyam Metalics and Energy Ltd,BSE,Capital Goods
+5047,543300,Sona BLW Precision Forgings Ltd,BSE,Auto Ancillaries
+5048,543306,Dodla Dairy Ltd,BSE,FMCG
+5049,543308,Krishna Institute of Medical Sciences Ltd,BSE,Healthcare
+5050,543311,India Pesticides Ltd,BSE,Chemicals
+5051,543312,Focus Business Solution Ltd,BSE,
+5052,543317,G R Infraprojects Ltd,BSE,Construction & Infra
+5053,543318,Clean Science and Technology Ltd,BSE,
+5054,543320,Eternal Ltd,BSE,Retail
+5055,543321,Tatva Chintan Pharma Chem Ltd,BSE,Chemicals
+5056,543322,Alivus Life Sciences Ltd,BSE,
+5057,543327,Exxaro Tiles Ltd,BSE,Consumer Durables
+5058,543329,Windlas Biotech Ltd,BSE,Pharma
+5059,543331,Meghmani Organics Ltd,BSE,Chemicals
+5060,543332,Epigral Ltd,BSE,Chemicals
+5061,543333,CarTrade Tech Ltd,BSE,Retail
+5062,543334,Nuvoco Vistas Corporation Ltd,BSE,
+5063,543335,Aptus Value Housing Finance India Ltd,BSE,
+5064,543349,Acutaas Chemicals Ltd,BSE,Pharma
+5065,543363,Prevest Denpro Ltd,BSE,Healthcare
+5066,543367,Paras Defence and Space Technologies Ltd,BSE,Defence
+5067,543372,Getalong Enterprise Ltd,BSE,Business Services
+5068,543373,Shri Venkatesh Refineries Ltd,BSE,FMCG
+5069,543375,Promax Power Ltd,BSE,Construction & Infra
+5070,543376,Samor Reality Ltd,BSE,
+5071,543377,Adishakti Loha and Ispat Ltd,BSE,
+5072,543385,National Highways Infra Trust,BSE,Infrastructure
+5073,543386,Fino Payments Bank Ltd,BSE,Banks
+5074,543387,S.J.S. Enterprises Ltd,BSE,Auto Ancillaries
+5075,543390,PB Fintech Ltd,BSE,Fintech
+5076,543397,Sapphire Foods India Ltd,BSE,Hospitality / Leisure
+5077,543398,Latent View Analytics Ltd,BSE,IT  Software
+5078,543401,Go Fashion (India) Ltd,BSE,Retail
+5079,543410,DMR Engineering Ltd,BSE,
+5080,543412,Star Health and Allied Insurance Company Ltd,BSE,Insurance
+5081,543413,Tega Industries Ltd,BSE,Capital Goods
+5082,543415,Anand Rathi Wealth Ltd,BSE,Capital Markets
+5083,543416,Zodiac Energy Ltd,BSE,
+5084,543417,RateGain Travel Technologies Ltd,BSE,IT  Software
+5085,543419,Shriram Properties Ltd,BSE,Real Estate
+5086,543426,Metro Brands Ltd,BSE,Consumer Durables
+5087,543427,Medplus Health Services Ltd,BSE,Retail
+5088,543433,HP Adhesives Ltd,BSE,Chemicals
+5089,543442,Brand Concepts Ltd,BSE,Retail
+5090,543443,Ascensive Educare Ltd,BSE,
+5091,543444,Fabino Enterprises Ltd,BSE,Pharma
+5092,543451,AGS Transact Technologies Ltd,BSE,
+5093,543453,Alkosign Ltd,BSE,
+5094,543458,AWL Agri Business Ltd,BSE,FMCG
+5095,543462,Dev Information Technology Ltd,BSE,
+5096,543463,Vedant Fashions Ltd,BSE,Retail
+5097,543464,Maruti Interior Products Ltd,BSE,
+5098,543470,Softtech Engineers Ltd,BSE,
+5099,543497,Bhatia Colour Chem Ltd,BSE,Chemicals
+5100,543498,Motherson Sumi Wiring India Ltd,BSE,Auto Ancillaries
+5101,543514,Veranda Learning Solutions Ltd,BSE,Consumer Services
+5102,543516,Dhyaani Tradeventtures Ltd,BSE,
+5103,543520,Global Longlife Hospital and Research Ltd,BSE,Healthcare
+5104,543524,Rainbow Children's Medicare Ltd,BSE,Healthcare
+5105,543525,Silver Touch Technologies Ltd,BSE,IT  Software
+5106,543526,Life Insurance Corporation of India,BSE,Insurance
+5107,543527,Prudent Corporate Advisory Services Ltd,BSE,Capital Markets
+5108,543528,Venus Pipes & Tubes Ltd,BSE,Capital Goods
+5109,543529,Delhivery Ltd,BSE,Logistics
+5110,543530,Paradeep Phosphates Ltd,BSE,
+5111,543532,Ethos Ltd,BSE,Consumer Durables
+5112,543533,eMudhra Ltd,BSE,
+5113,543534,Aether Industries Ltd,BSE,Chemicals
+5114,543535,We Win Ltd,BSE,
+5115,543537,Scarnose International Ltd,BSE,
+5116,543538,Goel Food Products Ltd,BSE,
+5117,543540,Pearl Green Clubs and Resorts Ltd,BSE,FMCG
+5118,543542,Kesar India Ltd,BSE,
+5119,543543,B-Right Realestate Ltd,BSE,Real Estate
+5120,543544,Jayant Infratech Ltd,BSE,Construction & Infra
+5121,543546,Healthy Life Agritec Ltd,BSE,FMCG
+5122,543547,Ddev Plastiks Industries Ltd,BSE,Chemicals
+5123,543573,Syrma SGS Technology Ltd,BSE,Capital Goods
+5124,543578,Olatech Solutions Ltd,BSE,IT  Software
+5125,543590,Rhetan TMT Ltd,BSE,Capital Goods
+5126,543591,Dreamfolks Services Ltd,BSE,Infrastructure
+5127,543593,Dhampur Bio Organics Ltd,BSE,
+5128,543596,Tamilnad Mercantile Bank Ltd,BSE,Banks
+5129,543597,Virtuoso Optoelectronics Ltd,BSE,
+5130,543598,Shantidoot Infra Services Ltd,BSE,
+5131,543599,Ksolves India Ltd,BSE,IT  Software
+5132,543606,Containe Technologies Ltd,BSE,Capital Goods
+5133,543613,Mafia Trends Ltd,BSE,
+5134,543614,Tips Films Ltd,BSE,Media
+5135,543615,Silicon Rental Solutions Ltd,BSE,Business Services
+5136,543616,Trident Lifeline Ltd,BSE,Pharma
+5137,543620,Insolation Energy Ltd,BSE,
+5138,543622,Steelman Telecom Ltd,BSE,Telecom
+5139,543625,SecUR Credentials Ltd,BSE,
+5140,543626,Electronics Mart India Ltd,BSE,
+5141,543635,Piramal Pharma Ltd,BSE,Pharma
+5142,543636,Dc Infotech and Communication Ltd,BSE,IT  Hardware
+5143,543638,Tracxn Technologies Ltd,BSE,Business Services
+5144,543644,Infobeans Technologies Ltd,BSE,IT  Software
+5145,543645,Hindprakash Industries Ltd,BSE,Chemicals
+5146,543650,DCX Systems Ltd,BSE,Defence
+5147,543651,DAPS Advertising Ltd,BSE,Media
+5148,543652,Fusion Finance Ltd,BSE,NBFC & Financial Services
+5149,543653,Bikaji Foods International Ltd,BSE,
+5150,543654,Global Health Ltd,BSE,Healthcare
+5151,543655,Anzen India Energy Yield Plus Trust,BSE,
+5152,543656,Technopack Polymers Ltd,BSE,
+5153,543663,Five-Star Business Finance Ltd,BSE,NBFC & Financial Services
+5154,543664,Kaynes Technology India Ltd,BSE,Capital Goods
+5155,543667,Inox Green Energy Services Ltd,BSE,Power
+5156,543686,Sirca Paints India Ltd,BSE,
+5157,543688,Sarveshwar Foods Ltd,BSE,
+5158,543689,Uniparts India Ltd,BSE,
+5159,543709,PNGS Gargi Fashion Jewellery Ltd,BSE,Consumer Durables
+5160,543712,Abans Financial Services Ltd,BSE,
+5161,543720,KFin Technologies Ltd,BSE,
+5162,543743,Aeroflex Neu Ltd,BSE,Capital Goods
+5163,543744,Rex Sealing and Packing Industries Ltd,BSE,Capital Goods
+5164,543745,SVS Ventures Ltd,BSE,Real Estate
+5165,543746,Logica Infoway Ltd,BSE,Retail
+5166,543747,Kamdhenu Ventures Ltd,BSE,Consumer Durables
+5167,543766,Ashika Credit Capital Ltd,BSE,NBFC & Financial Services
+5168,543767,Bodhi Tree Multimedia Ltd,BSE,Media
+5169,543798,Patron Exim Ltd,BSE,Chemicals
+5170,543812,DIVGI TORQTRANSFER SYSTEMS Ltd,BSE,Auto Ancillaries
+5171,543828,Sudarshan Pharma Industries Ltd,BSE,Chemicals
+5172,543829,Global Surfaces Ltd,BSE,Consumer Durables
+5173,543831,Bright Outdoor Media Ltd,BSE,Media
+5174,543848,Dev Labtech Venture Ltd,BSE,Consumer Durables
+5175,543859,Digital Fibre Infrastructure Trust,BSE,
+5176,543861,Udayshivakumar Infra Ltd,BSE,Construction & Infra
+5177,543899,Cube Highways Trust,BSE,
+5178,543910,AVG Logistics Ltd,BSE,Logistics
+5179,543912,Power and Instrumentation (Gujarat) Ltd,BSE,Capital Goods
+5180,543913,Nexus Select Trust,BSE,Real Estate
+5181,543914,Swati Projects Ltd,BSE,
+5182,543916,Hemant Surgical Industries Ltd,BSE,Healthcare
+5183,543918,GHCL Textiles Ltd,BSE,Textiles
+5184,543920,CFF Fluid Control Ltd,BSE,Defence
+5185,543923,IKIO Technologies Ltd,BSE,Consumer Durables
+5186,543927,Asian Warehousing Ltd,BSE,Consumer Services
+5187,543929,HMA Agro Industries Ltd,BSE,FMCG
+5188,543931,Veefin Solutions Ltd,BSE,IT  Services
+5189,543932,Ideaforge Technology Ltd,BSE,Defence
+5190,543933,Cyient DLM Ltd,BSE,Capital Goods
+5191,543934,Machhar Industries Ltd,BSE,Chemicals
+5192,543936,Senco Gold Ltd,BSE,Consumer Durables
+5193,543938,Acceleratebs India Ltd,BSE,IT  Software
+5194,543939,Kaka Industries Ltd,BSE,Capital Goods
+5195,543941,Ahasolar Technologies Ltd,BSE,Retail
+5196,543942,Utkarsh Small Finance Bank Ltd,BSE,Banks
+5197,543945,Netweb Technologies India Ltd,BSE,IT  Services
+5198,543952,NIIT Learning Systems Ltd,BSE,Consumer Services
+5199,543957,Redtape Ltd,BSE,Consumer Durables
+5200,543959,SBFC Finance Ltd,BSE,NBFC & Financial Services
+5201,543962,D.P. Wires Ltd,BSE,Capital Goods
+5202,543963,Shelter Pharma Ltd,BSE,Pharma
+5203,543971,Bondada Engineering Ltd,BSE,Telecom
+5204,543972,Aeroflex Industries Ltd,BSE,Capital Goods
+5205,543974,Vishnu Prakash R Punglia Ltd,BSE,Construction & Infra
+5206,543976,Shradha AI Technologies Ltd,BSE,IT  Software
+5207,543978,Ratnaveer Precision Engineering Ltd,BSE,Capital Goods
+5208,543980,Jupiter Life Line Hospitals Ltd,BSE,Healthcare
+5209,543981,R R Kabel Ltd,BSE,Capital Goods
+5210,543982,Quest Flow Controls Ltd,BSE,
+5211,543983,EMS Ltd,BSE,Utilities
+5212,543985,Zaggle Prepaid Ocean Services Ltd,BSE,IT  Services
+5213,543986,South West Pinnacle Exploration Ltd,BSE,Business Services
+5214,543988,Nuvama Wealth Management Ltd,BSE,Capital Markets
+5215,543989,Sai Silks (Kalamandir) Ltd,BSE,Retail
+5216,543990,Signatureglobal (India) Ltd,BSE,
+5217,543992,Yatra Online Ltd,BSE,Hospitality / Leisure
+5218,543994,JSW Infrastructure Ltd,BSE,Infrastructure
+5219,543996,Updater Services Ltd,BSE,Business Services
+5220,543997,Organic Recycling Systems Ltd,BSE,Utilities
+5221,544000,City Crops Agro Ltd,BSE,FMCG
+5222,544001,Sunita Tools Ltd,BSE,Capital Goods
+5223,544003,Plaza Wires Ltd,BSE,
+5224,544004,IRM Energy Ltd,BSE,Oil & Gas
+5225,544005,Intelligent Supply Chain Infrastructure Trust,BSE,
+5226,544008,Max Estates Ltd,BSE,Real Estate
+5227,544014,Honasa Consumer Ltd,BSE,FMCG
+5228,544015,Mish Designs Ltd,BSE,Textiles
+5229,544020,ESAF Small Finance Bank Ltd,BSE,Banks
+5230,544022,ASK Automotive Ltd,BSE,Auto Ancillaries
+5231,544026,Indian Renewable Energy Development Agency Ltd,BSE,NBFC & Financial Services
+5232,544027,Fedbank Financial Services Ltd,BSE,NBFC & Financial Services
+5233,544028,Tata Technologies Ltd,BSE,IT  Services
+5234,544030,Flair Writing Industries Ltd,BSE,
+5235,544042,Bajel Projects Ltd,BSE,Capital Goods
+5236,544044,India Shelter Finance Corporation Ltd,BSE,NBFC & Financial Services
+5237,544046,INOX India Ltd,BSE,Capital Goods
+5238,544047,Siyaram Recycling Industries Ltd,BSE,
+5239,544055,Muthoot Microfin Ltd,BSE,NBFC & Financial Services
+5240,544057,Happy Forgings Ltd,BSE,Capital Goods
+5241,544059,Shanti Spintex Ltd,BSE,Textiles
+5242,544060,RBZ Jewellers Ltd,BSE,Consumer Durables
+5243,544061,Azad Engineering Ltd,BSE,Capital Goods
+5244,544066,Sundaram-Clayton Ltd,BSE,
+5245,544074,Shri Balaji Valve Components Ltd,BSE,
+5246,544080,Sayaji Hotels (Indore) Ltd,BSE,
+5247,544081,Jyoti CNC Automation Ltd,BSE,
+5248,544088,Medi Assist Healthcare Services Ltd,BSE,Insurance
+5249,544090,Sayaji Hotels (Pune) Ltd,BSE,Hospitality / Leisure
+5250,544091,Qualitek Labs Ltd,BSE,Business Services
+5251,544094,Euphoria Infotech (India) Ltd,BSE,IT  Services
+5252,544105,Harshdeep Hortico Ltd,BSE,FMCG
+5253,544106,Mayank Cattle Food Ltd,BSE,FMCG
+5254,544107,BLS E-Services Ltd,BSE,IT  Services
+5255,544108,Gabriel Pet Straps Ltd,BSE,Capital Goods
+5256,544118,Jana Small Finance Bank Ltd,BSE,Banks
+5257,544120,Capital Small Finance Bank Ltd,BSE,Banks
+5258,544121,Rudra Gas Enterprise Ltd,BSE,Construction & Infra
+5259,544122,Entero Healthcare Solutions Ltd,BSE,
+5260,544124,Vibhor Steel Tubes Ltd,BSE,Capital Goods
+5261,544129,Juniper Hotels Ltd,BSE,Hospitality / Leisure
+5262,544134,Platinum Industries Ltd,BSE,Chemicals
+5263,544137,Indus Infra Trust,BSE,Infrastructure
+5264,544138,J.G.Chemicals Ltd,BSE,Chemicals
+5265,544139,Koura Fine Diamond Jewelry Ltd,BSE,Consumer Durables
+5266,544142,Shipping Corporation of India Land and Assets Ltd,BSE,NBFC & Financial Services
+5267,544144,Popular Vehicles and Services Ltd,BSE,Automobiles
+5268,544149,Krystal Integrated Services Ltd,BSE,Business Services
+5269,544150,KP Green Engineering Ltd,BSE,Capital Goods
+5270,544151,Chatha Foods Ltd,BSE,FMCG
+5271,544157,Vruddhi Engineering Works Ltd,BSE,
+5272,544172,Indegene Ltd,BSE,Healthcare
+5273,544176,Aadhar Housing Finance Ltd,BSE,NBFC & Financial Services
+5274,544177,Aztec Fluids & Machinery Ltd,BSE,
+5275,544179,Go Digit General Insurance Ltd,BSE,Insurance
+5276,544181,Awfis Space Solutions Ltd,BSE,Business Services
+5277,544184,Borosil Scientific Ltd,BSE,
+5278,544185,Adtech Systems Ltd,BSE,Capital Goods
+5279,544189,Sattrix Information Security Ltd,BSE,IT  Services
+5280,544191,Purple Finance Ltd,BSE,
+5281,544192,Le Travenues Technology Ltd,BSE,Hospitality / Leisure
+5282,544197,JHS Svendgaard Retail Ventures Ltd,BSE,Retail
+5283,544198,Dee Development Engineers Ltd,BSE,
+5284,544200,Akme Fintrade (India) Ltd,BSE,NBFC & Financial Services
+5285,544203,Allied Blenders and Distillers Ltd,BSE,FMCG
+5286,544204,Vraj Iron And Steel Ltd,BSE,Metals
+5287,544205,National Peroxide Ltd,BSE,Chemicals
+5288,544209,Bansal Wire Industries Ltd,BSE,Capital Goods
+5289,544210,Emcure Pharmaceuticals Ltd,BSE,Pharma
+5290,544217,Sanstar Ltd,BSE,FMCG
+5291,544219,VVIP Infratech Ltd,BSE,Utilities
+5292,544220,Clinitech Laboratory Ltd,BSE,Healthcare
+5293,544221,Kizi Apparels Ltd,BSE,Textiles
+5294,544223,Ceigall India Ltd,BSE,Construction & Infra
+5295,544224,Afcom Holdings Ltd,BSE,Logistics
+5296,544225,Ola Electric Mobility Ltd,BSE,Automobiles
+5297,544226,Brainbees Solutions Ltd,BSE,Retail
+5298,544227,Unicommerce Esolutions Ltd,BSE,IT  Software
+5299,544232,Interarch Building Solutions Ltd,BSE,Construction & Infra
+5300,544235,Orient Technologies Ltd,BSE,
+5301,544236,Resourceful Automobile Ltd,BSE,Automobiles
+5302,544238,Premier Energies Ltd,BSE,Capital Goods
+5303,544240,Raymond Lifestyle Ltd,BSE,Textiles
+5304,544242,Travels & Rentals Ltd,BSE,Hospitality / Leisure
+5305,544243,Baazar Style Retail Ltd,BSE,Retail
+5306,544250,Sanofi Consumer Healthcare India Ltd,BSE,Pharma
+5307,544252,Bajaj Housing Finance Ltd,BSE,NBFC & Financial Services
+5308,544253,Kross Ltd,BSE,Auto Ancillaries
+5309,544254,Tolins Tyres Ltd,BSE,
+5310,544256,P N Gadgil Jewellers Ltd,BSE,Consumer Durables
+5311,544260,Northern Arc Capital Ltd,BSE,NBFC & Financial Services
+5312,544263,KRN Heat Exchanger And Refrigeration Ltd,BSE,Capital Goods
+5313,544265,Nexxus Petro Industries Ltd,BSE,Chemicals
+5314,544269,Neopolitan Pizza And Foods Ltd,BSE,FMCG
+5315,544271,Garuda Construction and Engineering Ltd,BSE,Construction & Infra
+5316,544272,Shiv Texchem Ltd,BSE,
+5317,544273,Mangalam Global Enterprise Ltd,BSE,FMCG
+5318,544274,Hyundai Motor India Ltd,BSE,Automobiles
+5319,544276,Deepak Builders and Engineers India Ltd,BSE,Construction & Infra
+5320,544277,Waaree Energies Ltd,BSE,Capital Goods
+5321,544280,Afcons Infrastructure Ltd,BSE,Construction & Infra
+5322,544282,Sagility Ltd,BSE,
+5323,544283,ACME Solar Holdings Ltd,BSE,Power
+5324,544290,Enviro Infra Engineers Ltd,BSE,Utilities
+5325,544291,Rajesh Power Services Ltd,BSE,Utilities
+5326,544292,Onesource Specialty Pharma Ltd,BSE,Pharma
+5327,544293,Suraksha Diagnostic Ltd,BSE,Healthcare
+5328,544302,Innovana Thinklabs Ltd,BSE,IT  Software
+5329,544305,One Mobikwik Systems Ltd,BSE,Fintech
+5330,544307,Vishal Mega Mart Ltd,BSE,Retail
+5331,544309,Inventurus Knowledge Solutions Ltd,BSE,IT  Services
+5332,544310,Yash Highvoltage Ltd,BSE,Capital Goods
+5333,544314,Sanathan Textiles Ltd,BSE,Textiles
+5334,544316,DAM Capital Advisors Ltd,BSE,Capital Markets
+5335,544317,Transrail Lighting Ltd,BSE,Capital Goods
+5336,544318,Mamata Machinery Ltd,BSE,Capital Goods
+5337,544319,Senores Pharmaceuticals Ltd,BSE,
+5338,544320,Carraro India Ltd,BSE,Auto Ancillaries
+5339,544322,Unimech Aerospace and Manufacturing Ltd,BSE,Defence
+5340,544330,Parmeshwar Metal Ltd,BSE,Capital Goods
+5341,544332,Fabtech Technologies Cleanrooms Ltd,BSE,Capital Goods
+5342,544333,Standard Engineering Technology Ltd,BSE,Capital Goods
+5343,544334,Indobell Insulations Ltd,BSE,Capital Goods
+5344,544337,Avax Apparels and Ornaments Ltd,BSE,
+5345,544338,Capital Infra Trus,BSE,
+5346,544341,Landmark Global Learning Ltd,BSE,Hospitality / Leisure
+5347,544344,Shriram Pistons & Rings Ltd,BSE,Auto Ancillaries
+5348,544362,Hexaware Technologies Ltd,BSE,IT  Software
+5349,544366,L.K.Mehta Polymers Ltd,BSE,Capital Goods
+5350,544367,Quality Power Electrical Equipments Ltd,BSE,
+5351,544370,Nukleus Office Solutions Ltd,BSE,Business Services
+5352,544374,Roadstar Infra Investment Trust,BSE,
+5353,544379,Prabha Energy Ltd,BSE,Oil & Gas
+5354,544381,Super Iron Foundry Ltd,BSE,
+5355,544386,Spectrum Electrical Industries Ltd,BSE,Capital Goods
+5356,544387,Desco Infratech Ltd,BSE,Construction & Infra
+5357,544388,Identixweb Ltd,BSE,
+5358,544391,Retaggio Industries Ltd,BSE,Consumer Durables
+5359,544392,Spinaroo Commercial Ltd,BSE,Paper
+5360,544397,Ather Energy Ltd,BSE,Automobiles
+5361,544398,Kenrik Industries Ltd,BSE,
+5362,544402,Jash Engineering Ltd,BSE,Capital Goods
+5363,544403,Aditya Birla Lifestyle Brands Ltd,BSE,Retail
+5364,544404,Borana Weaves Ltd,BSE,Textiles
+5365,544407,Aegis Vopak Terminals Ltd,BSE,Oil & Gas
+5366,544408,Leela Palaces Hotels & Resorts Ltd,BSE,Hospitality / Leisure
+5367,544413,Digitide Solutions Ltd,BSE,IT  Services
+5368,544414,Bluspring Enterprises Ltd,BSE,
+5369,544416,Krishival Foods Ltd,BSE,FMCG
+5370,544418,Oswal Pumps Ltd,BSE,Capital Goods
+5371,544419,ArisInfra Solutions Ltd,BSE,Construction & Infra
+5372,544420,Raymond Realty Ltd,BSE,Real Estate
+5373,544422,Abram Food Ltd,BSE,
+5374,544424,Globe Civil Projects Ltd,BSE,Construction & Infra
+5375,544433,Valencia India Ltd,BSE,Hospitality / Leisure
+5376,544434,Neetu Yoshi Ltd,BSE,Capital Goods
+5377,544435,Adcounty Media India Ltd,BSE,Media
+5378,544437,Marc Loire Fashions Ltd,BSE,
+5379,544440,Cryogenic Ogs Ltd,BSE,Capital Goods
+5380,544441,Meta Infotech Ltd,BSE,IT  Services
+5381,544445,Asston Pharmaceuticals Ltd,BSE,
+5382,544446,Advent Hotels International Ltd,BSE,
+5383,544447,Smartworks Coworking Spaces Ltd,BSE,Business Services
+5384,544448,Pashupati Cotspin Ltd,BSE,
+5385,544453,Monarch Surveyors and Engineering Consultants Ltd,BSE,Business Services
+5386,544455,GNG Electronics Ltd,BSE,IT  Hardware
+5387,544456,R M Drip and Sprinklers Systems Ltd,BSE,Capital Goods
+5388,544457,Brigade Hotel Ventures Ltd,BSE,Hospitality / Leisure
+5389,544460,Patel Chem Specialities Ltd,BSE,
+5390,544464,Umiya Mobile Ltd,BSE,Retail
+5391,544466,Aditya Infotech Ltd,BSE,
+5392,544467,National Securities Depository Ltd,BSE,Capital Markets
+5393,544468,B. D. Industries (Pune) Ltd,BSE,
+5394,544469,Sri Lotus Developers and Realty Ltd,BSE,Real Estate
+5395,544471,Takyon Networks Ltd,BSE,IT  Services
+5396,544474,BLT Logistics Ltd,BSE,
+5397,544475,Essex Marine Ltd,BSE,FMCG
+5398,544476,Jeena Sikho Lifecare Ltd,BSE,Pharma
+5399,544477,Highway Infrastructure Ltd,BSE,Infrastructure
+5400,544480,JSW Cement Ltd,BSE,
+5401,544484,BlueStone Jewellery and Lifestyle Ltd,BSE,Consumer Durables
+5402,544487,Patel Retail Ltd,BSE,
+5403,544488,Vikram Solar Ltd,BSE,Capital Goods
+5404,544489,LGT Business Connextions Ltd,BSE,Hospitality / Leisure
+5405,544491,Gem Aromatics Ltd,BSE,Chemicals
+5406,544492,Mangal Electrical Industries Ltd,BSE,Capital Goods
+5407,544496,Vikran Engineering Ltd,BSE,Construction & Infra
+5408,544497,Anlon Healthcare Ltd,BSE,Pharma
+5409,544500,Abril Paper Tech Ltd,BSE,
+5410,544501,Sugs Lloyd Ltd,BSE,Capital Goods
+5411,544502,Amanta Healthcare Ltd,BSE,Pharma
+5412,544503,Rachit Prints Ltd,BSE,Textiles
+5413,544505,Austere Systems Ltd,BSE,
+5414,544511,Karbonsteel Engineering Ltd,BSE,Construction & Infra
+5415,544512,Shringar House of Mangalsutra Ltd,BSE,Consumer Durables
+5416,544513,Dev Accelerator Ltd,BSE,
+5417,544515,Urban Company Ltd,BSE,Retail
+5418,544521,VMS TMT Ltd,BSE,
+5419,544522,A B Cotspin India Ltd,BSE,Textiles
+5420,544523,Ivalue Infosolutions Ltd,BSE,
+5421,544525,GK Energy Ltd,BSE,Construction & Infra
+5422,544526,Saatvik Green Energy Ltd,BSE,
+5423,544527,Atlanta Electricals Ltd,BSE,Capital Goods
+5424,544528,Ganesh Consumer Products Ltd,BSE,FMCG
+5425,544530,Anand Rathi Share And Stock Brokers Ltd,BSE,
+5426,544532,Solarworld Energy Solutions Ltd,BSE,Construction & Infra
+5427,544534,Jaro Institute of Technology Management and Research Ltd,BSE,Consumer Services
+5428,544535,Bharatrohan Airborne Innovations Ltd,BSE,FMCG
+5429,544536,Wealth First Portfolio Managers Ltd,BSE,NBFC & Financial Services
+5430,544539,Solvex Edibles Ltd,BSE,FMCG
+5431,544540,Epack Prefab Technologies Ltd,BSE,Capital Goods
+5432,544541,Systematic Industries Ltd,BSE,
+5433,544542,Justo Realfintech Ltd,BSE,Real Estate
+5434,544543,BMW Ventures Ltd,BSE,Metals & Mining
+5435,544544,Telge Projects Ltd,BSE,
+5436,544545,Trualt Bioenergy Ltd,BSE,
+5437,544549,Earkart Ltd,BSE,Healthcare
+5438,544552,Rukmani Devi Garg Agro Impex Ltd,BSE,FMCG
+5439,544554,KVS Castings Ltd,BSE,
+5440,544556,Dhillon Freight Carrier Ltd,BSE,Logistics
+5441,544557,Glottis Ltd,BSE,Logistics
+5442,544560,Sodhani Capital Ltd,BSE,Capital Markets
+5443,544562,Advance Agrolife Ltd,BSE,Chemicals
+5444,544567,Infinity Infoway Ltd,BSE,IT  Services
+5445,544568,DSM Fresh Foods Ltd,BSE,
+5446,544569,Tata Motors Ltd,BSE,Automobiles
+5447,544570,WeWork India Management Ltd,BSE,Business Services
+5448,544572,SKF India (Industrial) Ltd,BSE,Capital Goods
+5449,544574,Tata Capital Ltd,BSE,NBFC & Financial Services
+5450,544575,Mittal Sections Ltd,BSE,
+5451,544576,LG Electronics India Ltd,BSE,Consumer Durables
+5452,544577,Worth Peripherals Ltd,BSE,Capital Goods
+5453,544578,Rubicon Research Ltd,BSE,Pharma
+5454,544579,Anantam Highways Trust,BSE,Infrastructure
+5455,544580,Canara Robeco Asset Management Company Ltd,BSE,Capital Markets
+5456,544583,Canara HSBC Life Insurance Company Ltd,BSE,
+5457,544584,SK Minerals & Additives Ltd,BSE,Chemicals
+5458,544587,Midwest Ltd,BSE,Consumer Durables
+5459,544597,Piramal Finance Ltd,BSE,NBFC & Financial Services
+5460,544603,Billionbrains Garage Ventures Ltd,BSE,Capital Markets
+5461,544608,Emmvee Photovoltaic Power Ltd,BSE,Capital Goods
+5462,544609,Physicswallah Ltd,BSE,
+5463,544611,Mahamaya Lifesciences Ltd,BSE,Chemicals
+5464,544612,Tenneco Clean Air India Ltd,BSE,Auto Ancillaries
+5465,544614,Capillary Technologies India Ltd,BSE,IT  Software
+5466,544617,Excelsoft Technologies Ltd,BSE,IT  Services
+5467,544622,Kwality Walls (India) Ltd,BSE,
+5468,544627,Purple Wave Infocom Ltd,BSE,Capital Goods
+5469,544630,Helloji Holidays Ltd,BSE,Hospitality / Leisure
+5470,544632,Meesho Ltd,BSE,Retail
+5471,544633,Vidya Wires Ltd,BSE,Capital Goods
+5472,544634,Aequs Ltd,BSE,Defence
+5473,544635,Luxury Time Ltd,BSE,Consumer Durables
+5474,544636,Western Overseas Study Abroad Ltd,BSE,Hospitality / Leisure
+5475,544637,Methodhub Software Ltd,BSE,IT  Software
+5476,544641,K. V. Toys India Ltd,BSE,Consumer Durables
+5477,544645,Park Medi World Ltd,BSE,Healthcare
+5478,544646,Shipwaves Online Ltd,BSE,
+5479,544647,Nephrocare Health Services Ltd,BSE,Healthcare
+5480,544656,HRS Aluglaze Ltd,BSE,Capital Goods
+5481,544657,Pajson Agro India Ltd,BSE,FMCG
+5482,544658,ICICI Prudential Asset Management Company Ltd,BSE,Capital Markets
+5483,544664,KSH International Ltd,BSE,Capital Goods
+5484,544667,Dachepalli Publishers Ltd,BSE,Media
+5485,544668,Nanta Tech Ltd,BSE,Consumer Durables
+5486,544669,Admach Systems Ltd,BSE,Capital Goods
+5487,544675,Gabion Technologies India Ltd,BSE,Capital Goods
+5488,544678,Bharat Coking Coal Ltd,BSE,Oil & Gas
+5489,544679,Amagi Media Labs Ltd,BSE,IT  Services
+5490,544681,INDO SMC Ltd,BSE,Capital Goods
+5491,544682,GRE Renew Enertech Ltd,BSE,Construction & Infra
+5492,544684,Digilogic Systems Ltd,BSE,Defence
+5493,544685,Shadowfax Technologies Ltd,BSE,Logistics
+5494,544687,Hannah Joseph Hospital Ltd,BSE,Healthcare
+5495,544694,Accretion Nutraveda Ltd,BSE,Pharma
+5496,544695,Msafe Equipments Ltd,BSE,Metals
+5497,544698,PAN HR Solution Ltd,BSE,
+5498,544699,Aye Finance Ltd,BSE,NBFC & Financial Services
+5499,544700,Fractal Analytics Ltd,BSE,
+5500,544702,DCM Shriram International Ltd,BSE,
+5501,544703,DCM Shriram Fine Chemicals Ltd,BSE,
+5502,544708,Yashhtej Industries (India) Ltd,BSE,
+5503,544709,Gaudium IVF and Women Health Ltd,BSE,
+5504,544711,Kiaasa Retail Ltd,BSE,
+5505,544716,Shree Ram Twistex Ltd,BSE,
+5506,544717,Clean Max Enviro Energy Solutions Ltd,BSE,
+5507,544718,PNGS Reva Diamond Jewellery Ltd,BSE,
+5508,544720,Omnitech Engineering Ltd,BSE,
+5509,544723,Sedemac Mechatronics Ltd,BSE,
+5510,544724,Elfin Agro India Ltd,BSE,
+5511,544726,Kotyark Industries Ltd,BSE,
+5512,544739,Central Mine Planning & Design Institute Ltd,BSE,
+5513,544740,Tipco Engineering India Ltd,BSE,
+5514,544741,Highness Microelectronics Ltd,BSE,
+5515,544742,Sai Parenterals Ltd,BSE,
+5516,544743,Amir Chand Jagdish Kumar (Exports) Ltd,BSE,
+5517,544744,Powerica Ltd,BSE,
+5518,570005,GACM Technologies Ltd,BSE,NBFC & Financial Services
+5519,590003,Karur Vysya Bank Ltd,BSE,Banks
+5520,590005,Veedol Corporation Ltd,BSE,Oil & Gas
+5521,590013,Xpro India Ltd,BSE,Capital Goods
+5522,590018,Hisar Metal Industries Ltd-$,BSE,Capital Goods
+5523,590025,Ginni Filaments Ltd,BSE,Textiles
+5524,590031,De Nora India Ltd,BSE,Capital Goods
+5525,590051,Saksoft Ltd,BSE,IT  Software
+5526,590066,KCP Ltd,BSE,Cement & Mining
+5527,590072,Sundaram Brake Linings Ltd,BSE,Auto Ancillaries
+5528,590073,Wheels India Ltd,BSE,
+5529,590078,Maithan Alloys Ltd,BSE,Metals
+5530,5PAISA,5Paisa Capital Limited,NSE,Capital Markets
+5531,63MOONS,63 moons technologies limited,NSE,IT  Software
+5532,780014,Has Lifestyle Ltd,BSE,
+5533,AADHARHFC,Aadhar Housing Finance Limited,NSE,NBFC & Financial Services
+5534,AARTIIND,Aarti Industries Limited,NSE,Chemicals
+5535,AARTISURF,Aarti Surfactants Limited,NSE,Chemicals
+5536,AARVI,Aarvi Encon Limited,NSE,Business Services
+5537,ABB,ABB India Limited,NSE,Capital Goods
+5538,ABCAPITAL,Aditya Birla Capital Limited,NSE,NBFC & Financial Services
+5539,ABFRL,Aditya Birla Fashion and Retail Limited,NSE,Retail
+5540,ABHISHEK,Abhishek Corporation Limited,NSE,
+5541,ABSLAMC,Aditya Birla Sun Life AMC Limited,NSE,Capital Markets
+5542,ACC,ACC Limited,NSE,Cement & Mining
+5543,ACMESOLAR,Acme Solar Holdings Limited,NSE,Power
+5544,ACUTAAS,Acutaas Chemicals Limited,NSE,Pharma
+5545,ADANIENSOL,Adani Energy Solutions Limited,NSE,Power
+5546,ADANIENT,Adani Enterprises Limited,NSE,Metals & Mining
+5547,ADANIGREEN,Adani Green Energy Limited,NSE,Power
+5548,ADANIPORTS,Adani Ports and Special Economic Zone Limited,NSE,Infrastructure
+5549,ADANIPOWER,Adani Power Limited,NSE,Power
+5550,ADOR,Ador Welding Limited,NSE,Capital Goods
+5551,ADVANIHOTR,Advani Hotels & Resorts (India) Limited,NSE,Hospitality / Leisure
+5552,ADVENTHTL,Advent Hotels International Limited,NSE,Hospitality / Leisure
+5553,ADVENZYMES,Advanced Enzyme Technologies Limited,NSE,Pharma
+5554,AEROFLEX,Aeroflex Industries Limited,NSE,Capital Goods
+5555,AETHER,Aether Industries Limited,NSE,Chemicals
+5556,AFCONS,Afcons Infrastructure Limited,NSE,Construction & Infra
+5557,AFFORDABLE,Affordable Robotic & Automation Limited,NSE,Capital Goods
+5558,AFSL,Abans Financial Services Limited,NSE,NBFC & Financial Services
+5559,AGARIND,Agarwal Industrial Corporation Limited,NSE,Chemicals
+5560,AGI,AGI Greenpac Limited,NSE,Capital Goods
+5561,AGIIL,Agi Infra Limited,NSE,Real Estate
+5562,AGSTRA,AGS Transact Technologies Limited,NSE,Fintech
+5563,AHCL,Anlon Healthcare Limited,NSE,Pharma
+5564,AHLUCONT,Ahluwalia Contracts (India) Limited,NSE,Construction & Infra
+5565,AIAENG,AIA Engineering Limited,NSE,Capital Goods
+5566,AJANTPHARM,Ajanta Pharma Limited,NSE,Pharma
+5567,AKZOINDIA,Akzo Nobel India Limited,NSE,Consumer Durables
+5568,ALICON,Alicon Castalloy Limited,NSE,Auto Ancillaries
+5569,ALIVUS,Alivus Life Sciences Limited,NSE,Pharma
+5570,ALKEM,Alkem Laboratories Limited,NSE,Pharma
+5571,ALKYLAMINE,Alkyl Amines Chemicals Limited,NSE,Chemicals
+5572,ALLDIGI,Alldigi Tech Limited,NSE,Business Services
+5573,ALPSINDUS,Alps Industries Limited,NSE,
+5574,AMANTA,Amanta Healthcare Limited,NSE,Pharma
+5575,AMBIKCO,Ambika Cotton Mills Limited,NSE,Textiles
+5576,AMBUJACEM,Ambuja Cements Limited,NSE,Cement & Mining
+5577,AMIRCHAND,Amir Chand Jagdish Kumar (Exports) Limited,NSE,
+5578,ANANDRATHI,Anand Rathi Wealth Limited,NSE,Capital Markets
+5579,ANDHRAPAP,ANDHRA PAPER LIMITED,NSE,Paper
+5580,ANDHRSUGAR,The Andhra Sugars Limited,NSE,Chemicals
+5581,ANGELONE,Angel One Limited,NSE,Capital Markets
+5582,ANTELOPUS,Antelopus Selan Energy Limited,NSE,Oil & Gas
+5583,ANTGRAPHIC,Antarctica Limited,NSE,Capital Goods
+5584,ANUHPHR,Anuh Pharma Limited,NSE,Pharma
+5585,APCOTEXIND,Apcotex Industries Limited,NSE,Capital Goods
+5586,APLAPOLLO,APL Apollo Tubes Limited,NSE,Capital Goods
+5587,APLLTD,Alembic Pharmaceuticals Limited,NSE,Pharma
+5588,APOLLO,Apollo Micro Systems Limited,NSE,Defence
+5589,APOLLOTYRE,Apollo Tyres Limited,NSE,Auto Ancillaries
+5590,ARCHIES,Archies Limited,NSE,Consumer Durables
+5591,ARE&M,Amara Raja Energy & Mobility Limited,NSE,Auto Ancillaries
+5592,ARISINFRA,Arisinfra Solutions Limited,NSE,
+5593,ARMANFIN,Arman Financial Services Limited,NSE,NBFC & Financial Services
+5594,ARSHIYA,Arshiya Limited,NSE,Logistics
+5595,ARSSBL,Anand Rathi Share and Stock Brokers Limited,NSE,Capital Markets
+5596,ARVINDFASN,Arvind Fashions Limited,NSE,Retail
+5597,ASAL,Automotive Stampings and Assemblies Limited,NSE,Auto Ancillaries
+5598,ASALCBR,Associated Alcohols & Breweries Ltd.,NSE,FMCG
+5599,ASIANHOTNR,Asian Hotels (North) Limited,NSE,Hospitality / Leisure
+5600,ASIANPAINT,Asian Paints Limited,NSE,Consumer Durables
+5601,ASIL,Amit Spinning Industries Limited,NSE,
+5602,ASMS,Bartronics India Limited,NSE,IT  Services
+5603,ASTERDM,Aster DM Healthcare Limited,NSE,Healthcare
+5604,ASTRAL,Astral Limited,NSE,Capital Goods
+5605,ASTRAZEN,AstraZeneca Pharma India Limited,NSE,Pharma
+5606,ASTRON,Astron Paper & Board Mill Limited,NSE,Paper
+5607,ATGL,Adani Total Gas Limited,NSE,Oil & Gas
+5608,ATLASCYCLE,Atlas Cycles (Haryana) Limited,NSE,Consumer Durables
+5609,ATULAUTO,Atul Auto Limited,NSE,Automobiles
+5610,AUBANK,AU Small Finance Bank Limited,NSE,Banks
+5611,AUROPHARMA,Aurobindo Pharma Limited,NSE,Pharma
+5612,AVALON,Avalon Technologies Limited,NSE,Capital Goods
+5613,AVANTEL,Avantel Limited,NSE,Defence
+5614,AVANTIFEED,Avanti Feeds Limited,NSE,FMCG
+5615,AVG,AVG Logistics Limited,NSE,Logistics
+5616,AWHCL,Antony Waste Handling Cell Limited,NSE,Utilities
+5617,AWL,AWL Agri Business Limited,NSE,FMCG
+5618,AXISBANK,Axis Bank Limited,NSE,Banks
+5619,AYE,Aye Finance Limited,NSE,NBFC & Financial Services
+5620,BAGFILMS,B.A.G Films and Media Limited,NSE,Media
+5621,BAJAJCON,Bajaj Consumer Care Limited,NSE,FMCG
+5622,BAJAJELEC,Bajaj Electricals Limited,NSE,Consumer Durables
+5623,BAJAJFINSV,Bajaj Finserv Limited,NSE,NBFC & Financial Services
+5624,BAJAJHCARE,Bajaj Healthcare Limited,NSE,Pharma
+5625,BAJAJHIND,Bajaj Hindusthan Sugar Limited,NSE,FMCG
+5626,BAJEL,Bajel Projects Limited,NSE,Capital Goods
+5627,BALAXI,BALAXI PHARMACEUTICALS LIMITED,NSE,Pharma
+5628,BALKRISHNA,Balkrishna Paper Mills Limited,NSE,Paper
+5629,BALKRISIND,Balkrishna Industries Limited,NSE,Auto Ancillaries
+5630,BALLARPUR,Ballarpur Industries Limited,NSE,
+5631,BALMLAWRIE,Balmer Lawrie & Company Limited,NSE,Diversified
+5632,BALUFORGE,Balu Forge Industries Limited,NSE,Capital Goods
+5633,BANDHANBNK,Bandhan Bank Limited,NSE,Banks
+5634,BANG,Bang Overseas Limited,NSE,Textiles
+5635,BANKBARODA,Bank of Baroda,NSE,Banks
+5636,BANKINDIA,Bank of India,NSE,Banks
+5637,BANSALWIRE,Bansal Wire Industries Limited,NSE,Capital Goods
+5638,BBOX,Black Box Limited,NSE,IT  Services
+5639,BBTC,The Bombay Burmah Trading Corporation Limited,NSE,FMCG
+5640,BCG,Brightcom Group Limited,NSE,IT  Services
+5641,BCONCEPTS,Brand Concepts Limited,NSE,Retail
+5642,BDL,Bharat Dynamics Limited,NSE,Defence
+5643,BEARDSELL,Beardsell Limited,NSE,Capital Goods
+5644,BECTORFOOD,Mrs. Bectors Food Specialities Limited,NSE,FMCG
+5645,BEDMUTHA,Bedmutha Industries Limited,NSE,Capital Goods
+5646,BEL,Bharat Electronics Limited,NSE,Defence
+5647,BETA,Beta Drugs Limited,NSE,Pharma
+5648,BFINVEST,BF Investment Limited,NSE,NBFC & Financial Services
+5649,BFUTILITIE,BF Utilities Limited,NSE,Infrastructure
+5650,BHAGERIA,Bhageria Industries Limited,NSE,Chemicals
+5651,BHANDARI,Bhandari Hosiery Exports Limited,NSE,Textiles
+5652,BHARATCOAL,Bharat Coking Coal Limited,NSE,Oil & Gas
+5653,BHARATFORG,Bharat Forge Limited,NSE,Auto Ancillaries
+5654,BHARATSE,Bharat Seats Limited,NSE,Auto Ancillaries
+5655,BHARATWIRE,Bharat Wire Ropes Limited,NSE,Capital Goods
+5656,BHARTIARTL,Bharti Airtel Limited,NSE,Telecom
+5657,BIKAJI,Bikaji Foods International Limited,NSE,FMCG
+5658,BIOCON,Biocon Limited,NSE,Pharma
+5659,BIRLACORPN,Birla Corporation Limited,NSE,Cement & Mining
+5660,BIRLAMONEY,Aditya Birla Money Limited,NSE,Capital Markets
+5661,BKMINDST,Bkm Industries Limited,NSE,
+5662,BLKASHYAP,B. L. Kashyap and Sons Limited,NSE,Construction & Infra
+5663,BLS,BLS International Services Limited,NSE,Hospitality / Leisure
+5664,BLUECOAST,Blue Coast Hotels Limited,NSE,Hospitality / Leisure
+5665,BLUESTARCO,Blue Star Limited,NSE,Consumer Durables
+5666,BLUESTONE,BlueStone Jewellery and Lifestyle Limited,NSE,Consumer Durables
+5667,BLUSPRING,Bluspring Enterprises Limited,NSE,Business Services
+5668,BMWVENTLTD,BMW Ventures Limited,NSE,Metals & Mining
+5669,BOMDYEING,Bombay Dyeing & Mfg Company Limited,NSE,Textiles
+5670,BONLON,Bonlon Industries Limited,NSE,Metals
+5671,BORORENEW,BOROSIL RENEWABLES LIMITED,NSE,Capital Goods
+5672,BPCL,Bharat Petroleum Corporation Limited,NSE,Oil & Gas
+5673,BPL,BPL Limited,NSE,Consumer Durables
+5674,BRIGADE,Brigade Enterprises Limited,NSE,Real Estate
+5675,BRIGHOTEL,Brigade Hotel Ventures Limited,NSE,Hospitality / Leisure
+5676,BRITANNIA,Britannia Industries Limited,NSE,FMCG
+5677,BSE,BSE Limited,NSE,Capital Markets
+5678,BSL,BSL Limited,NSE,Textiles
+5679,BSOFT,BIRLASOFT LIMITED,NSE,IT  Software
+5680,BTML,Bodhi Tree Multimedia Limited,NSE,Media
+5681,CALSOFT,California Software Company Limited,NSE,IT  Software
+5682,CAMLINFINE,Camlin Fine Sciences Limited,NSE,Chemicals
+5683,CAMS,Computer Age Management Services Limited,NSE,Capital Markets
+5684,CANBK,Canara Bank,NSE,Banks
+5685,CANFINHOME,Can Fin Homes Limited,NSE,NBFC & Financial Services
+5686,CANHLIFE,Canara HSBC Life Insurance Company Limited,NSE,Insurance
+5687,CAPILLARY,Capillary Technologies India Limited,NSE,IT  Software
+5688,CAPITALSFB,Capital Small Finance Bank Limited,NSE,Banks
+5689,CAPLIPOINT,Caplin Point Laboratories Limited,NSE,Pharma
+5690,CARBORUNIV,Carborundum Universal Limited,NSE,Capital Goods
+5691,CARERATING,CARE Ratings Limited,NSE,Capital Markets
+5692,CARRARO,Carraro India Limited,NSE,Auto Ancillaries
+5693,CARYSIL,CARYSIL LIMITED,NSE,Consumer Durables
+5694,CCCL,Consolidated Construction Consortium Limited,NSE,Real Estate
+5695,CDSL,Central Depository Services (India) Limited,NSE,Capital Markets
+5696,CEATLTD,CEAT Limited,NSE,Auto Ancillaries
+5697,CEIGALL,Ceigall India Limited,NSE,Construction & Infra
+5698,CEMPRO,Cemindia Projects Limited,NSE,Construction & Infra
+5699,CENTEXT,Century Extrusions Limited,NSE,Capital Goods
+5700,CENTRALBK,Central Bank of India,NSE,Banks
+5701,CENTRUM,Centrum Capital Limited,NSE,NBFC & Financial Services
+5702,CENTURYPLY,Century Plyboards (India) Limited,NSE,Consumer Durables
+5703,CGCL,Capri Global Capital Limited,NSE,NBFC & Financial Services
+5704,CGPOWER,CG Power and Industrial Solutions Limited,NSE,Capital Goods
+5705,CHALET,Chalet Hotels Limited,NSE,Hospitality / Leisure
+5706,CHEMBOND,Chembond Material Technologies Limited,NSE,Chemicals
+5707,CHENNPETRO,Chennai Petroleum Corporation Limited,NSE,Oil & Gas
+5708,CHOLAFIN,Cholamandalam Investment and Finance Company Limited,NSE,NBFC & Financial Services
+5709,CIEINDIA,CIE Automotive India Limited,NSE,Auto Ancillaries
+5710,CIGNITITEC,Cigniti Technologies Limited,NSE,IT  Services
+5711,CINELINE,Cineline India Limited,NSE,Media
+5712,CIPLA,Cipla Limited,NSE,Pharma
+5713,CLEAN,Clean Science and Technology Limited,NSE,Chemicals
+5714,CLEANMAX,Clean Max Enviro Energy Solutions Limited,NSE,
+5715,CMPDI,Central Mine Planning & Design Institute Limited,NSE,
+5716,CMSINFO,CMS Info Systems Limited,NSE,Business Services
+5717,COALINDIA,Coal India Limited,NSE,Oil & Gas
+5718,COCHINSHIP,Cochin Shipyard Limited,NSE,Capital Goods
+5719,COFORGE,Coforge Limited,NSE,IT  Software
+5720,COHANCE,Cohance Lifesciences Limited,NSE,Pharma
+5721,CONCOR,Container Corporation of India Limited,NSE,Logistics
+5722,CONFIPET,Confidence Petroleum India Limited,NSE,Oil & Gas
+5723,CONTROLPR,Control Print Limited,NSE,IT  Hardware
+5724,CORDSCABLE,Cords Cable Industries Limited,NSE,Capital Goods
+5725,COROMANDEL,Coromandel International Limited,NSE,Chemicals
+5726,CRAFTSMAN,Craftsman Automation Limited,NSE,Auto Ancillaries
+5727,CRAMC,Canara Robeco Asset Management Company Limited,NSE,Capital Markets
+5728,CREDITACC,CREDITACCESS GRAMEEN LIMITED,NSE,NBFC & Financial Services
+5729,CREST,Crest Ventures Limited,NSE,NBFC & Financial Services
+5730,CSBBANK,CSB Bank Limited,NSE,Banks
+5731,CSLFINANCE,CSL Finance Limited,NSE,NBFC & Financial Services
+5732,CTE,Cambridge Technology Enterprises Limited,NSE,IT  Software
+5733,CUB,City Union Bank Limited,NSE,Banks
+5734,CUBEXTUB,Cubex Tubings Limited,NSE,Capital Goods
+5735,CUMMINSIND,Cummins India Limited,NSE,Capital Goods
+5736,CUPID,Cupid Limited,NSE,FMCG
+5737,CURAA,Cura Technologies Limited,NSE,IT  Software
+5738,CYIENT,Cyient Limited,NSE,IT  Services
+5739,CYIENTDLM,Cyient DLM Limited,NSE,Capital Goods
+5740,DABUR,Dabur India Limited,NSE,FMCG
+5741,DALBHARAT,Dalmia Bharat Limited,NSE,Cement & Mining
+5742,DALMIASUG,Dalmia Bharat Sugar and Industries Limited,NSE,FMCG
+5743,DAMCAPITAL,Dam Capital Advisors Limited,NSE,Capital Markets
+5744,DBOL,Dhampur Bio Organics Limited,NSE,FMCG
+5745,DBREALTY,Valor Estate Limited,NSE,Hospitality / Leisure
+5746,DCBBANK,DCB Bank Limited,NSE,Banks
+5747,DCI,DC Infotech and Communication Limited,NSE,IT  Hardware
+5748,DCM,DCM  Limited,NSE,IT  Services
+5749,DCMNVL,DCM Nouvelle Limited,NSE,Textiles
+5750,DCMSHRIRAM,DCM Shriram Limited,NSE,Diversified
+5751,DCW,DCW Limited,NSE,Chemicals
+5752,DCXINDIA,DCX Systems Limited,NSE,Defence
+5753,DDEVPLSTIK,Ddev Plastiks Industries Limited,NSE,Chemicals
+5754,DECCANCE,Deccan Cements Limited,NSE,Cement & Mining
+5755,DEEPAKFERT,Deepak Fertilizers and Petrochemicals Corporation Limited,NSE,Chemicals
+5756,DEEPAKNTR,Deepak Nitrite Limited,NSE,Chemicals
+5757,DELHIVERY,Delhivery Limited,NSE,Logistics
+5758,DELPHIFX,DELPHI WORLD MONEY LIMITED,NSE,NBFC & Financial Services
+5759,DEVIT,Dev Information Technology Limited,NSE,IT  Services
+5760,DHAMPURSUG,Dhampur Sugar Mills Limited,NSE,FMCG
+5761,DHARAN,DHARAN INFRA-EPC LIMITED,NSE,Real Estate
+5762,DHARSUGAR,Dharani Sugars & Chemicals Limited,NSE,
+5763,DHRUV,Dhruv Consultancy Services Limited,NSE,Business Services
+5764,DICIND,DIC India Limited,NSE,Chemicals
+5765,DIGITIDE,Digitide Solutions Limited,NSE,IT  Services
+5766,DISHTV,Dish TV India Limited,NSE,Media
+5767,DIXON,Dixon Technologies (India) Limited,NSE,Consumer Durables
+5768,DLF,DLF Limited,NSE,Real Estate
+5769,DMART,Avenue Supermarts Limited,NSE,Retail
+5770,DODLA,Dodla Dairy Limited,NSE,FMCG
+5771,DOLATALGO,Dolat Algotech Limited,NSE,Capital Markets
+5772,DONEAR,Donear Industries Limited,NSE,Textiles
+5773,DPWIRES,D P Wires Limited,NSE,Capital Goods
+5774,DRREDDY,Dr. Reddy's Laboratories Limited,NSE,Pharma
+5775,DSFCL,DCM Shriram Fine Chemicals Limited,NSE,
+5776,DWARKESH,Dwarikesh Sugar Industries Limited,NSE,FMCG
+5777,DYCL,Dynamic Cables Limited,NSE,Capital Goods
+5778,DYNAMATECH,Dynamatic Technologies Limited,NSE,Capital Goods
+5779,E2E,E2E Networks Limited,NSE,IT  Services
+5780,EASEMYTRIP,Easy Trip Planners Limited,NSE,Hospitality / Leisure
+5781,EBGNG,GNG Electronics Limited,NSE,IT  Hardware
+5782,ECLERX,eClerx Services Limited,NSE,Business Services
+5783,EDUCOMP,Educomp Solutions Limited,NSE,Consumer Services
+5784,EICHERMOT,Eicher Motors Limited,NSE,Automobiles
+5785,EIDPARRY,EID Parry India Limited,NSE,FMCG
+5786,EIEL,Enviro Infra Engineers Limited,NSE,Utilities
+5787,EIHOTEL,EIH Limited,NSE,Hospitality / Leisure
+5788,EIMCOELECO,Eimco Elecon (India) Limited,NSE,Capital Goods
+5789,ELECON,Elecon Engineering Company Limited,NSE,Capital Goods
+5790,ELECTCAST,Electrosteel Castings Limited,NSE,Capital Goods
+5791,ELECTHERM,Electrotherm (India) Limited,NSE,Capital Goods
+5792,ELGIEQUIP,Elgi Equipments Limited,NSE,Capital Goods
+5793,ELGIRUBCO,Elgi Rubber Company Limited,NSE,Capital Goods
+5794,EMAMILTD,Emami Limited,NSE,FMCG
+5795,EMBDL,Embassy Developments Limited,NSE,Real Estate
+5796,EMCURE,Emcure Pharmaceuticals Limited,NSE,Pharma
+5797,EMIL,Electronics Mart India Limited,NSE,Retail
+5798,EMMBI,Emmbi Industries Limited,NSE,Capital Goods
+5799,EMSLIMITED,EMS Limited,NSE,Utilities
+5800,EMUDHRA,eMudhra Limited,NSE,IT  Services
+5801,ENGINERSIN,Engineers India Limited,NSE,Construction & Infra
+5802,ENIL,Entertainment Network (India) Limited,NSE,Media
+5803,EPACKPEB,EPack Prefab Technologies Limited,NSE,Capital Goods
+5804,EPIGRAL,Epigral Limited,NSE,Chemicals
+5805,EPL,EPL Limited,NSE,Capital Goods
+5806,EQUITASBNK,Equitas Small Finance Bank Limited,NSE,Banks
+5807,ERIS,Eris Lifesciences Limited,NSE,Pharma
+5808,EROSMEDIA,Eros International Media Limited,NSE,
+5809,ESAFSFB,ESAF Small Finance Bank Limited,NSE,Banks
+5810,ESCORTS,Escorts Kubota Limited,NSE,Automobiles
+5811,ETERNAL,ETERNAL LIMITED,NSE,Retail
+5812,ETHOSLTD,Ethos Limited,NSE,Consumer Durables
+5813,EUROBOND,Euro Panel Products Limited,NSE,Capital Goods
+5814,EVEREADY,Eveready Industries India Limited,NSE,FMCG
+5815,EVERESTIND,Everest Industries Limited,NSE,Construction & Infra
+5816,EXCELSOFT,Excelsoft Technologies Limited,NSE,IT  Services
+5817,EXXARO,Exxaro Tiles Limited,NSE,Consumer Durables
+5818,FACT,Fertilizers and Chemicals Travancore Limited,NSE,Chemicals
+5819,FCSSOFT,FCS Software Solutions Limited,NSE,IT  Services
+5820,FEDERALBNK,The Federal Bank  Limited,NSE,Banks
+5821,FEDFINA,Fedbank Financial Services Limited,NSE,NBFC & Financial Services
+5822,FIBERWEB,Fiberweb (India) Limited,NSE,Textiles
+5823,FILATEX,Filatex India Limited,NSE,Textiles
+5824,FINCABLES,Finolex Cables Limited,NSE,Capital Goods
+5825,FINKURVE,Finkurve Financial Services Limited,NSE,NBFC & Financial Services
+5826,FINOPB,Fino Payments Bank Limited,NSE,Banks
+5827,FIRSTCRY,Brainbees Solutions Limited,NSE,Retail
+5828,FISCHER,Fischer Medical Ventures Limited,NSE,Healthcare
+5829,FIVESTAR,Five-Star Business Finance Limited,NSE,NBFC & Financial Services
+5830,FLAIR,Flair Writing Industries Limited,NSE,FMCG
+5831,FORCEMOT,FORCE MOTORS LTD,NSE,Automobiles
+5832,FORTIS,Fortis Healthcare Limited,NSE,Healthcare
+5833,FOSECOIND,Foseco India Limited,NSE,Chemicals
+5834,FRACTAL,Fractal Analytics Limited,NSE,IT  Software
+5835,FSL,Firstsource Solutions Limited,NSE,Business Services
+5836,FUSION,Fusion Finance Limited,NSE,NBFC & Financial Services
+5837,GABRIEL,Gabriel India Limited,NSE,Auto Ancillaries
+5838,GAEL,Gujarat Ambuja Exports Limited,NSE,FMCG
+5839,GAIL,GAIL (India) Limited,NSE,Oil & Gas
+5840,GALLANTT,Gallantt Ispat Limited,NSE,Capital Goods
+5841,GARFIBRES,Garware Technical Fibres Limited,NSE,Textiles
+5842,GARUDA,Garuda Construction and Engineering Limited,NSE,Construction & Infra
+5843,GAUDIUMIVF,Gaudium IVF and Women Health Limited,NSE,
+5844,GEMAROMA,Gem Aromatics Limited,NSE,Chemicals
+5845,GENCON,Generic Engineering Construction and Projects Limited,NSE,Real Estate
+5846,GENUSPOWER,Genus Power Infrastructures Limited,NSE,Capital Goods
+5847,GEOJITFSL,Geojit Financial Services Limited,NSE,Capital Markets
+5848,GHCL,GHCL Limited,NSE,Chemicals
+5849,GHCLTEXTIL,GHCL Textiles Limited,NSE,Textiles
+5850,GICL,Globe International Carriers Limited,NSE,Logistics
+5851,GINNIFILA,Ginni Filaments Limited,NSE,Textiles
+5852,GIPCL,Gujarat Industries Power Company Limited,NSE,Power
+5853,GKENERGY,GK Energy Limited,NSE,Construction & Infra
+5854,GLAND,Gland Pharma Limited,NSE,Pharma
+5855,GLAXO,GlaxoSmithKline Pharmaceuticals Limited,NSE,Pharma
+5856,GLENMARK,Glenmark Pharmaceuticals Limited,NSE,Pharma
+5857,GLOBECIVIL,Globe Civil Projects Limited,NSE,Construction & Infra
+5858,GNA,GNA Axles Limited,NSE,Auto Ancillaries
+5859,GNFC,Gujarat Narmada Valley Fertilizers and Chemicals Limited,NSE,Chemicals
+5860,GOACARBON,Goa Carbon Limited,NSE,Metals & Mining
+5861,GOCOLORS,Go Fashion (India) Limited,NSE,Retail
+5862,GODIGIT,Go Digit General Insurance Limited,NSE,Insurance
+5863,GODREJAGRO,Godrej Agrovet Limited,NSE,FMCG
+5864,GODREJCP,Godrej Consumer Products Limited,NSE,FMCG
+5865,GODREJIND,Godrej Industries Limited,NSE,Diversified
+5866,GODREJPROP,Godrej Properties Limited,NSE,Real Estate
+5867,GOKEX,Gokaldas Exports Limited,NSE,Textiles
+5868,GOLDIAM,Goldiam International Limited,NSE,Consumer Durables
+5869,GOLDTECH,AION-TECH SOLUTIONS LIMITED,NSE,IT  Software
+5870,GOODLUCK,Goodluck India Limited,NSE,Capital Goods
+5871,GOYALALUM,Goyal Aluminiums Limited,NSE,Business Services
+5872,GPIL,Godawari Power And Ispat limited,NSE,Capital Goods
+5873,GPPL,Gujarat Pipavav Port Limited,NSE,Infrastructure
+5874,GPTINFRA,GPT Infraprojects Limited,NSE,Construction & Infra
+5875,GRASIM,Grasim Industries Limited,NSE,Cement & Mining
+5876,GRAVITA,Gravita India Limited,NSE,Metals & Mining
+5877,GREAVESCOT,Greaves Cotton Limited,NSE,Capital Goods
+5878,GREENPANEL,Greenpanel Industries Limited,NSE,Consumer Durables
+5879,GREENPOWER,Orient Green Power Company Limited,NSE,Power
+5880,GRINDWELL,Grindwell Norton Limited,NSE,Capital Goods
+5881,GRMOVER,GRM Overseas Limited,NSE,FMCG
+5882,GROWW,Billionbrains Garage Ventures Limited,NSE,Capital Markets
+5883,GRWRHITECH,Garware Hi-Tech Films Limited,NSE,Capital Goods
+5884,GSPL,Gujarat State Petronet Limited,NSE,Oil & Gas
+5885,GUJALKALI,Gujarat Alkalies and Chemicals Limited,NSE,Chemicals
+5886,GUJAPOLLO,Gujarat Apollo Industries Limited,NSE,Capital Goods
+5887,GUJGASLTD,Gujarat Gas Limited,NSE,Oil & Gas
+5888,GUJTHEM,Gujarat Themis Biosyn Limited,NSE,Pharma
+5889,GULFOILLUB,Gulf Oil Lubricants India Limited,NSE,Oil & Gas
+5890,GULFPETRO,GP Petroleums Limited,NSE,Oil & Gas
+5891,GVKPIL,GVK Power & Infrastructure Limited,NSE,Construction & Infra
+5892,GVPIL,GE Power India Limited,NSE,Capital Goods
+5893,GVT&D,GE Vernova T&D India Limited,NSE,Capital Goods
+5894,HAL,Hindustan Aeronautics Limited,NSE,Defence
+5895,HAPPSTMNDS,Happiest Minds Technologies Limited,NSE,IT  Software
+5896,HATSUN,Hatsun Agro Product Limited,NSE,FMCG
+5897,HCC,Hindustan Construction Company Limited,NSE,Construction & Infra
+5898,HCL-INSYS,HCL Infosystems Limited,NSE,IT  Hardware
+5899,HDFCAMC,HDFC Asset Management Company Limited,NSE,Capital Markets
+5900,HDFCBANK,HDFC Bank Limited,NSE,Banks
+5901,HEG,HEG Limited,NSE,Capital Goods
+5902,HERITGFOOD,Heritage Foods Limited,NSE,FMCG
+5903,HEROMOTOCO,Hero MotoCorp Limited,NSE,Automobiles
+5904,HESTERBIO,Hester Biosciences Limited,NSE,Pharma
+5905,HEXT,Hexaware Technologies Limited,NSE,IT  Software
+5906,HFCL,HFCL Limited,NSE,Telecom
+5907,HGM,HandsOn Global Management (HGM) Limited,NSE,IT  Services
+5908,HIKAL,Hikal Limited,NSE,Pharma
+5909,HILTON,Hilton Metal Forging Limited,NSE,Capital Goods
+5910,HINDCOMPOS,Hindustan Composites Limited,NSE,Auto Ancillaries
+5911,HINDPETRO,Hindustan Petroleum Corporation Limited,NSE,Oil & Gas
+5912,HINDUNILVR,Hindustan Unilever Limited,NSE,FMCG
+5913,HINDWAREAP,Hindware Home Innovation Limited,NSE,Consumer Durables
+5914,HISARMETAL,Hisar Metal Industries Limited,NSE,Capital Goods
+5915,HITECHGEAR,The Hi-Tech Gears Limited,NSE,Auto Ancillaries
+5916,HLEGLAS,HLE Glascoat Limited,NSE,Capital Goods
+5917,HLVLTD,HLV LIMITED,NSE,Hospitality / Leisure
+5918,HMAAGRO,HMA Agro Industries Limited,NSE,FMCG
+5919,HMVL,Hindustan Media Ventures Limited,NSE,Media
+5920,HNDFDS,Hindustan Foods Limited,NSE,FMCG
+5921,HOMEFIRST,Home First Finance Company India Limited,NSE,NBFC & Financial Services
+5922,HPAL,HP Adhesives Limited,NSE,Chemicals
+5923,HPIL,Hindprakash Industries Limited,NSE,Chemicals
+5924,HSCL,Himadri Speciality Chemical Limited,NSE,Chemicals
+5925,HUDCO,Housing & Urban Development Corporation Limited,NSE,NBFC & Financial Services
+5926,HYUNDAI,Hyundai Motor India Limited,NSE,Automobiles
+5927,ICICIAMC,ICICI Prudential Asset Management Company Limited,NSE,Capital Markets
+5928,ICICIBANK,ICICI Bank Limited,NSE,Banks
+5929,ICICIGI,ICICI Lombard General Insurance Company Limited,NSE,Insurance
+5930,ICICIPRULI,ICICI Prudential Life Insurance Company Limited,NSE,Insurance
+5931,ICIL,Indo Count Industries Limited,NSE,Textiles
+5932,ICRA,ICRA Limited,NSE,Capital Markets
+5933,IDEA,Vodafone Idea Limited,NSE,Telecom
+5934,IDFCFIRSTB,IDFC First Bank Limited,NSE,Banks
+5935,IEX,Indian Energy Exchange Limited,NSE,Capital Markets
+5936,IFBAGRO,IFB Agro Industries Limited,NSE,FMCG
+5937,IFGLEXPOR,IFGL Refractories Limited,NSE,Capital Goods
+5938,IIFL,IIFL Finance Limited,NSE,NBFC & Financial Services
+5939,IIFLCAPS,IIFL Capital Services Limited,NSE,Capital Markets
+5940,IKIO,IKIO Technologies Limited,NSE,Consumer Durables
+5941,IL&FSENGG,IL&FS Engineering and Construction Company Limited,NSE,Construction & Infra
+5942,INA,Insolation Energy Limited,NSE,
+5943,INDGN,Indegene Limited,NSE,Healthcare
+5944,INDHOTEL,The Indian Hotels Company Limited,NSE,Hospitality / Leisure
+5945,INDIACEM,The India Cements Limited,NSE,Cement & Mining
+5946,INDIAMART,Indiamart Intermesh Limited,NSE,Retail
+5947,INDIANB,Indian Bank,NSE,Banks
+5948,INDIANCARD,Indian Card Clothing Company Limited,NSE,Textiles
+5949,INDIASHLTR,India Shelter Finance Corporation Limited,NSE,NBFC & Financial Services
+5950,INDIQUBE,Indiqube Spaces Limited,NSE,Business Services
+5951,INDORAMA,Indo Rama Synthetics (India) Limited,NSE,Textiles
+5952,INDOTECH,Indo Tech Transformers Limited,NSE,Capital Goods
+5953,INDOTHAI,Indo Thai Securities Limited,NSE,Capital Markets
+5954,INDUSFILA,Indus Fila Limited,NSE,
+5955,INDUSINDBK,IndusInd Bank Limited,NSE,Banks
+5956,INDUSTOWER,Indus Towers Limited,NSE,Telecom
+5957,INFOBEAN,InfoBeans Technologies Limited,NSE,IT  Software
+5958,INFY,Infosys Limited,NSE,IT  Software
+5959,INNOVACAP,Innova Captab Limited,NSE,Pharma
+5960,INNOVANA,Innovana Thinklabs Limited,NSE,IT  Software
+5961,INOXGREEN,Inox Green Energy Services Limited,NSE,Power
+5962,INOXINDIA,INOX India Limited,NSE,Capital Goods
+5963,INTELLECT,Intellect Design Arena Limited,NSE,IT  Software
+5964,INTLCONV,International Conveyors Limited,NSE,Capital Goods
+5965,IOB,Indian Overseas Bank,NSE,Banks
+5966,IOC,Indian Oil Corporation Limited,NSE,Oil & Gas
+5967,IOLCP,IOL Chemicals and Pharmaceuticals Limited,NSE,Pharma
+5968,IPCALAB,IPCA Laboratories Limited,NSE,Pharma
+5969,IPL,India Pesticides Limited,NSE,Chemicals
+5970,IRCTC,Indian Railway Catering And Tourism Corporation Limited,NSE,Hospitality / Leisure
+5971,IREDA,Indian Renewable Energy Development Agency Limited,NSE,NBFC & Financial Services
+5972,IRFC,Indian Railway Finance Corporation Limited,NSE,NBFC & Financial Services
+5973,IRMENERGY,IRM Energy Limited,NSE,Oil & Gas
+5974,ISGEC,Isgec Heavy Engineering Limited,NSE,Construction & Infra
+5975,ISHANCH,Ishan Dyes and Chemicals Limited,NSE,Chemicals
+5976,ITC,ITC Limited,NSE,FMCG
+5977,IXIGO,Le Travenues Technology Limited,NSE,Hospitality / Leisure
+5978,J&KBANK,The Jammu & Kashmir Bank Limited,NSE,Banks
+5979,JAGRAN,Jagran Prakashan Limited,NSE,Media
+5980,JAGSNPHARM,Jagsonpal Pharmaceuticals Limited,NSE,Pharma
+5981,JAICORPLTD,Jai Corp Limited,NSE,Capital Goods
+5982,JAINREC,Jain Resource Recycling Limited,NSE,Metals
+5983,JAIPURKURT,Nandani Creation Limited,NSE,Textiles
+5984,JASH,Jash Engineering Limited,NSE,Capital Goods
+5985,JAYKAY,Jaykay Enterprises Limited,NSE,Defence
+5986,JBCHEPHARM,JB Chemicals & Pharmaceuticals Limited,NSE,Pharma
+5987,JGCHEM,J.G.Chemicals Limited,NSE,Chemicals
+5988,JINDALSTEL,JINDAL STEEL LIMITED,NSE,Metals
+5989,JISLDVREQS,Jain Irrigation Systems Limited,NSE,Capital Goods
+5990,JISLJALEQS,Jain Irrigation Systems Limited,NSE,Capital Goods
+5991,JKIL,J.Kumar Infraprojects Limited,NSE,Construction & Infra
+5992,JKLAKSHMI,JK Lakshmi Cement Limited,NSE,Cement & Mining
+5993,JKTYRE,JK Tyre & Industries Limited,NSE,Auto Ancillaries
+5994,JPPOWER,Jaiprakash Power Ventures Limited,NSE,Power
+5995,JSL,Jindal Stainless Limited,NSE,Metals
+5996,JSLL,Jeena Sikho Lifecare Limited,NSE,Pharma
+5997,JSWCEMENT,JSW Cement Limited,NSE,Cement & Mining
+5998,JSWENERGY,JSW Energy Limited,NSE,Power
+5999,JSWINFRA,JSW Infrastructure Limited,NSE,Infrastructure
+6000,JSWSTEEL,JSW Steel Limited,NSE,Metals
+6001,JTLIND,JTL INDUSTRIES LIMITED,NSE,Capital Goods
+6002,JUBLFOOD,Jubilant Foodworks Limited,NSE,Hospitality / Leisure
+6003,JUBLPHARMA,Jubilant Pharmova Limited,NSE,Pharma
+6004,JUNIPER,Juniper Hotels Limited,NSE,Hospitality / Leisure
+6005,JYOTICNC,Jyoti CNC Automation Limited,NSE,Capital Goods
+6006,KALAMANDIR,Sai Silks (Kalamandir) Limited,NSE,Retail
+6007,KALPATARU,Kalpataru Limited,NSE,Real Estate
+6008,KAMDHENU,Kamdhenu Limited,NSE,Capital Goods
+6009,KAMOPAINTS,Kamdhenu Ventures Limited,NSE,Consumer Durables
+6010,KANORICHEM,Kanoria Chemicals & Industries Limited,NSE,Capital Goods
+6011,KANPRPLA,Kanpur Plastipack Limited,NSE,Capital Goods
+6012,KANSAINER,Kansai Nerolac Paints Limited,NSE,Consumer Durables
+6013,KARURVYSYA,Karur Vysya Bank Limited,NSE,Banks
+6014,KAYA,Kaya Limited,NSE,Hospitality / Leisure
+6015,KAYNES,Kaynes Technology India Limited,NSE,Capital Goods
+6016,KCPSUGIND,KCP Sugar and Industries Corporation Limited,NSE,FMCG
+6017,KEC,KEC International Limited,NSE,Construction & Infra
+6018,KELLTONTEC,Kellton Tech Solutions Limited,NSE,IT  Services
+6019,KFINTECH,Kfin Technologies Limited,NSE,Capital Markets
+6020,KHADIM,Khadim India Limited,NSE,Consumer Durables
+6021,KICL,Kalyani Investment Company Limited,NSE,NBFC & Financial Services
+6022,KILITCH,Kilitch Drugs (India) Limited,NSE,Pharma
+6023,KIRLOSENG,Kirloskar Oil Engines Limited,NSE,Capital Goods
+6024,KIRLOSIND,Kirloskar Industries Limited,NSE,Capital Goods
+6025,KIRLPNU,Kirloskar Pneumatic Company Limited,NSE,Capital Goods
+6026,KNRCON,KNR Constructions Limited,NSE,Construction & Infra
+6027,KOLTEPATIL,Kolte - Patil Developers Limited,NSE,Real Estate
+6028,KOTARISUG,Kothari Sugars And Chemicals Limited,NSE,FMCG
+6029,KOTHARIPET,Kothari Petrochemicals Limited,NSE,Chemicals
+6030,KOTYARK,Kotyark Industries Limited,NSE,Oil & Gas
+6031,KPEL,K.P. Energy Limited,NSE,Power
+6032,KPIGREEN,KPI Green Energy Limited,NSE,Power
+6033,KPIL,Kalpataru Projects International Limited,NSE,Construction & Infra
+6034,KPITTECH,KPIT Technologies Limited,NSE,IT  Software
+6035,KPRMILL,K.P.R. Mill Limited,NSE,Textiles
+6036,KRISHANA,Krishana Phoschem Limited,NSE,Chemicals
+6037,KRISHIVAL,Krishival Foods Limited,NSE,FMCG
+6038,KRITI,Kriti Industries (India) Limited,NSE,Capital Goods
+6039,KRITINUT,Kriti Nutrients Limited,NSE,FMCG
+6040,KRN,KRN Heat Exchanger and Refrigeration Limited,NSE,Capital Goods
+6041,KROSS,Kross Limited,NSE,Auto Ancillaries
+6042,KSHINTL,KSH International Limited,NSE,Capital Goods
+6043,KUNDANMM,Kundan Minerals and Metals Limited,NSE,
+6044,KWIL,Kwality Wall's (India) Limited,NSE,FMCG
+6045,LALPATHLAB,Dr. Lal Path Labs Ltd.,NSE,Healthcare
+6046,LANCORHOL,Lancor Holdings Limited,NSE,Real Estate
+6047,LAOPALA,La Opala RG Limited,NSE,Consumer Durables
+6048,LATENTVIEW,Latent View Analytics Limited,NSE,IT  Software
+6049,LAURUSLABS,Laurus Labs Limited,NSE,Pharma
+6050,LAXMIINDIA,Laxmi India Finance Limited,NSE,NBFC & Financial Services
+6051,LCCINFOTEC,LCC Infotech Limited,NSE,Consumer Services
+6052,LEEL,LEEL Electricals Limited,NSE,
+6053,LEMONTREE,Lemon Tree Hotels Limited,NSE,Hospitality / Leisure
+6054,LFIC,Lakshmi Finance & Industrial Corporation Limited,NSE,NBFC & Financial Services
+6055,LGBBROSLTD,LG Balakrishnan & Bros Limited,NSE,Auto Ancillaries
+6056,LGEINDIA,LG Electronics India Limited,NSE,Consumer Durables
+6057,LICI,Life Insurance Corporation Of India,NSE,Insurance
+6058,LLOYDSME,Lloyds Metals And Energy Limited,NSE,Metals & Mining
+6059,LOTUSDEV,Sri Lotus Developers and Realty Limited,NSE,Real Estate
+6060,LOVABLE,Lovable Lingerie Limited,NSE,Textiles
+6061,LT,Larsen & Toubro Limited,NSE,Construction & Infra
+6062,LTF,L&T Finance Limited,NSE,NBFC & Financial Services
+6063,LTM,LTIMindtree Limited,NSE,
+6064,LTTS,L&T Technology Services Limited,NSE,IT  Services
+6065,LUMAXIND,Lumax Industries Limited,NSE,Auto Ancillaries
+6066,LUMAXTECH,Lumax Auto Technologies Limited,NSE,Auto Ancillaries
+6067,LUPIN,Lupin Limited,NSE,Pharma
+6068,M&M,Mahindra & Mahindra Limited,NSE,Automobiles
+6069,M&MFIN,Mahindra & Mahindra Financial Services Limited,NSE,NBFC & Financial Services
+6070,MADHUCON,Madhucon Projects Limited,NSE,Construction & Infra
+6071,MAHABANK,Bank of Maharashtra,NSE,Banks
+6072,MAHAPEXLTD,Maha Rashtra Apex Corporation Limited,NSE,NBFC & Financial Services
+6073,MAHEPC,Mahindra EPC Irrigation Limited,NSE,Capital Goods
+6074,MAHESHWARI,Maheshwari Logistics Limited,NSE,Diversified
+6075,MALLCOM,Mallcom (India) Limited,NSE,Capital Goods
+6076,MAMATA,Mamata Machinery Limited,NSE,Capital Goods
+6077,MANALIPETC,Manali Petrochemicals Limited,NSE,Chemicals
+6078,MANAPPURAM,Manappuram Finance Limited,NSE,NBFC & Financial Services
+6079,MANINFRA,Man Infraconstruction Limited,NSE,Construction & Infra
+6080,MANOMAY,Manomay Tex India Limited,NSE,Textiles
+6081,MANORAMA,Manorama Industries Limited,NSE,FMCG
+6082,MANORG,Mangalam Organics Limited,NSE,Chemicals
+6083,MARALOVER,Maral Overseas Limited,NSE,Textiles
+6084,MARATHON,Marathon Nextgen Realty Limited,NSE,Real Estate
+6085,MARICO,Marico Limited,NSE,FMCG
+6086,MARKSANS,Marksans Pharma Limited,NSE,Pharma
+6087,MARUTI,Maruti Suzuki India Limited,NSE,Automobiles
+6088,MASFIN,MAS Financial Services Limited,NSE,NBFC & Financial Services
+6089,MASTEK,Mastek Limited,NSE,IT  Software
+6090,MATRIMONY,Matrimony.Com Limited,NSE,Retail
+6091,MAWANASUG,Mawana Sugars Limited,NSE,FMCG
+6092,MAXESTATES,Max Estates Limited,NSE,Real Estate
+6093,MAXIND,Max India Limited,NSE,NBFC & Financial Services
+6094,MAYURUNIQ,Mayur Uniquoters Ltd,NSE,Consumer Durables
+6095,MBAPL,Madhya Bharat Agro Products Limited,NSE,Chemicals
+6096,MCL,Madhav Copper Limited,NSE,Capital Goods
+6097,MCLOUD,Magellanic Cloud Limited,NSE,IT  Software
+6098,MEDANTA,Global Health Limited,NSE,Healthcare
+6099,MEDIASSIST,Medi Assist Healthcare Services Limited,NSE,Insurance
+6100,MEDPLUS,Medplus Health Services Limited,NSE,Retail
+6101,MEESHO,Meesho Limited,NSE,Retail
+6102,MEGASTAR,Megastar Foods Limited,NSE,FMCG
+6103,MENONBE,Menon Bearings Limited,NSE,Auto Ancillaries
+6104,MFSL,Max Financial Services Limited,NSE,Insurance
+6105,MGEL,Mangalam Global Enterprise Limited,NSE,FMCG
+6106,MGL,Mahanagar Gas Limited,NSE,Oil & Gas
+6107,MHRIL,Mahindra Holidays & Resorts India Limited,NSE,Hospitality / Leisure
+6108,MICEL,MIC Electronics Limited,NSE,Capital Goods
+6109,MIDHANI,Mishra Dhatu Nigam Limited,NSE,Defence
+6110,MINDTECK,Mindteck (India) Limited,NSE,IT  Software
+6111,MIRCELECTR,MIRC Electronics Limited,NSE,Consumer Durables
+6112,MITCON,MITCON Consultancy & Engineering Services Limited,NSE,Business Services
+6113,MITTAL,Mittal Life Style Limited,NSE,Textiles
+6114,MMFL,MM Forgings Limited,NSE,Auto Ancillaries
+6115,MODTHREAD,Modern Threads (India) Limited,NSE,Textiles
+6116,MOIL,MOIL Limited,NSE,Metals & Mining
+6117,MOKSH,Moksh Ornaments Limited,NSE,Consumer Durables
+6118,MOL,Meghmani Organics Limited,NSE,Chemicals
+6119,MOLDTECH,Mold-Tek Technologies Limited,NSE,Construction & Infra
+6120,MONARCH,Monarch Networth Capital Limited,NSE,Capital Markets
+6121,MONEYBOXX,Moneyboxx Finance Limited,NSE,NBFC & Financial Services
+6122,MONTECARLO,Monte Carlo Fashions Limited,NSE,Textiles
+6123,MOREPENLAB,Morepen Laboratories Limited,NSE,Pharma
+6124,MOSCHIP,Moschip Technologies Limited,NSE,IT  Hardware
+6125,MOTHERSON,Samvardhana Motherson International Limited,NSE,Auto Ancillaries
+6126,MOTILALOFS,Motilal Oswal Financial Services Limited,NSE,Capital Markets
+6127,MOTOGENFIN,The Motor & General Finance Limited,NSE,Business Services
+6128,MPHASIS,MphasiS Limited,NSE,IT  Software
+6129,MPSLTD,MPS Limited,NSE,Consumer Services
+6130,MRPL,Mangalore Refinery and Petrochemicals Limited,NSE,Oil & Gas
+6131,MSPL,MSP Steel & Power Limited,NSE,Capital Goods
+6132,MSUMI,Motherson Sumi Wiring India Limited,NSE,Auto Ancillaries
+6133,MTNL,Mahanagar Telephone Nigam Limited,NSE,Telecom
+6134,MUTHOOTMF,Muthoot Microfin Limited,NSE,NBFC & Financial Services
+6135,MWL,Mangalam Worldwide Limited,NSE,Metals & Mining
+6136,NACLIND,NACL Industries Limited,NSE,Chemicals
+6137,NAHARCAP,Nahar Capital and Financial Services Limited,NSE,NBFC & Financial Services
+6138,NAM-INDIA,Nippon Life India Asset Management Limited,NSE,Capital Markets
+6139,NAUKRI,Info Edge (India) Limited,NSE,Retail
+6140,NAVA,NAVA LIMITED,NSE,Power
+6141,NAVKARCORP,Navkar Corporation Limited,NSE,Logistics
+6142,NCLIND,NCL Industries Limited,NSE,Cement & Mining
+6143,NECLIFE,Nectar Lifesciences Limited,NSE,Pharma
+6144,NELCO,NELCO Limited,NSE,IT  Hardware
+6145,NESTLEIND,Nestle India Limited,NSE,FMCG
+6146,NETWEB,Netweb Technologies India Limited,NSE,IT  Services
+6147,NEULANDLAB,Neuland Laboratories Limited,NSE,Pharma
+6148,NEWGEN,Newgen Software Technologies Limited,NSE,IT  Software
+6149,NFL,National Fertilizers Limited,NSE,Chemicals
+6150,NGIL,Nakoda Group of Industries Limited,NSE,FMCG
+6151,NH,Narayana Hrudayalaya Ltd.,NSE,Healthcare
+6152,NHPC,NHPC Limited,NSE,Power
+6153,NIACL,The New India Assurance Company Limited,NSE,Insurance
+6154,NIBE,NIBE Limited,NSE,Defence
+6155,NIITMTS,NIIT Learning Systems Limited,NSE,Consumer Services
+6156,NINSYS,NINtec Systems Limited,NSE,IT  Software
+6157,NIPPOBATRY,Indo-National Limited,NSE,FMCG
+6158,NITCO,Nitco Limited,NSE,Consumer Durables
+6159,NLCINDIA,NLC India Limited,NSE,Power
+6160,NMDC,NMDC Limited,NSE,Metals & Mining
+6161,NOCIL,NOCIL Limited,NSE,Chemicals
+6162,NOIDATOLL,Noida Toll Bridge Company Limited,NSE,Infrastructure
+6163,NORBTEAEXP,Norben Tea & Exports Limited,NSE,FMCG
+6164,NORTHARC,Northern Arc Capital Limited,NSE,NBFC & Financial Services
+6165,NRL,Nupur Recyclers Limited,NSE,Metals & Mining
+6166,NTPC,NTPC Limited,NSE,Power
+6167,NUCLEUS,Nucleus Software Exports Limited,NSE,IT  Software
+6168,NUVAMA,Nuvama Wealth Management Limited,NSE,Capital Markets
+6169,NUVOCO,Nuvoco Vistas Corporation Limited,NSE,Cement & Mining
+6170,OAL,Oriental Aromatics Limited,NSE,Chemicals
+6171,ODIGMA,Odigma Consultancy Solutions Limited,NSE,IT  Services
+6172,OLAELEC,Ola Electric Mobility Limited,NSE,Automobiles
+6173,OLECTRA,Olectra Greentech Limited,NSE,Automobiles
+6174,OMAXAUTO,Omax Autos Limited,NSE,Auto Ancillaries
+6175,OMAXE,Omaxe Limited,NSE,Real Estate
+6176,OMINFRAL,OM INFRA LIMITED,NSE,Construction & Infra
+6177,ONEPOINT,One Point One Solutions Limited,NSE,Business Services
+6178,ONGC,Oil & Natural Gas Corporation Limited,NSE,Oil & Gas
+6179,ONWARDTEC,Onward Technologies Limited,NSE,IT  Services
+6180,OPTIEMUS,Optiemus Infracom Limited,NSE,Telecom
+6181,ORICONENT,Oricon Enterprises Limited,NSE,Capital Goods
+6182,ORIENTBELL,Orient Bell Limited,NSE,Consumer Durables
+6183,ORIENTCEM,Orient Cement Limited,NSE,Cement & Mining
+6184,ORIENTTECH,Orient Technologies Limited,NSE,IT  Services
+6185,ORISSAMINE,The Orissa Minerals Development Company Limited,NSE,Metals & Mining
+6186,OSIAHYPER,Osia Hyper Retail Limited,NSE,Retail
+6187,OSWALAGRO,Oswal Agro Mills Limited,NSE,Business Services
+6188,OSWALPUMPS,Oswal Pumps Limited,NSE,Capital Goods
+6189,PAGEIND,Page Industries Limited,NSE,Textiles
+6190,PAKKA,PAKKA LIMITED,NSE,Paper
+6191,PARAS,Paras Defence and Space Technologies Limited,NSE,Defence
+6192,PARKHOSPS,Park Medi World Limited,NSE,Healthcare
+6193,PASHUPATI,Pashupati Cotspin Limited,NSE,Textiles
+6194,PATANJALI,Patanjali Foods Limited,NSE,FMCG
+6195,PATELENG,Patel Engineering Limited,NSE,Construction & Infra
+6196,PATELRMART,Patel Retail Limited,NSE,Retail
+6197,PAUSHAKLTD,Paushak Limited,NSE,Chemicals
+6198,PAYTM,One 97 Communications Limited,NSE,Fintech
+6199,PCBL,PCBL Chemical Limited,NSE,Chemicals
+6200,PEARLPOLY,Pearl Polymers Limited,NSE,Consumer Durables
+6201,PERSISTENT,Persistent Systems Limited,NSE,IT  Software
+6202,PETRONET,Petronet LNG Limited,NSE,Oil & Gas
+6203,PFC,Power Finance Corporation Limited,NSE,NBFC & Financial Services
+6204,PFS,PTC India Financial Services Limited,NSE,NBFC & Financial Services
+6205,PHOENIXLTD,The Phoenix Mills Limited,NSE,Real Estate
+6206,PICCADIL,Piccadily Agro Industries Limited,NSE,FMCG
+6207,PIDILITIND,Pidilite Industries Limited,NSE,Chemicals
+6208,PIGL,Power & Instrumentation (Gujarat) Limited,NSE,Capital Goods
+6209,PIIND,PI Industries Limited,NSE,Chemicals
+6210,PIRAMALFIN,Piramal Finance Limited,NSE,NBFC & Financial Services
+6211,PIXTRANS,Pix Transmissions Limited,NSE,Capital Goods
+6212,PLATIND,Platinum Industries Limited,NSE,Chemicals
+6213,PNB,Punjab National Bank,NSE,Banks
+6214,PNBGILTS,PNB Gilts Limited,NSE,NBFC & Financial Services
+6215,PNBHOUSING,PNB Housing Finance Limited,NSE,NBFC & Financial Services
+6216,PNGJL,P N Gadgil Jewellers Limited,NSE,Consumer Durables
+6217,PNGSREVA,PNGS Reva Diamond Jewellery Limited,NSE,
+6218,POCL,Pondy Oxides & Chemicals Limited,NSE,Metals
+6219,PODDARHOUS,Poddar Housing and Development Limited,NSE,
+6220,POLICYBZR,PB Fintech Limited,NSE,Fintech
+6221,POLYCAB,Polycab India Limited,NSE,Capital Goods
+6222,POLYMED,Poly Medicure Limited,NSE,Healthcare
+6223,POONAWALLA,Poonawalla Fincorp Limited,NSE,NBFC & Financial Services
+6224,POWERGRID,Power Grid Corporation of India Limited,NSE,Power
+6225,POWERMECH,Power Mech Projects Limited,NSE,Construction & Infra
+6226,PPL,Prakash Pipes Limited,NSE,Capital Goods
+6227,PRABHA,Prabha Energy Limited,NSE,Oil & Gas
+6228,PRAJIND,Praj Industries Limited,NSE,Capital Goods
+6229,PRECOT,Precot Limited,NSE,Textiles
+6230,PREMEXPLN,Premier Explosives Limited,NSE,Chemicals
+6231,PREMIERENE,Premier Energies Limited,NSE,Capital Goods
+6232,PREMIERPOL,Premier Polyfilm Limited,NSE,Capital Goods
+6233,PRESTIGE,Prestige Estates Projects Limited,NSE,Real Estate
+6234,PRINCEPIPE,Prince Pipes And Fittings Limited,NSE,Capital Goods
+6235,PRITIKAUTO,Pritika Auto Industries Limited,NSE,Auto Ancillaries
+6236,PRIVISCL,Privi Speciality Chemicals Limited,NSE,Chemicals
+6237,PRUDENT,Prudent Corporate Advisory Services Limited,NSE,Capital Markets
+6238,PSB,Punjab & Sind Bank,NSE,Banks
+6239,PUNJABCHEM,Punjab Chemicals & Crop Protection Limited,NSE,Chemicals
+6240,PUNJLLOYD,Punj Lloyd Limited,NSE,
+6241,PURVA,Puravankara Limited,NSE,Real Estate
+6242,PVSL,Popular Vehicles and Services Limited,NSE,Automobiles
+6243,QPOWER,Quality Power Electrical Equipments Limited,NSE,Capital Goods
+6244,QUESS,Quess Corp Limited,NSE,Business Services
+6245,RACE,Race Eco Chain Limited,NSE,Utilities
+6246,RACLGEAR,RACL Geartech Limited,NSE,Auto Ancillaries
+6247,RADICO,Radico Khaitan Limited,NSE,FMCG
+6248,RADIOCITY,Music Broadcast Limited,NSE,Media
+6249,RAILTEL,Railtel Corporation Of India Limited,NSE,Telecom
+6250,RAIN,Rain Industries Limited,NSE,Chemicals
+6251,RAJRATAN,Rajratan Global Wire Limited,NSE,Auto Ancillaries
+6252,RALLIS,Rallis India Limited,NSE,Chemicals
+6253,RAMAPHO,Rama Phosphates Limited,NSE,Chemicals
+6254,RAMCOCEM,The Ramco Cements Limited,NSE,Cement & Mining
+6255,RAMCOSYS,Ramco Systems Limited,NSE,IT  Software
+6256,RAMKY,Ramky Infrastructure Limited,NSE,Construction & Infra
+6257,RANEHOLDIN,Rane Holdings Limited,NSE,NBFC & Financial Services
+6258,RATEGAIN,Rategain Travel Technologies Limited,NSE,IT  Software
+6259,RAYMONDLSL,Raymond Lifestyle Limited,NSE,Textiles
+6260,RAYMONDREL,Raymond Realty Limited,NSE,Real Estate
+6261,RBLBANK,RBL Bank Limited,NSE,Banks
+6262,RCF,Rashtriya Chemicals and Fertilizers Limited,NSE,Chemicals
+6263,RECLTD,REC Limited,NSE,NBFC & Financial Services
+6264,REDINGTON,Redington Limited,NSE,Business Services
+6265,REFEX,Refex Industries Limited,NSE,Chemicals
+6266,REGAAL,Regaal Resources Limited,NSE,FMCG
+6267,REGENCERAM,Regency Ceramics Limited,NSE,Consumer Durables
+6268,RELAXO,Relaxo Footwears Limited,NSE,Consumer Durables
+6269,RELCHEMQ,Reliance Chemotex Industries Limited,NSE,Textiles
+6270,RELIANCE,Reliance Industries Limited,NSE,Oil & Gas
+6271,RELTD,Ravindra Energy Limited,NSE,Capital Goods
+6272,REMSONSIND,Remsons Industries Limited,NSE,Auto Ancillaries
+6273,REPCOHOME,Repco Home Finance Limited,NSE,NBFC & Financial Services
+6274,REPL,Rudrabhishek Enterprises Limited,NSE,Construction & Infra
+6275,RESPONIND,Responsive Industries Limited,NSE,Consumer Durables
+6276,RETAIL,JHS Svendgaard Retail Ventures Limited,NSE,Retail
+6277,RGL,Renaissance Global Limited,NSE,Consumer Durables
+6278,RHFL,Reliance Home Finance Limited,NSE,NBFC & Financial Services
+6279,RITCO,Ritco Logistics Limited,NSE,Logistics
+6280,RITES,RITES Limited,NSE,Construction & Infra
+6281,RKDL,Ravi Kumar Distilleries Limited,NSE,FMCG
+6282,RKFORGE,Ramkrishna Forgings Limited,NSE,Auto Ancillaries
+6283,RMCL,Radha Madhav Corporation Limited,NSE,
+6284,RMDRIP,R M Drip and Sprinklers Systems Limited,NSE,Capital Goods
+6285,RML,Rane (Madras) Limited,NSE,Auto Ancillaries
+6286,RNBDENIMS,R&B Denims Limited,NSE,Textiles
+6287,ROLLT,Rollatainers Limited,NSE,Capital Goods
+6288,ROUTE,ROUTE MOBILE LIMITED,NSE,Telecom
+6289,RSWM,RSWM Limited,NSE,Textiles
+6290,RSYSTEMS,R Systems International Limited,NSE,IT  Services
+6291,RTNINDIA,RattanIndia Enterprises Limited,NSE,Retail
+6292,RUBICON,Rubicon Research Limited,NSE,Pharma
+6293,RUDRA,Rudra Global Infra Products Limited,NSE,Capital Goods
+6294,RUSHABEAR,Rushabh Precision Bearings Limited,NSE,
+6295,RUSHIL,Rushil Decor Limited,NSE,Consumer Durables
+6296,SAATVIKGL,Saatvik Green Energy Limited,NSE,Capital Goods
+6297,SAGILITY,SAGILITY LIMITED,NSE,IT  Services
+6298,SAHLIBHFI,Shalibhadra Finance Limited,NSE,
+6299,SAIL,Steel Authority of India Limited,NSE,Metals
+6300,SAILIFE,Sai Life Sciences Limited,NSE,Pharma
+6301,SAKHTISUG,Sakthi Sugars Limited,NSE,FMCG
+6302,SAKSOFT,Saksoft Limited,NSE,IT  Software
+6303,SALASAR,Salasar Techno Engineering Limited,NSE,Capital Goods
+6304,SALSTEEL,S.A.L. Steel Limited,NSE,Metals
+6305,SAMBHAAV,Sambhaav Media Limited,NSE,Media
+6306,SAMMAANCAP,Sammaan Capital Limited,NSE,NBFC & Financial Services
+6307,SANCO,Sanco Industries Limited,NSE,Capital Goods
+6308,SANDESH,The Sandesh Limited,NSE,Media
+6309,SANDHAR,Sandhar Technologies Limited,NSE,Auto Ancillaries
+6310,SANGAMIND,Sangam (India) Limited,NSE,Textiles
+6311,SANGHVIMOV,Sanghvi Movers Limited,NSE,Business Services
+6312,SANGINITA,Sanginita Chemicals Limited,NSE,Chemicals
+6313,SANOFI,Sanofi India Limited,NSE,Pharma
+6314,SAPPHIRE,Sapphire Foods India Limited,NSE,Hospitality / Leisure
+6315,SAREGAMA,Saregama India Limited,NSE,Media
+6316,SARLAPOLY,Sarla Performance Fibers Limited,NSE,Textiles
+6317,SARVESHWAR,Sarveshwar Foods Limited,NSE,FMCG
+6318,SASKEN,Sasken Technologies Limited,NSE,IT  Services
+6319,SATIN,Satin Creditcare Network Limited,NSE,NBFC & Financial Services
+6320,SAYAJIHOTL,Sayaji Hotels Limited,NSE,
+6321,SBC,SBC Exports Limited,NSE,Textiles
+6322,SBFC,SBFC Finance Limited,NSE,NBFC & Financial Services
+6323,SBICARD,SBI Cards and Payment Services Limited,NSE,NBFC & Financial Services
+6324,SBILIFE,SBI Life Insurance Company Limited,NSE,Insurance
+6325,SCHAEFFLER,Schaeffler India Limited,NSE,Auto Ancillaries
+6326,SCILAL,Shipping Corporation of India Land and Assets Limited,NSE,NBFC & Financial Services
+6327,SCPL,Sheetal Cool Products Limited,NSE,FMCG
+6328,SECURCRED,SecUR Credentials Limited,NSE,
+6329,SEDEMAC,SEDEMAC Mechatronics Limited,NSE,
+6330,SEJALLTD,Sejal Glass Limited,NSE,Capital Goods
+6331,SENCO,Senco Gold Limited,NSE,Consumer Durables
+6332,SEPC,SEPC Limited,NSE,Construction & Infra
+6333,SERVOTECH,Servotech Renewable Power System Limited,NSE,Capital Goods
+6334,SETCO,Setco Automotive Limited,NSE,Auto Ancillaries
+6335,SETUINFRA,Setubandhan Infrastructure Limited,NSE,Construction & Infra
+6336,SGIL,Synergy Green Industries Limited,NSE,Capital Goods
+6337,SHADOWFAX,Shadowfax Technologies Limited,NSE,Logistics
+6338,SHAH,Shah Metacorp Limited,NSE,Capital Goods
+6339,SHALBY,Shalby Limited,NSE,Healthcare
+6340,SHANTIGEAR,Shanthi Gears Limited,NSE,Capital Goods
+6341,SHANTIGOLD,Shanti Gold International Limited,NSE,Consumer Durables
+6342,SHILCTECH,Shilchar Technologies Limited,NSE,Capital Goods
+6343,SHRADHA,Shradha Realty Limited,NSE,Real Estate
+6344,SHREECEM,SHREE CEMENT LIMITED,NSE,Cement & Mining
+6345,SHRENIK,Shrenik Limited,NSE,Paper
+6346,SHRIPISTON,Shriram Pistons & Rings Limited,NSE,Auto Ancillaries
+6347,SHRIRAMFIN,Shriram Finance Limited,NSE,NBFC & Financial Services
+6348,SHRIRAMPPS,Shriram Properties Limited,NSE,Real Estate
+6349,SHYAMMETL,Shyam Metalics and Energy Limited,NSE,Capital Goods
+6350,SICALLOG,Sical Logistics Limited,NSE,Logistics
+6351,SIGIND,Signet Industries Limited,NSE,Business Services
+6352,SIGMA,Sigma Solve Limited,NSE,IT  Services
+6353,SIGMAADV,SIGMA ADVANCED SYSTEMS LIMITED,NSE,Telecom
+6354,SIGNATURE,Signatureglobal (India) Limited,NSE,Real Estate
+6355,SILGO,Silgo Retail Limited,NSE,Consumer Durables
+6356,SIMBHALS,Simbhaoli Sugars Limited,NSE,FMCG
+6357,SINCLAIR,Sinclairs Hotels Limited,NSE,Hospitality / Leisure
+6358,SIRCA,Sirca Paints India Limited,NSE,Consumer Durables
+6359,SIS,SIS LIMITED,NSE,Consumer Services
+6360,SJS,S.J.S. Enterprises Limited,NSE,Auto Ancillaries
+6361,SJVN,SJVN Limited,NSE,Power
+6362,SKFINDIA,SKF India Limited,NSE,Capital Goods
+6363,SKIPPER,Skipper Limited,NSE,Capital Goods
+6364,SKYGOLD,SKY GOLD AND DIAMONDS LIMITED,NSE,Consumer Durables
+6365,SMCGLOBAL,SMC Global Securities Limited,NSE,Capital Markets
+6366,SNOWMAN,Snowman Logistics Limited,NSE,Logistics
+6367,SOBHA,Sobha Limited,NSE,Real Estate
+6368,SOFTTECH,Softtech Engineers Limited,NSE,IT  Software
+6369,SOLARA,Solara Active Pharma Sciences Limited,NSE,Pharma
+6370,SOLARINDS,Solar Industries India Limited,NSE,Chemicals
+6371,SOLARWORLD,Solarworld Energy Solutions Limited,NSE,Construction & Infra
+6372,SOLEX,Solex Energy Limited,NSE,Capital Goods
+6373,SOMANYCERA,Somany Ceramics Limited,NSE,Consumer Durables
+6374,SOMATEX,Soma Textiles & Industries Limited,NSE,Textiles
+6375,SOMICONVEY,Somi Conveyor Beltings Limited,NSE,Capital Goods
+6376,SONACOMS,Sona BLW Precision Forgings Limited,NSE,Auto Ancillaries
+6377,SONAMLTD,SONAM LIMITED,NSE,Consumer Durables
+6378,SONATSOFTW,Sonata Software Limited,NSE,IT  Software
+6379,SOTL,Savita Oil Technologies Limited,NSE,Oil & Gas
+6380,SOUTHBANK,The South Indian Bank Limited,NSE,Banks
+6381,SOUTHWEST,South West Pinnacle Exploration Limited,NSE,Business Services
+6382,SPANDANA,Spandana Sphoorty Financial Limited,NSE,NBFC & Financial Services
+6383,SPIC,Southern Petrochemicals Industries Corporation  Limited,NSE,Chemicals
+6384,SPLPETRO,Supreme Petrochem Limited,NSE,Chemicals
+6385,SPMLINFRA,SPML Infra Limited,NSE,Construction & Infra
+6386,SRF,SRF Limited,NSE,Chemicals
+6387,SRGHFL,SRG Housing Finance Limited,NSE,NBFC & Financial Services
+6388,SRM,SRM Contractors Limited,NSE,Construction & Infra
+6389,SRTL,Shree Ram Twistex Limited,NSE,
+6390,STANLEY,Stanley Lifestyles Limited,NSE,Consumer Durables
+6391,STARHEALTH,Star Health and Allied Insurance Company Limited,NSE,Insurance
+6392,STEELCITY,Steel City Securities Limited,NSE,Capital Markets
+6393,STEELXIND,STEEL EXCHANGE INDIA LIMITED,NSE,Capital Goods
+6394,STLTECH,Sterlite Technologies Limited,NSE,Telecom
+6395,STYLAMIND,Stylam Industries Limited,NSE,Consumer Durables
+6396,STYLEBAAZA,Baazar Style Retail Limited,NSE,Retail
+6397,SUBEXLTD,Subex Limited,NSE,IT  Software
+6398,SUBROS,Subros Limited,NSE,Capital Goods
+6399,SUDARCOLOR,Sudarshan Colorants India Limited,NSE,Chemicals
+6400,SUDEEPPHRM,Sudeep Pharma Limited,NSE,Pharma
+6401,SUKHJITS,Sukhjit Starch & Chemicals Limited,NSE,FMCG
+6402,SUNCLAY,Sundaram Clayton Limited,NSE,Auto Ancillaries
+6403,SUNDRMFAST,Sundram Fasteners Limited,NSE,Auto Ancillaries
+6404,SUNFLAG,Sunflag Iron And Steel Company Limited,NSE,Capital Goods
+6405,SUNPHARMA,Sun Pharmaceutical Industries Limited,NSE,Pharma
+6406,SUPRIYA,Supriya Lifescience Limited,NSE,Pharma
+6407,SURAKSHA,Suraksha Diagnostic Limited,NSE,Healthcare
+6408,SURYAROSNI,Surya Roshni Limited,NSE,Capital Goods
+6409,SUTLEJTEX,Sutlej Textiles and Industries Limited,NSE,Textiles
+6410,SUZLON,Suzlon Energy Limited,NSE,Capital Goods
+6411,SWARAJENG,Swaraj Engines Limited,NSE,Capital Goods
+6412,SWELECTES,Swelect Energy Systems Limited,NSE,Capital Goods
+6413,SWSOLAR,Sterling and Wilson Renewable Energy Limited,NSE,Construction & Infra
+6414,SYMPHONY,Symphony Limited,NSE,Consumer Durables
+6415,SYNGENE,Syngene International Limited,NSE,Healthcare
+6416,SYRMA,Syrma SGS Technology Limited,NSE,Capital Goods
+6417,TAKE,Take Solutions Limited,NSE,Healthcare
+6418,TALWALKARS,Talwalkars Better Value Fitness Limited,NSE,
+6419,TANLA,Tanla Platforms Limited,NSE,IT  Software
+6420,TARC,TARC Limited,NSE,Real Estate
+6421,TARIL,Transformers And Rectifiers (India) Limited,NSE,Capital Goods
+6422,TASTYBITE,Tasty Bite Eatables Limited,NSE,FMCG
+6423,TATACAP,Tata Capital Limited,NSE,NBFC & Financial Services
+6424,TATACHEM,Tata Chemicals Limited,NSE,Chemicals
+6425,TATAELXSI,Tata Elxsi Limited,NSE,IT  Software
+6426,TATAPOWER,Tata Power Company Limited,NSE,Power
+6427,TATASTEEL,Tata Steel Limited,NSE,Metals
+6428,TATATECH,Tata Technologies Limited,NSE,IT  Services
+6429,TATVA,Tatva Chintan Pharma Chem Limited,NSE,Chemicals
+6430,TCI,Transport Corporation of India Limited,NSE,Logistics
+6431,TCS,Tata Consultancy Services Limited,NSE,IT  Software
+6432,TDPOWERSYS,TD Power Systems Limited,NSE,Capital Goods
+6433,TEAMGTY,Team India Guaranty Limited,NSE,NBFC & Financial Services
+6434,TEAMLEASE,Teamlease Services Limited,NSE,Business Services
+6435,TECHIN,Techindia Nirman Limited,NSE,
+6436,TECHM,Tech Mahindra Limited,NSE,IT  Software
+6437,TEJASNET,Tejas Networks Limited,NSE,Telecom
+6438,TENNIND,Tenneco Clean Air India Limited,NSE,Auto Ancillaries
+6439,TERASOFT,Tera Software Limited,NSE,IT  Services
+6440,TEXRAIL,Texmaco Rail & Engineering Limited,NSE,Capital Goods
+6441,THEINVEST,The Investment Trust Of India Limited,NSE,NBFC & Financial Services
+6442,THELEELA,Leela Palaces Hotels & Resorts Limited,NSE,Hospitality / Leisure
+6443,THERMAX,Thermax Limited,NSE,Capital Goods
+6444,THOMASCOOK,Thomas Cook  (India)  Limited,NSE,Hospitality / Leisure
+6445,THOMASCOTT,Thomas Scott (India) Limited,NSE,Textiles
+6446,TI,Tilaknagar Industries Limited,NSE,FMCG
+6447,TICL,Twamev Construction and Infrastructure Limited,NSE,Construction & Infra
+6448,TIINDIA,Tube Investments of India Limited,NSE,Auto Ancillaries
+6449,TIJARIA,Tijaria Polypipes Limited,NSE,Capital Goods
+6450,TIL,TIL Limited,NSE,Automobiles
+6451,TINNARUBR,Tinna Rubber and Infrastructure Limited,NSE,Capital Goods
+6452,TIPSMUSIC,Tips Music Limited,NSE,Media
+6453,TITAGARH,TITAGARH RAIL SYSTEMS LIMITED,NSE,Capital Goods
+6454,TITAN,Titan Company Limited,NSE,Consumer Durables
+6455,TMB,Tamilnad Mercantile Bank Limited,NSE,Banks
+6456,TMCV,Tata Motors Limited,NSE,Automobiles
+6457,TNPETRO,Tamilnadu PetroProducts Limited,NSE,Chemicals
+6458,TOLINS,Tolins Tyres Limited,NSE,Auto Ancillaries
+6459,TORNTPOWER,Torrent Power Limited,NSE,Power
+6460,TOTAL,Total Transport Systems Limited,NSE,Logistics
+6461,TRACXN,Tracxn Technologies Limited,NSE,Business Services
+6462,TRANSWORLD,TRANSWORLD SHIPPING LINES LIMITED,NSE,Logistics
+6463,TREJHARA,TREJHARA SOLUTIONS LIMITED,NSE,IT  Software
+6464,TRENT,Trent Limited,NSE,Retail
+6465,TRF,TRF Limited,NSE,Capital Goods
+6466,TRUALT,TruAlt Bioenergy Limited,NSE,FMCG
+6467,TTKPRESTIG,TTK Prestige Limited,NSE,Consumer Durables
+6468,TTML,Tata Teleservices (Maharashtra) Limited,NSE,Telecom
+6469,TVSMOTOR,TVS Motor Company Limited,NSE,Automobiles
+6470,TVSSCS,TVS Supply Chain Solutions Limited,NSE,Logistics
+6471,TVVISION,TV Vision Limited,NSE,Media
+6472,UBL,United Breweries Limited,NSE,FMCG
+6473,UDS,Updater Services Limited,NSE,Business Services
+6474,UFBL,United Foodbrands Limited,NSE,Hospitality / Leisure
+6475,UFLEX,UFLEX Limited,NSE,Capital Goods
+6476,UGROCAP,Ugro Capital Limited,NSE,NBFC & Financial Services
+6477,UJJIVANSFB,Ujjivan Small Finance Bank Limited,NSE,Banks
+6478,ULTRACEMCO,UltraTech Cement Limited,NSE,Cement & Mining
+6479,UNIDT,United Drilling Tools Limited,NSE,Capital Goods
+6480,UNIECOM,Unicommerce Esolutions Limited,NSE,IT  Software
+6481,UNIPARTS,Uniparts India Limited,NSE,Auto Ancillaries
+6482,UNITDSPR,United Spirits Limited,NSE,FMCG
+6483,UNITECH,Unitech Limited,NSE,Real Estate
+6484,UNIVAFOODS,Univa Foods Limited,NSE,Hospitality / Leisure
+6485,UNIVASTU,Univastu India Limited,NSE,Construction & Infra
+6486,UNIVCABLES,Universal Cables Limited,NSE,Capital Goods
+6487,UNOMINDA,UNO Minda Limited,NSE,Auto Ancillaries
+6488,UPL,UPL Limited,NSE,Chemicals
+6489,URBANCO,Urban Company Limited,NSE,Retail
+6490,USHAMART,Usha Martin Limited,NSE,Capital Goods
+6491,USK,Udayshivakumar Infra Limited,NSE,Construction & Infra
+6492,UTIAMC,UTI Asset Management Company Limited,NSE,Capital Markets
+6493,UTKARSHBNK,Utkarsh Small Finance Bank Limited,NSE,Banks
+6494,V2RETAIL,V2 Retail Limited,NSE,Retail
+6495,VAIBHAVGBL,Vaibhav Global Limited,NSE,Consumer Durables
+6496,VARDMNPOLY,Vardhman Polytex Limited,NSE,Textiles
+6497,VARROC,Varroc Engineering Limited,NSE,Auto Ancillaries
+6498,VASCONEQ,Vascon Engineers Limited,NSE,Real Estate
+6499,VBL,Varun Beverages Limited,NSE,FMCG
+6500,VCL,Vaxtex Cotfab Limited,NSE,Textiles
+6501,VEDL,Vedanta Limited,NSE,Metals
+6502,VEEDOL,Veedol Corporation Limited,NSE,Oil & Gas
+6503,VENUSPIPES,Venus Pipes & Tubes Limited,NSE,Capital Goods
+6504,VENUSREM,Venus Remedies Limited,NSE,Pharma
+6505,VERANDA,Veranda Learning Solutions Limited,NSE,Consumer Services
+6506,VERTOZ,Vertoz Limited,NSE,Media
+6507,VGL,VARVEE GLOBAL LIMITED,NSE,Textiles
+6508,VHLTD,Viceroy Hotels Limited,NSE,Hospitality / Leisure
+6509,VIJIFIN,Viji Finance Limited,NSE,NBFC & Financial Services
+6510,VIKRAMSOLR,Vikram Solar Limited,NSE,Capital Goods
+6511,VIKRAN,Vikran Engineering Limited,NSE,Construction & Infra
+6512,VIMTALABS,Vimta Labs Limited,NSE,Healthcare
+6513,VIPIND,VIP Industries Limited,NSE,Consumer Durables
+6514,VISHNU,Vishnu Chemicals Limited,NSE,Chemicals
+6515,VLSFINANCE,VLS Finance Limited,NSE,NBFC & Financial Services
+6516,VMM,Vishal Mega Mart Limited,NSE,Retail
+6517,VMSTMT,VMS TMT Limited,NSE,Capital Goods
+6518,VOLTAS,Voltas Limited,NSE,Consumer Durables
+6519,VPRPL,Vishnu Prakash R Punglia Limited,NSE,Construction & Infra
+6520,VSSL,Vardhman Special Steels Limited,NSE,Capital Goods
+6521,VSTIND,VST Industries Limited,NSE,FMCG
+6522,VSTL,Vibhor Steel Tubes Limited,NSE,Capital Goods
+6523,VSTTILLERS,V.S.T Tillers Tractors Limited,NSE,Automobiles
+6524,VTL,Vardhman Textiles Limited,NSE,Textiles
+6525,WAAREEENER,Waaree Energies Limited,NSE,Capital Goods
+6526,WABAG,VA Tech Wabag Limited,NSE,Utilities
+6527,WAKEFIT,Wakefit Innovations Limited,NSE,Consumer Durables
+6528,WANBURY,Wanbury Limited,NSE,Pharma
+6529,WCIL,Western Carriers (India) Limited,NSE,Logistics
+6530,WEALTH,Wealth First Portfolio Managers Limited,NSE,NBFC & Financial Services
+6531,WEL,Wonder Electricals Limited,NSE,Consumer Durables
+6532,WELCORP,Welspun Corp Limited,NSE,Capital Goods
+6533,WENDT,Wendt (India) Limited,NSE,Capital Goods
+6534,WEWIN,WE WIN LIMITED,NSE,Business Services
+6535,WEWORK,WeWork India Management Limited,NSE,Business Services
+6536,WHIRLPOOL,Whirlpool of India Limited,NSE,Consumer Durables
+6537,WILLAMAGOR,Williamson Magor & Company Limited,NSE,NBFC & Financial Services
+6538,WINDLAS,Windlas Biotech Limited,NSE,Pharma
+6539,WINSOME,Winsome Yarns Limited,NSE,Textiles
+6540,WIPL,The Western India Plywoods Limited,NSE,Consumer Durables
+6541,WIPRO,Wipro Limited,NSE,IT  Software
+6542,WORTHPERI,Worth Peripherals Limited,NSE,Capital Goods
+6543,XLENERGY,XL Energy Limited,NSE,
+6544,XPROINDIA,Xpro India Limited,NSE,Capital Goods
+6545,YATRA,Yatra Online Limited,NSE,Hospitality / Leisure
+6546,YESBANK,Yes Bank Limited,NSE,Banks
+6547,YUKEN,Yuken India Limited,NSE,Capital Goods
+6548,ZAGGLE,Zaggle Prepaid Ocean Services Limited,NSE,IT  Services
+6549,ZEEL,Zee Entertainment Enterprises Limited,NSE,Media
+6550,ZEELEARN,Zee Learn Limited,NSE,Consumer Services
+6551,ZEEMEDIA,Zee Media Corporation Limited,NSE,Media
+6552,ZENITHEXPO,Zenith Exports Limited,NSE,Consumer Durables
+6553,ZENTEC,Zen Technologies Limited,NSE,Defence
+6554,ZFCVINDIA,ZF Commercial Vehicle Control Systems India Limited,NSE,Auto Ancillaries
+6555,ZODIAC,Zodiac Energy Limited,NSE,Construction & Infra
+6556,ZODIACLOTH,Zodiac Clothing Company Limited,NSE,Textiles
+6557,ZOTA,Zota Health Care LImited,NSE,Pharma
+6558,ZUARIIND,ZUARI INDUSTRIES LIMITED,NSE,FMCG
+6559,ZYDUSLIFE,Zydus Lifesciences Limited,NSE,Pharma
+6560,JINDALPOLY,Jindal Poly Films Limited,BSE,Capital Goods
+6561,530525,Rajnish Retail Limited,BSE,
+6562,AFIL,Akme Fintrade (India) Limited,NSE,NBFC & Financial Services
+6563,500219,Jain Irrigation Systems Ltd,BSE,Capital Goods
+6564,506690,Unichem Laboratories Ltd,BSE,Pharma
+6565,511756,Abirami Financial Services India Ltd,BSE,NBFC & Financial Services
+6566,511768,Master Trust Ltd,BSE,Capital Markets
+6567,516078,Jumbo Bag Ltd,BSE,Capital Goods
+6568,519479,Omega Ag-Seeds Punjab Ltd,BSE,FMCG
+6569,521244,MKP Mobility Ltd,BSE,Textiles
+6570,526494,Promact Plastics Ltd,BSE,Capital Goods
+6571,526839,Shelter Infra Projects Ltd-$,BSE,Construction & Infra
+6572,531640,Suvidha Infraestate Corporation Ltd,BSE,Real Estate
+6573,537524,Viaan Industries Ltd,BSE,
+6574,537536,Denis Chem Lab Ltd,BSE,Pharma
+6575,539046,Manaksia Coated Metals & Industries Ltd,BSE,Capital Goods
+6576,539287,Ortin Global Ltd,BSE,Pharma
+6577,539984,Hindusthan Insulators & Industries Ltd,BSE,Capital Goods
+6578,543904,Mankind Pharma Ltd,BSE,Pharma
+6579,544594,Game Changers Texfab Ltd,BSE,Textiles
+6580,544606,Pine Labs Ltd,BSE,Fintech
+6581,570004,Jain Irrigation Systems Ltd_DVR,BSE,Capital Goods
+6582,ARIS,Arisinfra Solutions Limited,NSE,Construction & Infra
+6583,BCPL,BCPL Railway Infrastructure Limited,NSE,
+6584,BILVYAPAR,BIL VYAPAR LIMITED,NSE,NBFC & Financial Services
+6585,BIRLANU,BirlaNu Limited,NSE,Consumer Durables
+6586,GRINFRA,G R Infraprojects Limited,NSE,Construction & Infra
+6587,MANAKCOAT,Manaksia Coated Metals & Industries Limited,NSE,Capital Goods
+6588,MOLDTKPAC,Mold-Tek Packaging Limited,NSE,Capital Goods
+6589,ORTINGLOBE,ORTIN GLOBAL LIMITED,NSE,Pharma
+6590,PINELABS,Pine Labs Limited,NSE,Fintech
+6591,SPCENET,Spacenet Enterprises India Limited,NSE,Business Services
+6592,UNITEDPOLY,United Polyfab Gujarat Limited,NSE,Textiles
+6593,513544,Mardia Samyoung Capillary Tubes Company Ltd,BSE,Metals
+6594,530931,Stanpacks India Ltd,BSE,Capital Goods
+6595,538965,Concord Drugs Ltd,BSE,Pharma
+6596,539219,Mauria Udyog Ltd,BSE,Capital Goods
+6597,531334,VIKALP SECURITIES LIMITED,BSE,
+6598,505893,Hindustan Hardy Limited,BSE,
+6599,543711,Sula Vineyards Limited,BSE,
+6600,500101,Arvind Ltd,BSE,Textiles
+6601,500241,Kirloskar Brothers Ltd-$,BSE,Capital Goods
+6602,500472,SKF India Ltd,BSE,Capital Goods
+6603,511493,Shrydus Industries Ltd,BSE,NBFC & Financial Services
+6604,511644,Omega Interactive Technologies Ltd,BSE,IT  Software
+6605,513307,Belding India Ltd,BSE,Capital Goods
+6606,517397,Pan Electronics India Ltd,BSE,Capital Goods
+6607,517498,Websol Energy System Ltd,BSE,Capital Goods
+6608,520066,Jay Bharat Maruti Ltd,BSE,Auto Ancillaries
+6609,523385,Nilkamal Ltd,BSE,Consumer Durables
+6610,523722,Svam Software Ltd,BSE,IT  Software
+6611,524322,Kabra Drugs Ltd,BSE,Pharma
+6612,524570,Poddar Pigments Ltd-$,BSE,Chemicals
+6613,526731,Bright Brothers Ltd-$,BSE,Capital Goods
+6614,531489,CG Vak Software & Exports Ltd,BSE,IT  Software
+6615,531583,Rap Corp Ltd,BSE,Real Estate
+6616,532181,Gujarat Mineral Development Corporation Ltd,BSE,Metals & Mining
+6617,532303,Integrated Hitech Ltd,BSE,IT  Software
+6618,532457,Gulshan Polyols Ltd,BSE,FMCG
+6619,532780,Parsvnath Developers Ltd,BSE,Real Estate
+6620,532911,Parle Industries Ltd,BSE,Business Services
+6621,539008,Tirupati Fincorp Ltd,BSE,
+6622,539290,Oswal Greentech Ltd,BSE,NBFC & Financial Services
+6623,540082,Riddhi Steel and Tube Ltd,BSE,Capital Goods
+6624,540404,Prime Fresh Ltd,BSE,FMCG
+6625,540710,Capacite Infraprojects Ltd,BSE,Construction & Infra
+6626,543830,Labelkraft Technologies Ltd,BSE,Paper
+6627,543940,Jio Financial Services Ltd,BSE,NBFC & Financial Services
+6628,544202,Stanley Lifestyles Ltd,BSE,Consumer Durables
+6629,AKSHAR,Akshar Spintex Limited,NSE,Textiles
+6630,BAJAJ-AUTO,Bajaj Auto Limited,NSE,Automobiles
+6631,ENTERO,Entero Healthcare Solutions Limited,NSE,Retail
+6632,FCL,Fineotex Chemical Limited,NSE,Chemicals
+6633,JMA,Jullundur Motor Agency (Delhi) Limited,NSE,Auto Ancillaries
+6634,NAVINFLUOR,Navin Fluorine International Limited,NSE,Chemicals
+6635,SULA,Sula Vineyards Limited,NSE,FMCG
+6636,533110,SHREE PRECOATED STEELS LIMITED,BSE,
+6637,539005,Jayatma Enterprises Limited,BSE,
+6638,544301,Odigma Consultancy Solutions Limited,BSE,
+6639,NILASPACES,Nila Spaces Limited,NSE,Real Estate
+6640,543600,Harsha Engineers International Limited,BSE,
+6641,542231,Nila Spaces Limited,BSE,
+6642,531638,Suraj Limited,BSE,
+6643,500290,MRF LIMITED,BSE,
+6644,543489,Gateway Distriparks Limited,BSE,
+6645,532612,Indoco Remedies Limited,BSE,
+6646,RSSOFTWARE,R S Software (India) Limited,NSE,IT  Software
+6647,WONDERLA,Wonderla Parks and Resorts,NSE,Hospitality / Leisure
+6648,544662,Simandhar Impex Limited,BSE,
+6649,538268,Wonderla Parks and Resorts,BSE,
+6650,TARACHAND,Tara Chand Infralogistic Solutions Limited,NSE,Business Services
+6651,523850,AXTEL INDUSTRIES LIMITED,BSE,
+6652,BAJAJHLDNG,Bajaj Holdings & Investment Limited,NSE,NBFC & Financial Services
+6653,533170,TAMBOLI INDUSTRIES LTD,BSE,
+6654,500265,Maharashtra Seamless Ltd,BSE,Capital Goods
+6655,500325,Reliance Industries Ltd,BSE,Oil & Gas
+6656,501425,The Bombay Burmah Trading Corporation Ltd,BSE,FMCG
+6657,502589,Vapi Enterprise Ltd,BSE,Paper
+6658,503893,Satyam Silk Mills Ltd,BSE,
+6659,506590,PCBL Chemical Ltd,BSE,Chemicals
+6660,509162,Indag Rubber Ltd-$,BSE,Auto Ancillaries
+6661,509196,MM Rubber Company Ltd,BSE,Auto Ancillaries
+6662,509472,Cravatex Ltd,BSE,Business Services
+6663,509597,Hardcastle & Waud Manufacturing Company Ltd,BSE,Chemicals
+6664,511048,Kusam Electrical Industries Ltd,BSE,
+6665,512531,State Trading Corporation of India Ltd,BSE,Business Services
+6666,513252,Jay Ushin Ltd,BSE,Auto Ancillaries
+6667,514034,JBF Industries Ltd,BSE,
+6668,514183,Black Rose Industries Ltd,BSE,Chemicals
+6669,517372,Gujarat Intrux Ltd-$,BSE,Capital Goods
+6670,517447,R.S. Software (India) Ltd,BSE,IT  Software
+6671,521234,Sri Nachammai Cotton Mills Ltd-$,BSE,Textiles
+6672,522257,Rajoo Engineers Ltd-$,BSE,Capital Goods
+6673,523606,Sika Interplant Systems Ltd,BSE,Defence
+6674,524440,Camex Ltd,BSE,Chemicals
+6675,524500,Kilitch Drugs India Ltd,BSE,Pharma
+6676,524654,Natural Capsules Ltd,BSE,Pharma
+6677,526775,Valiant Communications Ltd-$,BSE,Telecom
+6678,526861,Rishi Laser Ltd,BSE,Capital Goods
+6679,531237,Dhruva Capital Services Ltd,BSE,NBFC & Financial Services
+6680,531289,National Fittings Ltd,BSE,Capital Goods
+6681,531349,Panacea Biotec Ltd,BSE,Pharma
+6682,531426,Tamil Nadu Newsprint & Papers Ltd,BSE,Paper
+6683,531676,Emrock Corporation Ltd,BSE,FMCG
+6684,531840,IEC Education Ltd,BSE,IT  Software
+6685,532395,Axiscades Technologies Ltd,BSE,Defence
+6686,532404,Saven Technologies Ltd,BSE,IT  Services
+6687,532656,Facor Alloys Ltd,BSE,Metals
+6688,532783,LT Foods Ltd,BSE,FMCG
+6689,532808,Pearl Global Industries Ltd,BSE,Textiles
+6690,532957,Gokak Textiles Ltd,BSE,Textiles
+6691,534618,Waaree Renewable Technologies Ltd,BSE,Capital Goods
+6692,534742,Zuari Agro Chemicals Ltd,BSE,Chemicals
+6693,536659,PVV Infra Ltd,BSE,Construction & Infra
+6694,537709,Shree Hanuman Sugar & Industries Ltd,BSE,FMCG
+6695,538964,Mercury Laboratories Ltd,BSE,Pharma
+6696,539018,Beekay Steel Industries Ltd,BSE,Capital Goods
+6697,539118,VRL Logistics Ltd,BSE,Logistics
+6698,539221,Sportking India Ltd,BSE,Textiles
+6699,539515,Quint Digital Ltd,BSE,Media
+6700,539787,HealthCare Global Enterprises Ltd,BSE,Healthcare
+6701,539837,Raghav Productivity Enhancers Ltd,BSE,Capital Goods
+6702,539872,Bajaj Healthcare Ltd,BSE,Pharma
+6703,540061,Bigbloc Construction Ltd,BSE,Cement & Mining
+6704,540151,Diksat Transworld Ltd,BSE,
+6705,540777,HDFC Life Insurance Company Ltd,BSE,Insurance
+6706,541269,Chemfab Alkalis Ltd,BSE,Chemicals
+6707,542437,Anmol India Ltd,BSE,Oil & Gas
+6708,543266,Heranba Industries Ltd,BSE,Chemicals
+6709,543643,Narmada Agrobase Ltd,BSE,FMCG
+6710,543926,Bizotic Commercial Ltd,BSE,Textiles
+6711,544045,DOMS Industries Ltd,BSE,FMCG
+6712,544257,Sodhani Academy of Fintech Enablers Ltd,BSE,Consumer Services
+6713,544264,Diffusion Engineers Ltd,BSE,Capital Goods
+6714,544395,STL Networks Ltd,BSE,Telecom
+6715,544516,Airfloa Rail Technology Ltd,BSE,Capital Goods
+6716,544613,Fujiyama Power Systems Ltd,BSE,Capital Goods
+6717,CESC,CESC Limited,NSE,Power
+6718,CINEVISTA,Cinevista Limited,NSE,Media
+6719,CROMPTON,Crompton Greaves Consumer Electricals Limited,NSE,Consumer Durables
+6720,DIFFNKG,Diffusion Engineers Limited,NSE,Capital Goods
+6721,GATEWAY,Gateway Distriparks Limited,NSE,Logistics
+6722,HARSHA,Harsha Engineers International Limited,NSE,Capital Goods
+6723,HDFCLIFE,HDFC Life Insurance Company Limited,NSE,Insurance
+6724,NARMADA,Narmada Agrobase Limited,NSE,FMCG
+6725,ORIENTELEC,Orient Electric Limited,NSE,Consumer Durables
+6726,PARAGMILK,Parag Milk Foods Limited,NSE,FMCG
+6727,UTLSOLAR,Fujiyama Power Systems Limited,NSE,Capital Goods
+6728,ABREL,Aditya Birla Real Estate Limited,NSE,Paper
+6729,WESTLIFE,Westlife Foodworld Limited,NSE,Hospitality / Leisure
+6730,505533,Westlife Foodworld Limited,BSE,
+6731,531761,Apollo Pipes Limited,BSE,
+6732,500388,Shree Krishna Paper Mills & Industries Ltd,BSE,Paper
+6733,506196,Viksit Engineering Ltd,BSE,
+6734,523842,Super Tannery Ltd,BSE,Consumer Durables
+6735,524518,Krebs Biochemicals & Industries Ltd-$,BSE,Pharma
+6736,530341,Mukesh Babu Financial Services Ltd,BSE,NBFC & Financial Services
+6737,532894,Indowind Energy Ltd,BSE,Power
+6738,542176,Aryan Share and Stock Brokers Ltd,BSE,NBFC & Financial Services
+6739,544412,3B Films Ltd,BSE,Capital Goods
+6740,544470,M & B Engineering Ltd,BSE,Construction & Infra
+6741,544558,Fabtech Technologies Ltd,BSE,Healthcare
+6742,544688,Kasturi Metal Composite Ltd,BSE,Capital Goods
+6743,APOLLOPIPE,Apollo Pipes Limited,NSE,Capital Goods
+6744,APTUS,Aptus Value Housing Finance India Limited,NSE,NBFC & Financial Services
+6745,JPASSOCIAT,Jaiprakash Associates Limited,NSE,Construction & Infra
+6746,MBEL,M & B Engineering Limited,NSE,Construction & Infra
+6747,RTNPOWER,RattanIndia Power Limited,NSE,Power
+6748,TOKYOPLAST,Tokyo Plast International Limited,NSE,Consumer Durables
+6749,WINDMACHIN,Windsor Machines Limited,NSE,Capital Goods
+6750,ZUARI,Zuari Agro Chemicals Limited,NSE,Chemicals
+6751,502281,Triveni Glass Limited,BSE,
