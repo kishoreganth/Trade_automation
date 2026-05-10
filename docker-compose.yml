@@ -1,6 +1,7 @@
 version: "3.9"
 
 x-common-env: &common-env
+  TZ: Asia/Kolkata
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
   POSTGRES_DB: automation_trade
@@ -39,6 +40,7 @@ services:
       - "3000"
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Kolkata
     networks:
       - trade_net
 
@@ -117,6 +119,8 @@ services:
     container_name: trade_postgres
     restart: unless-stopped
     environment:
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
       POSTGRES_DB: automation_trade
       POSTGRES_USER: trade_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trade_secure_pwd_2026}
