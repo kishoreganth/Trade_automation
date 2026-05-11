@@ -6,7 +6,27 @@ Replaces: run_quarterly_extraction() direct await in nse_url_test.py.
 import logging
 import asyncio
 import threading
+from datetime import datetime, timedelta, timezone
+
 from celery import shared_task
+from sqlalchemy import text
+
+from app.cache import init_redis, publish_ws_event
+from app.cache_keys import (
+    notify_extraction_update,
+    notify_quarterly_results,
+    invalidate_pe_analysis,
+)
+from app.database import get_db_session
+from app.services.ocr_extractor import (
+    download_and_convert_pdf,
+    download_and_convert_pdf_full,
+    extract_financial_data_ai,
+    save_quarterly_result,
+    fetch_and_save_cmp,
+    run_ai_stock_analysis,
+    _parse_announcement_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +45,6 @@ def _run_async(coro):
 
 async def _ensure_redis():
     """Ensure Redis client exists for the current thread's event loop."""
-    from app.cache import init_redis
     await init_redis()
 
 
@@ -97,16 +116,6 @@ async def _do_extraction(
     migrated from nse_url_test.py).
     """
     await _ensure_redis()
-    from app.services.ocr_extractor import (
-        download_and_convert_pdf,
-        download_and_convert_pdf_full,
-        extract_financial_data_ai,
-        save_quarterly_result,
-        fetch_and_save_cmp,
-    )
-    from app.cache_keys import notify_extraction_update, notify_quarterly_results
-    from app.database import get_db_session
-    from sqlalchemy import text
 
     # Flip placeholder row to 'processing' so PE Pending shows EXTRACTING
     # (blue pulse) live. No-op if no row exists yet (will be created by save).
@@ -196,12 +205,6 @@ async def _mark_extraction_failed(
     """Mark extraction as failed in DB AND notify frontend.
     If no row exists for this PDF, INSERT a failed-status row so the stock
     appears on PE Pending page with FAILED badge (matches old app behavior)."""
-    from datetime import datetime, timezone
-    from app.cache_keys import notify_extraction_update, invalidate_pe_analysis
-    from app.database import get_db_session
-    from app.services.ocr_extractor import _parse_announcement_date
-    from sqlalchemy import text
-
     err_short = (error or "")[:500]
     ann_dt = _parse_announcement_date(announcement_date) or datetime.now(timezone.utc)
 
@@ -273,9 +276,6 @@ async def _do_retry_stuck():
     (queued but never picked up — happens after queue/worker mismatch or broker purge).
     Skips rows whose PDF URL is missing — nothing we can do with those."""
     await _ensure_redis()
-    from app.database import get_db_session
-    from sqlalchemy import text
-    from datetime import datetime, timedelta, timezone
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
     count = 0
@@ -330,9 +330,6 @@ def run_ai_analysis(self, stock_symbol: str, analysis_type: str = "valuation"):
 async def _do_ai_analysis(stock_symbol: str, analysis_type: str):
     """Async AI analysis implementation."""
     await _ensure_redis()
-    from app.services.ocr_extractor import run_ai_stock_analysis
-    from app.cache_keys import invalidate_pe_analysis
-    from app.cache import publish_ws_event
 
     result = await run_ai_stock_analysis(stock_symbol, analysis_type)
 

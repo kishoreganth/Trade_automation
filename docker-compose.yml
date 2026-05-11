@@ -83,8 +83,6 @@ services:
       - .env
     environment:
       <<: *common-env
-      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-true}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,7 +169,6 @@ services:
       - .env
     environment:
       <<: *common-env
-      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -204,7 +201,6 @@ services:
       - .env
     environment:
       <<: *common-env
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

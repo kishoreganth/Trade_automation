@@ -6,7 +6,17 @@ Replaces: scheduled fetch quotes logic in nse_url_test.py.
 import logging
 import asyncio
 import threading
+
 from celery import shared_task
+
+from app.cache import init_redis, publish_ws_event
+from app.cache_keys import notify_job_event
+from app.services.quote_fetcher import (
+    is_fetch_enabled,
+    load_gsheet_stocks,
+    fetch_quotes_batched,
+    update_gsheet_with_prices,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +35,6 @@ def _run_async(coro):
 
 async def _ensure_redis():
     """Ensure Redis client exists for the current thread's event loop."""
-    from app.cache import init_redis
     await init_redis()
 
 
@@ -63,13 +72,6 @@ def scheduled_fetch_quotes(self):
 async def _do_scheduled_fetch():
     """Async implementation for scheduled quote fetch."""
     await _ensure_redis()
-    from app.services.quote_fetcher import (
-        is_fetch_enabled,
-        load_gsheet_stocks,
-        fetch_quotes_batched,
-        update_gsheet_with_prices,
-    )
-    from app.cache import publish_ws_event
 
     if not await is_fetch_enabled():
         logger.info("Scheduled fetch disabled in config — skipping")
@@ -137,12 +139,6 @@ def fetch_quotes_manual(self, job_id: str = None):
 async def _do_manual_fetch(job_id: str):
     """Manual fetch implementation with job progress updates."""
     await _ensure_redis()
-    from app.services.quote_fetcher import (
-        load_gsheet_stocks,
-        fetch_quotes_batched,
-        update_gsheet_with_prices,
-    )
-    from app.cache_keys import notify_job_event
 
     await notify_job_event("job_progress", {
         "id": job_id, "status": "running", "progress": 10,
@@ -176,7 +172,6 @@ async def _do_manual_fetch(job_id: str):
 async def _notify_job_failed(job_id: str, error: str):
     """Notify frontend of job failure."""
     await _ensure_redis()
-    from app.cache_keys import notify_job_event
     try:
         await notify_job_event("job_failed", {
             "id": job_id, "status": "failed", "message": error,

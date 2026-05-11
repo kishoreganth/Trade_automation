@@ -30,16 +30,12 @@ async def refresh_scrip_master(db: AsyncSession = Depends(get_db)):
     """
     Refresh NSE + BSE scrip master data.
     Updates tokens, adds new stocks, marks delisted as inactive.
+    TODO: wire up _fetch_nse_token_map / _fetch_bse_token_map from services.
     """
-    from ..services.nse_fetcher import _fetch_nse_token_map
-    from ..services.bse_fetcher import _fetch_bse_token_map
-
     nse_count = 0
     bse_count = 0
 
     try:
-        # This would call the actual scrip master APIs
-        # For now, return success placeholder
         await invalidate_stocks()
         return {"success": True, "nse_count": nse_count, "bse_count": bse_count}
     except Exception as e:

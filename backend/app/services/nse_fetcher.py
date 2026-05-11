@@ -66,7 +66,6 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
                 continue
 
             # Dedup: check if this exact announcement already exists
-            from sqlalchemy import text
             existing = await db.execute(text(
                 "SELECT id FROM messages WHERE symbol = :s AND description = :d AND file_url = :f LIMIT 1"
             ), {"s": symbol, "d": description, "f": file_url})

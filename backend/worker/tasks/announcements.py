@@ -9,6 +9,20 @@ import asyncio
 import threading
 from celery import shared_task
 
+from app.cache import init_redis
+from app.services.nse_fetcher import (
+    fetch_nse_announcements,
+    process_nse_announcements,
+    process_nse_for_extraction,
+)
+from app.services.bse_fetcher import (
+    fetch_bse_announcements,
+    process_bse_ca_data,
+    process_bse_results_data,
+    process_bse_board_meeting_data,
+)
+from worker.tasks.extraction import run_quarterly_extraction
+
 logger = logging.getLogger(__name__)
 
 _thread_local = threading.local()
@@ -26,7 +40,6 @@ def _run_async(coro):
 
 async def _ensure_redis():
     """Ensure Redis client exists for the current thread's event loop."""
-    from app.cache import init_redis
     await init_redis()
 
 
@@ -54,8 +67,6 @@ def fetch_nse_equities(self):
 async def _do_fetch_nse_equities():
     """Async implementation — imports the actual fetch logic."""
     await _ensure_redis()
-    from app.services.nse_fetcher import fetch_nse_announcements, process_nse_announcements, process_nse_for_extraction
-    from worker.tasks.extraction import run_quarterly_extraction
 
     announcements = await fetch_nse_announcements(segment="equities")
     new_items = await process_nse_announcements(announcements)
@@ -98,7 +109,6 @@ def fetch_bse_all_announcements(self):
 async def _do_fetch_bse_all():
     """Async implementation for BSE all announcements."""
     await _ensure_redis()
-    from app.services.bse_fetcher import fetch_bse_announcements, process_bse_ca_data
 
     announcements = await fetch_bse_announcements(category="all")
     new_items = await process_bse_ca_data(announcements)
@@ -129,8 +139,6 @@ def fetch_bse_results(self):
 async def _do_fetch_bse_results():
     """Async implementation for BSE result announcements."""
     await _ensure_redis()
-    from app.services.bse_fetcher import fetch_bse_announcements, process_bse_results_data
-    from worker.tasks.extraction import run_quarterly_extraction
 
     announcements = await fetch_bse_announcements(category="result")
     new_items = await process_bse_results_data(announcements)
@@ -171,8 +179,6 @@ def fetch_bse_board_meeting(self):
 async def _do_fetch_bse_board_meeting():
     """Async implementation for BSE board meeting announcements."""
     await _ensure_redis()
-    from app.services.bse_fetcher import fetch_bse_announcements, process_bse_board_meeting_data
-    from worker.tasks.extraction import run_quarterly_extraction
 
     announcements = await fetch_bse_announcements(category="board_meeting")
     new_items = await process_bse_board_meeting_data(announcements)

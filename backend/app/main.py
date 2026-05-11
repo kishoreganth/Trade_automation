@@ -3,11 +3,15 @@ FastAPI application entry point.
 Production: gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker
 """
 
+import asyncio
+
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .lifespan import lifespan
 from .config import get_settings
+from .database import engine
 from .websocket import ws_manager, websocket_endpoint
 from .cache import get_redis
 from .routers import messages, pe_analysis, jobs, auth, stocks, config, orders
@@ -60,10 +64,6 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check for Docker/Nginx — verifies DB + Redis + WS metrics, all in parallel."""
-    import asyncio
-    from sqlalchemy import text
-    from .database import engine
-
     async def _check_redis():
         try:
             await get_redis().ping()

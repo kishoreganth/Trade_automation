@@ -112,7 +112,10 @@ async def fetch_bse_announcements(category: str = "all", max_pages: int = 10) ->
                 if len(table) < 50:
                     break
     except Exception as e:
-        logger.error(f"BSE fetch failed ({category}, page {page_no}): {e}")
+        logger.error(
+            f"BSE fetch failed ({category}, page {page_no}): "
+            f"{type(e).__name__}: {e or '<no message>'}"
+        )
 
     return all_rows
 

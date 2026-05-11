@@ -7,6 +7,13 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..cache import publish_ws_event
+from worker.tasks.quotes import fetch_quotes_manual
+from worker.tasks.announcements import (
+    fetch_nse_equities,
+    fetch_bse_all_announcements,
+    fetch_bse_results,
+)
+from worker.tasks.extraction import retry_stuck_extractions, run_ai_analysis
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -17,23 +24,18 @@ async def start_job(job_type: str):
     job_id = str(uuid.uuid4())[:8]
 
     if job_type == "fetch_quotes":
-        from worker.tasks.quotes import fetch_quotes_manual
         fetch_quotes_manual.delay(job_id=job_id)
 
     elif job_type == "fetch_nse":
-        from worker.tasks.announcements import fetch_nse_equities
         fetch_nse_equities.delay()
 
     elif job_type == "fetch_bse":
-        from worker.tasks.announcements import fetch_bse_all_announcements
         fetch_bse_all_announcements.delay()
 
     elif job_type == "fetch_bse_results":
-        from worker.tasks.announcements import fetch_bse_results
         fetch_bse_results.delay()
 
     elif job_type == "extraction":
-        from worker.tasks.extraction import retry_stuck_extractions
         retry_stuck_extractions.delay()
 
     else:
@@ -54,7 +56,6 @@ async def start_ai_analysis(body: dict):
     if not symbol:
         raise HTTPException(status_code=400, detail="Symbol required")
 
-    from worker.tasks.extraction import run_ai_analysis
     run_ai_analysis.delay(stock_symbol=symbol, analysis_type="valuation")
 
     await publish_ws_event({

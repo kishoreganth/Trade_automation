@@ -2,10 +2,12 @@
 Messages API router.
 """
 
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from typing import Optional
 
 from ..database import get_db
 from ..cache import cached, cache_get, cache_set
@@ -139,8 +141,6 @@ async def get_sectors(db: AsyncSession = Depends(get_db)):
 @router.post("/trigger_message")
 async def trigger_message(body: dict, db: AsyncSession = Depends(get_db)):
     """Save a new message and broadcast via WebSocket."""
-    from datetime import datetime
-
     now = datetime.utcnow()
     result = await db.execute(text("""
         INSERT INTO messages (chat_id, message, timestamp, symbol, company_name, description, file_url, option, sector, exchange)

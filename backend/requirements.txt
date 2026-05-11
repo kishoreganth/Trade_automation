@@ -31,6 +31,9 @@ openai
 pyotp
 itsdangerous
 
+# PDF rendering / page selection (used by app/services/ocr_extractor.py: `import fitz`)
+pymupdf
+
 # Google Sheets write-back (used by legacy get_quote.py to update sheet)
 gspread
 oauth2client

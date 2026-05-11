@@ -4,18 +4,23 @@ Extracted from: nse_url_test.py (run_quarterly_extraction, _upsert_quarterly_res
     _insert_extraction_placeholder, _auto_fetch_cmp_for_stock)
 """
 
-import logging
+import asyncio
+import base64
 import io
+import json
+import logging
 import re
-from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
+import fitz
 import httpx
 from sqlalchemy import text
 
 from ..database import get_db_session
 from ..config import get_settings
 from ..cache_keys import invalidate_pe_analysis
+from .quote_fetcher import get_single_quote
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -34,7 +39,6 @@ _openai_clients_per_loop: dict[int, httpx.AsyncClient] = {}
 
 def _get_openai_client() -> httpx.AsyncClient:
     """Return (or create) the httpx.AsyncClient bound to the current event loop."""
-    import asyncio
     try:
         loop_id = id(asyncio.get_running_loop())
     except RuntimeError:
@@ -114,7 +118,6 @@ _MAX_PAGES_SCAN = 25
 
 def _render_pages_to_png(pdf_bytes: bytes, page_indices: List[int], zoom: float = 2.0) -> List[bytes]:
     """Render given PDF page indices (0-based) to PNG bytes via PyMuPDF."""
-    import fitz
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     out: List[bytes] = []
     mat = fitz.Matrix(zoom, zoom)
@@ -150,7 +153,6 @@ async def download_pdf_bytes(pdf_url: str) -> Optional[bytes]:
 
 def _select_financial_pages(pdf_bytes: bytes) -> tuple:
     """Return (filtered_page_indices, total_pages, has_text_layer)."""
-    import fitz
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     total = doc.page_count
     filtered: List[int] = []
@@ -209,7 +211,6 @@ async def download_and_convert_pdf_full(pdf_url: str, max_pages: int = 12) -> Li
     pdf_bytes = await download_pdf_bytes(pdf_url)
     if pdf_bytes is None:
         return []
-    import fitz
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     n = min(doc.page_count, max_pages)
     doc.close()
@@ -313,9 +314,6 @@ async def extract_financial_data_ai(
     Send financial-page images to OpenAI Vision (gpt-4.1-mini) to extract
     standalone_periods + consolidated_periods (full schema, matches old app).
     """
-    import base64
-    import json
-
     if not settings.OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY not configured")
         return None
@@ -371,7 +369,6 @@ def _derive_quarter(period_ended: Optional[str], financial_year: Optional[str]) 
     Indian FY: April-March. Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar."""
     if not period_ended:
         return None
-    import re
     pe_lower = period_ended.lower()
     month_name_map = {
         "march": "Q4", "mar": "Q4",
@@ -604,8 +601,6 @@ async def save_quarterly_result(
     computes FY-EPS estimates, and UPSERTs one row per (quarter, financial_year).
     Returns list of inserted/updated row IDs.
     """
-    import json
-
     if not extraction_data:
         raise ValueError(f"AI extraction returned empty for {stock_symbol}")
 
@@ -767,8 +762,6 @@ async def fetch_and_save_cmp(stock_symbol: str, exchange: str = "NSE") -> Option
     Fetch current market price for stock and update quarterly_results.
     Calculates PE ratio (CMP / FY_EPS).
     """
-    from .quote_fetcher import get_single_quote
-
     cmp = await get_single_quote(stock_symbol, exchange)
     if cmp is None:
         return None
@@ -813,8 +806,6 @@ async def run_ai_stock_analysis(stock_symbol: str, analysis_type: str = "valuati
     if not history:
         return {"error": f"No data found for {stock_symbol}"}
 
-    # Format for AI analysis
-    import json
     prompt = f"""Analyze {stock_symbol} based on quarterly results:
 {json.dumps(history, indent=2, default=str)}
 

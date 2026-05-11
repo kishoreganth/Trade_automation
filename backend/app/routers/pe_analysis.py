@@ -18,6 +18,7 @@ from ..constants import (
     VALUATION_OPTIONS, VALUATION_VALUES, canonicalize_valuation, valuation_tone,
     VALUATION_TONE_BULLISH, VALUATION_TONE_BEARISH,
 )
+from worker.tasks.extraction import run_quarterly_extraction
 
 router = APIRouter(prefix="/api", tags=["pe_analysis"])
 
@@ -676,7 +677,6 @@ async def retrigger_pe_extraction(
     """), {"rid": found.id})
     await db.commit()
 
-    from worker.tasks.extraction import run_quarterly_extraction
     task = run_quarterly_extraction.delay(
         stock_symbol=found.stock_symbol,
         pdf_url=found.source_pdf_url,

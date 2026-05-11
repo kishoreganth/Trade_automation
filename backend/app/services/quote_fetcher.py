@@ -9,6 +9,7 @@ import asyncio
 from typing import Dict, List, Optional
 
 import httpx
+import pandas as pd
 from sqlalchemy import text
 
 from ..database import get_db_session
@@ -31,8 +32,9 @@ async def load_gsheet_stocks():
     Load stock list from Google Sheet.
     Returns pandas DataFrame with columns: SYMBOL, EXCHANGE, etc.
     """
-    import pandas as pd
-
+    # gsheet_stock_get is a legacy module mounted at runtime and may
+    # initialize Google credentials on import — keep lazy so API startup
+    # doesn't depend on it.
     try:
         from gsheet_stock_get import GSheetStockClient
         client = GSheetStockClient()
@@ -52,8 +54,6 @@ async def fetch_quotes_batched(
     Uses Kotak Neo API (or configured broker API).
     Returns dict of {symbol: price}.
     """
-    import pandas as pd
-
     if stocks_df.empty:
         return {}
 
@@ -122,6 +122,7 @@ async def get_single_quote(symbol: str, exchange: str = "NSE") -> Optional[float
 async def update_gsheet_with_prices(stocks_df, quotes: Dict[str, float]):
     """Update Google Sheet with fetched prices."""
     try:
+        # Lazy: see note in load_gsheet_stocks().
         from gsheet_stock_get import GSheetStockClient
         client = GSheetStockClient()
 
