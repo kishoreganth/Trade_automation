@@ -97,8 +97,13 @@ export async function deletePEAnalysis(symbol: string) {
   return data;
 }
 
-export async function updatePEAnalysis(symbol: string, body: Record<string, unknown>) {
-  const { data } = await api.put(`/pe_analysis/${symbol}`, body);
+export async function updatePEAnalysis(
+  symbol: string,
+  body: Record<string, unknown>,
+  rowId?: number,
+) {
+  const params = rowId != null ? { row_id: rowId } : undefined;
+  const { data } = await api.put(`/pe_analysis/${symbol}`, body, { params });
   return data;
 }
 

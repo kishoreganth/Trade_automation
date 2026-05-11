@@ -713,8 +713,23 @@ async def delete_pe_analysis(symbol: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/pe_analysis/{symbol}")
-async def update_pe_analysis(symbol: str, body: dict, db: AsyncSession = Depends(get_db)):
-    """Update valuation/recommendation/comments/cmp/pe etc for a stock."""
+async def update_pe_analysis(
+    symbol: str,
+    body: dict,
+    row_id: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update valuation/recommendation/comments/cmp/pe etc for a stock.
+
+    `row_id` (query param) — when provided, updates that exact quarterly_results
+    row. The frontend always passes it now so SKIP / Edit always hit the row
+    that is currently visible on the page (otherwise we may silently update a
+    different FY/quarter row for the same stock, e.g. when Q4 is already
+    reviewed but the user is acting on the Q3 PENDING row).
+
+    Fallback (no row_id) keeps the legacy "latest row" behavior so any older
+    callers / scripts keep working.
+    """
     allowed_fields = [
         "valuation", "recommendation", "comments", "target_price",
         "manual_fy_eps", "manual_fy_eps_formula", "cmp", "pe",
@@ -743,11 +758,33 @@ async def update_pe_analysis(symbol: str, body: dict, db: AsyncSession = Depends
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
     updates["sym"] = symbol
 
-    await db.execute(text(f"""
-        UPDATE quarterly_results SET {set_clause}, updated_at = NOW()
-        WHERE stock_symbol = :sym
-        AND id = (SELECT id FROM quarterly_results WHERE stock_symbol = :sym ORDER BY financial_year DESC, quarter DESC LIMIT 1)
-    """), updates)
+    if row_id is not None:
+        updates["rid"] = row_id
+        result = await db.execute(text(f"""
+            UPDATE quarterly_results SET {set_clause}, updated_at = NOW()
+            WHERE id = :rid AND stock_symbol = :sym
+        """), updates)
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No row found for {symbol} with id={row_id}",
+            )
+    else:
+        result = await db.execute(text(f"""
+            UPDATE quarterly_results SET {set_clause}, updated_at = NOW()
+            WHERE stock_symbol = :sym
+            AND id = (
+                SELECT id FROM quarterly_results
+                WHERE stock_symbol = :sym
+                ORDER BY financial_year DESC, quarter DESC, id DESC
+                LIMIT 1
+            )
+        """), updates)
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No row found for {symbol}",
+            )
     await db.commit()
 
     # Update sector/sub_sector in stocks table if provided
@@ -759,4 +796,4 @@ async def update_pe_analysis(symbol: str, body: dict, db: AsyncSession = Depends
         await db.commit()
 
     await invalidate_pe_analysis()
-    return {"success": True}
+    return {"success": True, "updated_row_id": row_id}

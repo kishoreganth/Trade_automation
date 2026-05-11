@@ -166,7 +166,7 @@ services:
       dockerfile: Dockerfile
     container_name: trade_celery_io
     restart: unless-stopped
-    command: ["celery", "-A", "worker.celery_app", "worker", "-Q", "io_tasks", "-c", "20", "-n", "io@%h", "--pool=prefork", "--loglevel=info"]
+    command: ["celery", "-A", "worker.celery_app", "worker", "-Q", "io_queue", "-c", "20", "-n", "io@%h", "--pool=prefork", "--loglevel=info"]
     env_file:
       - .env
     environment:
@@ -199,7 +199,7 @@ services:
       dockerfile: Dockerfile
     container_name: trade_celery_cpu
     restart: unless-stopped
-    command: ["celery", "-A", "worker.celery_app", "worker", "-Q", "cpu_tasks", "-c", "4", "-n", "cpu@%h", "--pool=prefork", "--loglevel=info"]
+    command: ["celery", "-A", "worker.celery_app", "worker", "-Q", "cpu_queue", "-c", "4", "-n", "cpu@%h", "--pool=prefork", "--loglevel=info"]
     env_file:
       - .env
     environment:

@@ -132,13 +132,14 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
     }
   };
 
-  const handleIgnore = async (symbol: string) => {
+  const handleIgnore = async (symbol: string, rowId: number) => {
     try {
-      await updatePEAnalysis(symbol, { valuation: "ignore" });
+      await updatePEAnalysis(symbol, { valuation: "ignore" }, rowId);
       queryClient.invalidateQueries({ queryKey: ["pe-analysis"] });
       toast.success(`${symbol} marked as IGNORE`);
-    } catch {
-      toast.error(`Failed to ignore ${symbol}`);
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || `Failed to ignore ${symbol}`);
     }
   };
 
@@ -318,7 +319,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
                       <ValuationBadge value={valuation} pending={valuationFilter === "pending"} />
                       {valuationFilter === "pending" && !valuation && (
                         <button
-                          onClick={() => handleIgnore(row.stock_symbol as string)}
+                          onClick={() => handleIgnore(row.stock_symbol as string, Number(row.id))}
                           className="text-[11px] px-2.5 py-0.5 rounded-full border-2 border-slate-400 text-slate-700 hover:border-slate-600 hover:text-slate-900 hover:bg-slate-100 font-bold tracking-wide transition-all"
                           title="Mark as ignored — moves to PE Reviewed"
                         >
@@ -611,11 +612,13 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
       if (hasFormula) {
         payload.manual_fy_eps_formula = JSON.stringify({ q1_expr: form.formula_q1, q2_expr: form.formula_q2, q3_expr: form.formula_q3, q4_expr: form.formula_q4 });
       }
-      await updatePEAnalysis(symbol, payload);
+      const rowId = row.id != null ? Number(row.id) : undefined;
+      await updatePEAnalysis(symbol, payload, rowId);
       toast.success(`${symbol} updated`);
       onSaved();
-    } catch {
-      toast.error("Failed to update");
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || "Failed to update");
     } finally {
       setSaving(false);
     }
