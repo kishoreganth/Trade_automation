@@ -259,8 +259,13 @@ async def get_pe_analysis(
         conditions.append("s.sector = :sector")
         params["sector"] = sector
     if search:
-        conditions.append("(qr.stock_symbol ILIKE :search OR qr.company_name ILIKE :search)")
+        conditions.append(
+            "(qr.stock_symbol ILIKE :search OR qr.company_name ILIKE :search"
+            " OR s.symbol ILIKE :search"
+            " OR CAST(s.bse_token AS TEXT) LIKE :search_exact)"
+        )
         params["search"] = f"%{search}%"
+        params["search_exact"] = f"%{search}%"
     if date_from:
         try:
             df_dt = datetime.strptime(date_from[:10], "%Y-%m-%d")
@@ -278,12 +283,9 @@ async def get_pe_analysis(
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-    # Window-function dedup: ONE row per stock_symbol (latest FY+Quarter, prefer completed).
-    # NOTE: previous version had two correlated subqueries that walked
-    # quarterly_results to find consolidated FY EPS via "same company_name from
-    # a different stock_symbol". That made PE Pending O(N^2) and dominated
-    # latency past ~1500 rows. Using only local row data here — the cross-symbol
-    # fallback is rare enough that it's fine to handle at write time, not read time.
+    # Window-function dedup: ONE row per unified stock identity.
+    # JOIN matches on symbol OR bse_token (handles BSE rows with numeric scrip codes).
+    # PARTITION uses COALESCE(s.symbol, ...) so BSE "543280" and NSE "NAZARA" merge.
     dedup_cte = f"""
         WITH ranked AS (
           SELECT qr.*,
@@ -297,15 +299,17 @@ async def get_pe_analysis(
             ) AS fy_eps_stored,
             (qr.fy_eps_diluted_consolidated IS NOT NULL
              OR qr.fy_eps_basic_consolidated IS NOT NULL) AS fy_from_consolidated,
-            s.sector, s.sub_sector,
+            s.symbol AS resolved_symbol, s.sector, s.sub_sector,
             ROW_NUMBER() OVER (
-              PARTITION BY qr.stock_symbol
+              PARTITION BY COALESCE(s.symbol, qr.stock_symbol)
               ORDER BY qr.financial_year DESC, qr.quarter DESC,
                 CASE WHEN qr.extraction_status = 'completed' THEN 0 ELSE 1 END,
                 qr.id DESC
             ) AS rn
           FROM quarterly_results qr
-          LEFT JOIN stocks s ON qr.stock_symbol = s.symbol
+          LEFT JOIN stocks s
+            ON s.symbol = qr.stock_symbol
+            OR (qr.stock_symbol ~ '^\\d+$' AND s.bse_token = CAST(qr.stock_symbol AS INT))
           {where}
         )
     """

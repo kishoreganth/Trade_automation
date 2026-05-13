@@ -69,6 +69,9 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
   const [retriggering, setRetriggering] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
 
+  const filtersKey = JSON.stringify(filters) + valuationFilter + perPage;
+  useEffect(() => { setPage(1); }, [filtersKey]);
+
   const confirm = useConfirm();
   const params = { page, per_page: perPage, valuation_filter: valuationFilter, ...filters };
   const { data, isLoading, isError, error, refetch, isFetching } = usePEAnalysis(params);

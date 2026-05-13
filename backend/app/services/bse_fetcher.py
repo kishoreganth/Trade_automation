@@ -170,7 +170,7 @@ async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:
                 continue
 
             # Save to messages — use actual announcement time from BSE
-            symbol = _scrip_to_symbol(scrip_code, company_name)
+            symbol = await _scrip_to_symbol(db, scrip_code, company_name)
             ann_time = _parse_bse_datetime(news_dt)
             option = classify_announcement(subject)
 
@@ -320,7 +320,7 @@ async def process_bse_results_data(bse_data: List[Dict]) -> List[Dict]:
             })
             new_row = result.scalar()
 
-            symbol = _scrip_to_symbol(scrip_code, company_name)
+            symbol = await _scrip_to_symbol(db, scrip_code, company_name)
 
             # Always make sure the announcement appears on the feed (Quarterly Result page)
             await _upsert_message_for_extraction(
@@ -410,7 +410,7 @@ async def process_bse_board_meeting_data(bse_data: List[Dict]) -> List[Dict]:
             })
             new_row = result.scalar()
 
-            symbol = _scrip_to_symbol(scrip_code, company_name)
+            symbol = await _scrip_to_symbol(db, scrip_code, company_name)
 
             # Make sure the item appears on the Outcome of Board Meeting feed page
             await _upsert_message_for_extraction(
@@ -474,6 +474,47 @@ def _parse_bse_datetime(dt_str: str) -> datetime:
     return datetime.now(IST)
 
 
-def _scrip_to_symbol(scrip_code: str, company_name: str) -> str:
-    """Convert BSE scrip code to trading symbol (lookup from stocks table or fallback)."""
+_SCRIP_SYMBOL_CACHE: dict[str, str] = {}
+
+
+async def _scrip_to_symbol(db, scrip_code: str, company_name: str) -> str:
+    """Convert BSE scrip code to trading symbol using stocks table.
+
+    Three-layer resolution:
+    1. bse_token lookup (exact)
+    2. company_name fuzzy match (fallback for missing bse_token)
+    3. Return scrip_code as-is (last resort)
+    """
+    if scrip_code in _SCRIP_SYMBOL_CACHE:
+        return _SCRIP_SYMBOL_CACHE[scrip_code]
+
+    # Layer 1: bse_token lookup
+    try:
+        scrip_int = int(scrip_code)
+        row = await db.execute(
+            text("SELECT symbol FROM stocks WHERE bse_token = :bse LIMIT 1"),
+            {"bse": scrip_int},
+        )
+        symbol = row.scalar()
+        if symbol:
+            _SCRIP_SYMBOL_CACHE[scrip_code] = symbol
+            return symbol
+    except (ValueError, TypeError):
+        pass
+
+    # Layer 2: company_name fuzzy match
+    if company_name:
+        clean_name = company_name.split(" Limited")[0].split(" Ltd")[0].strip()
+        if len(clean_name) >= 3:
+            row = await db.execute(
+                text("SELECT symbol FROM stocks WHERE company_name ILIKE :pattern LIMIT 1"),
+                {"pattern": f"%{clean_name}%"},
+            )
+            symbol = row.scalar()
+            if symbol:
+                _SCRIP_SYMBOL_CACHE[scrip_code] = symbol
+                return symbol
+
+    # Layer 3: fallback to scrip code
+    _SCRIP_SYMBOL_CACHE[scrip_code] = scrip_code
     return scrip_code
