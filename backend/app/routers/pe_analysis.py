@@ -256,13 +256,13 @@ async def get_pe_analysis(
         conditions.append("qr.exchange = :exchange")
         params["exchange"] = exchange
     if sector:
-        conditions.append("s.sector = :sector")
+        conditions.append("COALESCE(s1.sector, s2.sector) = :sector")
         params["sector"] = sector
     if search:
         conditions.append(
             "(qr.stock_symbol ILIKE :search OR qr.company_name ILIKE :search"
-            " OR s.symbol ILIKE :search"
-            " OR CAST(s.bse_token AS TEXT) LIKE :search_exact)"
+            " OR s1.symbol ILIKE :search"
+            " OR CAST(s2.bse_token AS TEXT) LIKE :search_exact)"
         )
         params["search"] = f"%{search}%"
         params["search_exact"] = f"%{search}%"
@@ -284,8 +284,8 @@ async def get_pe_analysis(
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     # Window-function dedup: ONE row per unified stock identity.
-    # JOIN matches on symbol OR bse_token (handles BSE rows with numeric scrip codes).
-    # PARTITION uses COALESCE(s.symbol, ...) so BSE "543280" and NSE "NAZARA" merge.
+    # Two LEFT JOINs (each index-friendly) instead of OR-based JOIN which kills perf.
+    # s1 = match by symbol (NSE entries), s2 = match by bse_token (BSE numeric entries).
     dedup_cte = f"""
         WITH ranked AS (
           SELECT qr.*,
@@ -299,17 +299,20 @@ async def get_pe_analysis(
             ) AS fy_eps_stored,
             (qr.fy_eps_diluted_consolidated IS NOT NULL
              OR qr.fy_eps_basic_consolidated IS NOT NULL) AS fy_from_consolidated,
-            s.symbol AS resolved_symbol, s.sector, s.sub_sector,
+            COALESCE(s1.symbol, s2.symbol) AS resolved_symbol,
+            COALESCE(s1.sector, s2.sector) AS sector,
+            COALESCE(s1.sub_sector, s2.sub_sector) AS sub_sector,
             ROW_NUMBER() OVER (
-              PARTITION BY COALESCE(s.symbol, qr.stock_symbol)
+              PARTITION BY COALESCE(s1.symbol, s2.symbol, qr.stock_symbol)
               ORDER BY qr.financial_year DESC, qr.quarter DESC,
                 CASE WHEN qr.extraction_status = 'completed' THEN 0 ELSE 1 END,
                 qr.id DESC
             ) AS rn
           FROM quarterly_results qr
-          LEFT JOIN stocks s
-            ON s.symbol = qr.stock_symbol
-            OR (qr.stock_symbol ~ '^\\d+$' AND s.bse_token = CAST(qr.stock_symbol AS INT))
+          LEFT JOIN stocks s1 ON s1.symbol = qr.stock_symbol
+          LEFT JOIN stocks s2 ON s2.bse_token = CASE
+            WHEN qr.stock_symbol ~ '^\\d+$' THEN CAST(qr.stock_symbol AS INT)
+          END
           {where}
         )
     """
