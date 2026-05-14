@@ -231,22 +231,22 @@ async def get_pe_analysis(
     offset = (page - 1) * per_page
     params = {"limit": per_page, "offset": offset}
 
-    # Valuation conditions are applied OUTSIDE the CTE so that the
-    # ROW_NUMBER() dedup window sees ALL rows for a stock and picks the
-    # best one first.  If one row is reviewed and another is pending for
-    # the same stock, the reviewed (completed) row wins rn=1 and the
-    # pending duplicate is suppressed on the Pending page.
+    scope_conditions: list[str] = []
     outer_conditions: list[str] = []
+
+    # For PENDING: valuation filter goes OUTSIDE the CTE so the dedup
+    # window sees all rows.  If a stock has both a reviewed and a pending
+    # row, the reviewed (completed) row wins rn=1 and the pending
+    # duplicate is suppressed.
+    # For REVIEWED/FAILED: filter stays INSIDE the CTE (old behavior) so
+    # a stock's reviewed Q3 isn't hidden by a newer pending Q4.
     if valuation_filter == "pending":
         outer_conditions.append("(valuation IS NULL OR valuation = '')")
     elif valuation_filter == "reviewed":
-        outer_conditions.append("valuation IS NOT NULL AND valuation != ''")
-        outer_conditions.append("extraction_status = 'completed'")
+        scope_conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
+        scope_conditions.append("qr.extraction_status = 'completed'")
     elif valuation_filter == "failed":
-        outer_conditions.append("extraction_status IN ('failed', 'error')")
-
-    # Scoping conditions stay INSIDE the CTE (year, quarter, exchange, etc.)
-    scope_conditions: list[str] = []
+        scope_conditions.append("qr.extraction_status IN ('failed', 'error')")
     if year:
         year_num = _fy_to_year(year)
         if year_num:
