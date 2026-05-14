@@ -234,14 +234,22 @@ async def get_pe_analysis(
     scope_conditions: list[str] = []
     outer_conditions: list[str] = []
 
-    # For PENDING: valuation filter goes OUTSIDE the CTE so the dedup
-    # window sees all rows.  If a stock has both a reviewed and a pending
-    # row, the reviewed (completed) row wins rn=1 and the pending
-    # duplicate is suppressed.
-    # For REVIEWED/FAILED: filter stays INSIDE the CTE (old behavior) so
-    # a stock's reviewed Q3 isn't hidden by a newer pending Q4.
+    # All filters go INSIDE the CTE (preserves old per-page dedup).
+    # For PENDING: also exclude rows whose stock+quarter+FY already has
+    # a reviewed counterpart — this prevents the same stock from showing
+    # on both PE Pending and PE Reviewed simultaneously.
     if valuation_filter == "pending":
-        outer_conditions.append("(valuation IS NULL OR valuation = '')")
+        scope_conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
+        scope_conditions.append("""
+            NOT EXISTS (
+                SELECT 1 FROM quarterly_results r
+                WHERE r.stock_symbol = qr.stock_symbol
+                  AND r.quarter = qr.quarter
+                  AND r.financial_year = qr.financial_year
+                  AND r.valuation IS NOT NULL AND r.valuation != ''
+                  AND r.extraction_status = 'completed'
+            )
+        """)
     elif valuation_filter == "reviewed":
         scope_conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
         scope_conditions.append("qr.extraction_status = 'completed'")
