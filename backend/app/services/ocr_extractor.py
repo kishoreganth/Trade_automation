@@ -516,6 +516,33 @@ def _compute_all_fy_eps(ai_response: Dict) -> Dict:
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 
+_FY_BARE_YEAR = re.compile(r"^(\d{4})$")
+_FY_SHORT = re.compile(r"^FY(\d{2})$")
+_FY_LONG = re.compile(r"^FY(\d{4})$")
+
+
+def _normalize_fy(fy: str) -> str:
+    """Normalize financial_year to 'YYYY-YY' format (Indian FY convention).
+    '2026' -> '2025-26', 'FY26' -> '2025-26', 'FY2026' -> '2025-26'.
+    Already-correct formats like '2025-26' pass through unchanged."""
+    if not fy:
+        return fy
+    fy = fy.strip()
+    m = _FY_BARE_YEAR.match(fy)
+    if m:
+        end_yr = int(m.group(1))
+        return f"{end_yr - 1}-{str(end_yr)[-2:]}"
+    m = _FY_SHORT.match(fy)
+    if m:
+        end_short = int(m.group(1))
+        end_yr = 2000 + end_short
+        return f"{end_yr - 1}-{str(end_yr)[-2:]}"
+    m = _FY_LONG.match(fy)
+    if m:
+        end_yr = int(m.group(1))
+        return f"{end_yr - 1}-{str(end_yr)[-2:]}"
+    return fy
+
 
 def _normalize_to_ist_midnight(dt: datetime) -> datetime:
     """Truncate a datetime to IST midnight for consistent dedup.
@@ -674,7 +701,7 @@ async def save_quarterly_result(
     def _add(periods, dest_key, cum_dest):
         for p in periods:
             q = p.get("quarter")
-            fy = p.get("financial_year")
+            fy = _normalize_fy(p.get("financial_year", ""))
             pt = p.get("period_type", "quarter")
             if not q or not fy:
                 continue
