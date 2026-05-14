@@ -245,7 +245,7 @@ async def get_pe_analysis(
                 SELECT 1 FROM quarterly_results r
                 WHERE r.stock_symbol = qr.stock_symbol
                   AND r.quarter = qr.quarter
-                  AND r.financial_year = qr.financial_year
+                  AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
                   AND r.valuation IS NOT NULL AND r.valuation != ''
                   AND r.extraction_status = 'completed'
             )
