@@ -229,37 +229,44 @@ async def get_pe_analysis(
         return cached_result
 
     offset = (page - 1) * per_page
-    conditions = []
     params = {"limit": per_page, "offset": offset}
 
+    # Valuation conditions are applied OUTSIDE the CTE so that the
+    # ROW_NUMBER() dedup window sees ALL rows for a stock and picks the
+    # best one first.  If one row is reviewed and another is pending for
+    # the same stock, the reviewed (completed) row wins rn=1 and the
+    # pending duplicate is suppressed on the Pending page.
+    outer_conditions: list[str] = []
     if valuation_filter == "pending":
-        conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
+        outer_conditions.append("(valuation IS NULL OR valuation = '')")
     elif valuation_filter == "reviewed":
-        conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
-        conditions.append("qr.extraction_status = 'completed'")
+        outer_conditions.append("valuation IS NOT NULL AND valuation != ''")
+        outer_conditions.append("extraction_status = 'completed'")
     elif valuation_filter == "failed":
-        conditions.append("qr.extraction_status IN ('failed', 'error')")
+        outer_conditions.append("extraction_status IN ('failed', 'error')")
 
+    # Scoping conditions stay INSIDE the CTE (year, quarter, exchange, etc.)
+    scope_conditions: list[str] = []
     if year:
         year_num = _fy_to_year(year)
         if year_num:
             yr_short = str(year_num % 100).zfill(2)
-            conditions.append("qr.financial_year LIKE :year_pattern")
+            scope_conditions.append("qr.financial_year LIKE :year_pattern")
             params["year_pattern"] = f"%{yr_short}%"
         else:
-            conditions.append("qr.financial_year = :year")
+            scope_conditions.append("qr.financial_year = :year")
             params["year"] = year
     if quarter:
-        conditions.append("qr.quarter = :quarter")
+        scope_conditions.append("qr.quarter = :quarter")
         params["quarter"] = quarter
     if exchange:
-        conditions.append("qr.exchange = :exchange")
+        scope_conditions.append("qr.exchange = :exchange")
         params["exchange"] = exchange
     if sector:
-        conditions.append("COALESCE(s1.sector, s2.sector) = :sector")
+        scope_conditions.append("COALESCE(s1.sector, s2.sector) = :sector")
         params["sector"] = sector
     if search:
-        conditions.append(
+        scope_conditions.append(
             "(qr.stock_symbol ILIKE :search OR qr.company_name ILIKE :search"
             " OR s1.symbol ILIKE :search"
             " OR CAST(s2.bse_token AS TEXT) LIKE :search_exact)"
@@ -269,19 +276,20 @@ async def get_pe_analysis(
     if date_from:
         try:
             df_dt = datetime.strptime(date_from[:10], "%Y-%m-%d")
-            conditions.append("COALESCE(qr.announcement_date, qr.created_at) >= :date_from")
+            scope_conditions.append("COALESCE(qr.announcement_date, qr.created_at) >= :date_from")
             params["date_from"] = df_dt
         except ValueError:
             pass
     if date_to:
         try:
             dt_dt = datetime.strptime(date_to[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999000)
-            conditions.append("COALESCE(qr.announcement_date, qr.created_at) <= :date_to")
+            scope_conditions.append("COALESCE(qr.announcement_date, qr.created_at) <= :date_to")
             params["date_to"] = dt_dt
         except ValueError:
             pass
 
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    where_inside = "WHERE " + " AND ".join(scope_conditions) if scope_conditions else ""
+    outer_filter = " AND ".join(outer_conditions)
 
     # Window-function dedup: ONE row per unified stock identity.
     # Two LEFT JOINs (each index-friendly) instead of OR-based JOIN which kills perf.
@@ -313,20 +321,22 @@ async def get_pe_analysis(
           LEFT JOIN stocks s2 ON s2.bse_token = CASE
             WHEN qr.stock_symbol ~ '^\\d+$' THEN CAST(qr.stock_symbol AS INT)
           END
-          {where}
+          {where_inside}
         )
     """
 
+    outer_where = f"AND {outer_filter}" if outer_filter else ""
+
     count_sql = f"""
         {dedup_cte}
-        SELECT COUNT(*) FROM ranked WHERE rn = 1
+        SELECT COUNT(*) FROM ranked WHERE rn = 1 {outer_where}
     """
     count_row = await db.execute(text(count_sql), params)
     total = count_row.scalar()
 
     data_sql = f"""
         {dedup_cte}
-        SELECT * FROM ranked WHERE rn = 1
+        SELECT * FROM ranked WHERE rn = 1 {outer_where}
         ORDER BY COALESCE(announcement_date, created_at) DESC
         LIMIT :limit OFFSET :offset
     """

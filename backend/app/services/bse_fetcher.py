@@ -267,6 +267,7 @@ async def _insert_pending_qr_placeholder(
     """
     quarter, fy = _quarter_fy_for_today()
     ann_dt = _parse_bse_datetime(news_dt)
+    ann_dt = ann_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     try:
         await db.execute(text("""
             INSERT INTO quarterly_results

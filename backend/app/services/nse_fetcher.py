@@ -189,6 +189,7 @@ async def process_nse_for_extraction(announcements: List[Dict]) -> List[Dict]:
 
             # Insert pending placeholder in quarterly_results
             ann_time = _parse_nse_datetime(an_dt)
+            ann_time = ann_time.replace(hour=0, minute=0, second=0, microsecond=0)
             quarter, fy = _quarter_fy_for_today()
             try:
                 await db.execute(text("""

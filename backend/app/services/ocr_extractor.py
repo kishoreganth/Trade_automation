@@ -10,7 +10,7 @@ import io
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import fitz
@@ -514,20 +514,38 @@ def _compute_all_fy_eps(ai_response: Dict) -> Dict:
     }
 
 
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _normalize_to_ist_midnight(dt: datetime) -> datetime:
+    """Truncate a datetime to IST midnight for consistent dedup.
+    All BSE/NSE announcements are IST-based; normalizing to midnight
+    ensures two timestamps on the same calendar day always match the
+    unique constraint (stock_symbol, quarter, financial_year, announcement_date)."""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(_IST)
+    else:
+        dt = dt.replace(tzinfo=_IST)
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def _parse_announcement_date(announcement_date) -> Optional[datetime]:
-    """Parse BSE announcement_date (string or datetime) to datetime for asyncpg timestamptz."""
+    """Parse announcement_date and normalize to IST midnight for dedup."""
     if announcement_date is None or announcement_date == "":
         return None
     if isinstance(announcement_date, datetime):
-        return announcement_date
+        return _normalize_to_ist_midnight(announcement_date)
     s = str(announcement_date).strip()
     for fmt in (
-        "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d", "%d-%b-%Y %H:%M:%S", "%d %b %Y %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d",
+        "%d-%b-%Y %H:%M:%S", "%d %b %Y %H:%M:%S",
         "%d-%b-%Y", "%d %b %Y",
     ):
         try:
-            return datetime.strptime(s, fmt)
+            dt = datetime.strptime(s, fmt)
+            return _normalize_to_ist_midnight(dt)
         except ValueError:
             continue
     logger.warning(f"Could not parse announcement_date '{announcement_date}'")
@@ -689,7 +707,7 @@ async def save_quarterly_result(
         raise ValueError(f"No mappable (quarter, fy) entries for {stock_symbol}")
 
     now = datetime.now(timezone.utc)
-    ann_dt = _parse_announcement_date(announcement_date) or now
+    ann_dt = _parse_announcement_date(announcement_date) or _normalize_to_ist_midnight(now)
     raw_ai_str = json.dumps(extraction_data)
 
     inserted_ids: List[int] = []

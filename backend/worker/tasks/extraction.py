@@ -206,7 +206,10 @@ async def _mark_extraction_failed(
     If no row exists for this PDF, INSERT a failed-status row so the stock
     appears on PE Pending page with FAILED badge (matches old app behavior)."""
     err_short = (error or "")[:500]
-    ann_dt = _parse_announcement_date(announcement_date) or datetime.now(timezone.utc)
+    ann_dt = _parse_announcement_date(announcement_date)
+    if ann_dt is None:
+        from app.services.ocr_extractor import _normalize_to_ist_midnight
+        ann_dt = _normalize_to_ist_midnight(datetime.now(timezone.utc))
 
     try:
         async with get_db_session() as db:
