@@ -1,6 +1,6 @@
 "use client";
 
-import { usePEAnalysis } from "@/hooks/usePEAnalysis";
+import { usePEAnalysis, usePEFilters } from "@/hooks/usePEAnalysis";
 import { fmtCurrency, fmtNumber } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { deletePEAnalysis, updatePEAnalysis, retriggerPEExtraction, fetchValuationOptions } from "@/lib/api";
@@ -14,6 +14,7 @@ import {
   type ValuationOption,
 } from "@/lib/valuationOptions";
 import { RemarkSelect } from "./RemarkSelect";
+import { SectorSelect } from "./SectorSelect";
 import { useConfirm } from "./ConfirmDialog";
 
 function useValuationOptions(): ValuationOption[] {
@@ -543,6 +544,8 @@ function TableSkeleton() {
 }
 
 function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; onClose: () => void; onSaved: () => void }) {
+  const { data: filterOptions } = usePEFilters();
+  const sectorOptions: string[] = filterOptions?.sectors || [];
   const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const symbol = (row.stock_symbol as string) || "";
@@ -679,7 +682,7 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
           </DrawerField>
 
           <DrawerField label="Sector">
-            <input type="text" value={form.sector} onChange={(e) => set("sector", e.target.value)} className="drawer-input" placeholder="e.g. NBFC & Financial Services" />
+            <SectorSelect value={form.sector} onChange={(v) => set("sector", v)} options={sectorOptions} />
           </DrawerField>
 
           <DrawerField label="Sub-Sector">
