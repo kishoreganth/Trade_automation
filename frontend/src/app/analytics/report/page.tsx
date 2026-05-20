@@ -69,7 +69,7 @@ export default function AnalyticsReportPage() {
 
   if (!data) return <div className="text-gray-500 p-8 text-center">No data available</div>;
 
-  const { summary, pe_distribution, valuation_counts, sector_summary, top_cheapest, top_expensive } = data;
+  const { summary, pe_distribution, valuation_counts, signal_counts, sector_summary, top_cheapest, top_expensive } = data;
   const total = summary?.total || 0;
   const cheapCount = valuation_counts?.CHEAP || 0;
   const expensiveCount = valuation_counts?.EXPENSIVE || 0;
@@ -135,6 +135,11 @@ export default function AnalyticsReportPage() {
         <PEDistributionChart data={pe_distribution || []} onBarClick={(range) => openDrill("pe_range", range, `PE Range: ${range}`)} />
         <ValuationBarChart data={valuation_counts || {}} onBarClick={(val) => openFullPage("valuation", val, `${val} Stocks`)} />
       </div>
+
+      {/* Signal Distribution */}
+      {signal_counts && Object.keys(signal_counts).length > 0 && (
+        <SignalSection data={signal_counts} onSignalClick={(sig) => openFullPage("signal", sig, `Signal: ${sig}`)} />
+      )}
 
       {/* Sector Table */}
       <SectorSummaryTable data={sector_summary || []} onRowClick={(sec) => openDrill("sector", sec, `Sector: ${sec}`)} />
@@ -393,6 +398,53 @@ function Top10Table({ title, data, variant }: { title: string; data: Record<stri
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ─── Signal Section ─── */
+
+const SIGNAL_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
+  BUY: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", bar: "#10b981" },
+  HOLD: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", bar: "#f59e0b" },
+  SELL: { bg: "bg-red-50 border-red-200", text: "text-red-700", bar: "#ef4444" },
+  WATCH: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700", bar: "#3b82f6" },
+};
+
+function SignalSection({ data, onSignalClick }: { data: Record<string, number>; onSignalClick: (sig: string) => void }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const totalSignals = entries.reduce((sum, [, v]) => sum + v, 0);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700">Signal Distribution</h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">{totalSignals} stocks with signals assigned</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {entries.map(([signal, count]) => {
+          const colors = SIGNAL_COLORS[signal.toUpperCase()] || { bg: "bg-gray-50 border-gray-200", text: "text-gray-700", bar: "#6b7280" };
+          const pct = totalSignals > 0 ? ((count / totalSignals) * 100).toFixed(0) : "0";
+          return (
+            <div
+              key={signal}
+              onClick={() => onSignalClick(signal)}
+              className={`rounded-xl border p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all active:scale-[0.98] ${colors.bg}`}
+            >
+              <div className={`text-xl font-bold ${colors.text}`}>{count}</div>
+              <div className="text-xs font-semibold text-gray-700 mt-1">{signal}</div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: colors.bar }} />
+                </div>
+                <span className="text-[10px] text-gray-500">{pct}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

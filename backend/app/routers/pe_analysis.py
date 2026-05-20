@@ -635,10 +635,17 @@ async def get_report_summary(
     top_cheapest = sorted(with_pe, key=lambda x: x["pe"])[:10]
     top_expensive = sorted(with_pe, key=lambda x: x["pe"], reverse=True)[:10]
 
+    signal_counts: dict = {}
+    for r in data:
+        sig = r.get("recommendation") or ""
+        if sig:
+            signal_counts[sig] = signal_counts.get(sig, 0) + 1
+
     result = {
         "summary": {"total": len(data), "avg_pe": avg_pe, "median_pe": median_pe},
         "pe_distribution": pe_distribution,
         "valuation_counts": valuation_counts,
+        "signal_counts": signal_counts,
         "sector_summary": sector_summary,
         "top_cheapest": top_cheapest,
         "top_expensive": top_expensive,
@@ -707,6 +714,8 @@ async def get_report_detail(
         filtered = [r for r in all_data if r.get("pe") and lo <= r["pe"] < hi]
     elif filter_type == "sector" and filter_value:
         filtered = [r for r in all_data if (r.get("sector") or "Unknown") == filter_value]
+    elif filter_type == "signal" and filter_value:
+        filtered = [r for r in all_data if (r.get("recommendation") or "") == filter_value]
     else:
         filtered = all_data
 
