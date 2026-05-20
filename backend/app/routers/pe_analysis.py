@@ -677,7 +677,8 @@ async def get_report_detail(
         SELECT DISTINCT ON (qr.stock_symbol)
             qr.stock_symbol, qr.company_name, qr.pe, qr.cmp, qr.valuation,
             qr.recommendation, qr.target_price, qr.financial_year, qr.quarter,
-            qr.exchange, COALESCE(s.sector, 'Unknown') AS sector
+            qr.exchange, qr.comments, qr.source_pdf_url,
+            COALESCE(s.sector, 'Unknown') AS sector
         FROM quarterly_results qr
         LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
         WHERE {where_clause}

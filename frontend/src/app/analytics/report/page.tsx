@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useReportSummary } from "@/hooks/usePEAnalysis";
 import { ReportFilterBar } from "@/components/ReportFilterBar";
 import { ReportDrillDrawer } from "@/components/ReportDrillDrawer";
@@ -34,6 +35,7 @@ export default function AnalyticsReportPage() {
   const [filters, setFilters] = useState<ReportFilters>({});
   const [drillParams, setDrillParams] = useState<DrillParams | null>(null);
   const { data, isLoading } = useReportSummary(filters);
+  const router = useRouter();
 
   const openDrill = (filter_type: string, filter_value: string, title: string) => {
     setDrillParams({ filter_type, filter_value, title, ...filters });
@@ -83,7 +85,7 @@ export default function AnalyticsReportPage() {
           label="Total Reviewed"
           value={total}
           subtitle="stocks analyzed"
-          onClick={() => openDrill("valuation", "", "All Reviewed Stocks")}
+          onClick={() => router.push("/analytics/pe-reviewed")}
         />
         <SummaryCard
           icon={<BarChart3 className="w-4 h-4" />}
