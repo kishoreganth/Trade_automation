@@ -5,11 +5,11 @@ import { PETable } from "@/components/PETable";
 import { ColumnsDropdown } from "@/components/ColumnsDropdown";
 import { FormulasModal } from "@/components/FormulasModal";
 import { usePEFilters, usePEAnalysis } from "@/hooks/usePEAnalysis";
-import { CheckCircle2, RefreshCw, Download, Search, X, ChevronDown } from "lucide-react";
+import { CheckCircle2, RefreshCw, Download, Search, X, ChevronDown, Filter } from "lucide-react";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { triggerJob, exportPEAnalysisCSV } from "@/lib/api";
+import { triggerJob, exportPEAnalysisCSV, fetchValuationOptions } from "@/lib/api";
 import toast from "react-hot-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 
 const ALL_COLUMNS = [
   { key: "date", label: "Date" },
@@ -56,7 +56,10 @@ export default function PEReviewedPage() {
   const [perPage, setPerPage] = useState(50);
   const [showFormulas, setShowFormulas] = useState(false);
   const [visibleCols, setVisibleCols] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
+  const [remarkFilter, setRemarkFilter] = useState("");
+  const [signalFilter, setSignalFilter] = useState("");
   const { data: filterOptions } = usePEFilters();
+  const { data: valuationOptions } = useQuery({ queryKey: ["valuation-options"], queryFn: fetchValuationOptions, staleTime: 60_000 });
   const queryClient = useQueryClient();
 
   const handleFilterChange = (key: string, value: string) => {
@@ -66,14 +69,16 @@ export default function PEReviewedPage() {
   const clearFilters = () => setFilters({});
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  const clearSecondRow = () => { setSearch(""); setSectors([]); setDateFrom(""); setDateTo(""); };
-  const secondRowActive = !!(search || sectors.length || dateFrom || dateTo);
+  const clearSecondRow = () => { setSearch(""); setSectors([]); setDateFrom(""); setDateTo(""); setRemarkFilter(""); setSignalFilter(""); };
+  const secondRowActive = !!(search || sectors.length || dateFrom || dateTo || remarkFilter || signalFilter);
 
   const allFilters: Record<string, string> = { ...filters };
   if (search) allFilters.search = search;
   if (sectors.length) allFilters.sector = sectors.join(",");
   if (dateFrom) allFilters.date_from = dateFrom;
   if (dateTo) allFilters.date_to = dateTo;
+  if (remarkFilter) allFilters.valuation = remarkFilter;
+  if (signalFilter) allFilters.signal = signalFilter;
 
   const { data: peData } = usePEAnalysis({ page: 1, per_page: perPage, valuation_filter: "reviewed", ...allFilters });
   const totalStocks = peData?.total || 0;
@@ -172,6 +177,29 @@ export default function PEReviewedPage() {
         <MultiSectorSelect options={filterOptions?.sectors || []} selected={sectors} onChange={setSectors} />
 
         <DateRangePicker from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+
+        <select
+          value={remarkFilter}
+          onChange={(e) => setRemarkFilter(e.target.value)}
+          className="text-xs py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="">All Remarks</option>
+          {(valuationOptions || []).map((opt: { value: string; label: string }) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={signalFilter}
+          onChange={(e) => setSignalFilter(e.target.value)}
+          className="text-xs py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="">All Signals</option>
+          <option value="BUY">BUY</option>
+          <option value="HOLD">HOLD</option>
+          <option value="SELL">SELL</option>
+          <option value="WATCH">WATCH</option>
+        </select>
 
         {secondRowActive && (
           <button onClick={clearSecondRow} className="text-xs text-red-500 border border-red-200 rounded-md px-2 py-0.5 hover:bg-red-50 hover:border-red-300 active:scale-95 transition-all flex items-center gap-0.5"><X className="w-3 h-3" /> Clear</button>

@@ -220,10 +220,12 @@ async def get_pe_analysis(
     search: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    valuation: Optional[str] = None,
+    signal: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Paginated PE analysis results with computed fields."""
-    cache_key = f"pe:list:{valuation_filter}:{page}:{per_page}:{year}:{quarter}:{exchange}:{sector}:{search}:{date_from}:{date_to}"
+    cache_key = f"pe:list:{valuation_filter}:{page}:{per_page}:{year}:{quarter}:{exchange}:{sector}:{search}:{date_from}:{date_to}:{valuation}:{signal}"
     cached_result = await cache_get(cache_key)
     if cached_result:
         return cached_result
@@ -295,6 +297,12 @@ async def get_pe_analysis(
             params["date_to"] = dt_dt
         except ValueError:
             pass
+    if valuation:
+        scope_conditions.append("qr.valuation = :valuation_exact")
+        params["valuation_exact"] = valuation
+    if signal:
+        scope_conditions.append("qr.recommendation = :signal_exact")
+        params["signal_exact"] = signal
 
     where_inside = "WHERE " + " AND ".join(scope_conditions) if scope_conditions else ""
     outer_filter = " AND ".join(outer_conditions)

@@ -77,6 +77,8 @@ export async function fetchPEAnalysis(params: {
   search?: string;
   date_from?: string;
   date_to?: string;
+  valuation?: string;
+  signal?: string;
 }) {
   const { data } = await api.get("/pe_analysis", { params });
   return data;

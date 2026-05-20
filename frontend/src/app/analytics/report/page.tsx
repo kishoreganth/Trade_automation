@@ -41,6 +41,15 @@ export default function AnalyticsReportPage() {
     setDrillParams({ filter_type, filter_value, title, ...filters });
   };
 
+  const openFullPage = (filter_type: string, filter_value: string, title: string) => {
+    const params = new URLSearchParams({ type: filter_type, value: filter_value, title });
+    if (filters.year) params.set("year", filters.year);
+    if (filters.quarter) params.set("quarter", filters.quarter);
+    if (filters.exchange) params.set("exchange", filters.exchange);
+    if (filters.sector) params.set("sector", filters.sector);
+    router.push(`/analytics/report/detail?${params.toString()}`);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -108,7 +117,7 @@ export default function AnalyticsReportPage() {
           subtitle={`${cheapPct}% of total`}
           color="text-emerald-600"
           bgAccent="bg-emerald-50 border-emerald-200"
-          onClick={() => openDrill("valuation", "CHEAP", "Cheap Stocks")}
+          onClick={() => openFullPage("valuation", "CHEAP", "Cheap Stocks")}
         />
         <SummaryCard
           icon={<TrendingUp className="w-4 h-4" />}
@@ -117,14 +126,14 @@ export default function AnalyticsReportPage() {
           subtitle={`${expensivePct}% of total`}
           color="text-red-600"
           bgAccent="bg-red-50 border-red-200"
-          onClick={() => openDrill("valuation", "EXPENSIVE", "Expensive Stocks")}
+          onClick={() => openFullPage("valuation", "EXPENSIVE", "Expensive Stocks")}
         />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <PEDistributionChart data={pe_distribution || []} onBarClick={(range) => openDrill("pe_range", range, `PE Range: ${range}`)} />
-        <ValuationBarChart data={valuation_counts || {}} onBarClick={(val) => openDrill("valuation", val, `${val} Stocks`)} />
+        <ValuationBarChart data={valuation_counts || {}} onBarClick={(val) => openFullPage("valuation", val, `${val} Stocks`)} />
       </div>
 
       {/* Sector Table */}
