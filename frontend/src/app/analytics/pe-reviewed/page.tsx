@@ -184,7 +184,7 @@ export default function PEReviewedPage() {
           className="text-xs py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
           <option value="">All Remarks</option>
-          {(valuationOptions || []).map((opt: { value: string; label: string }) => (
+          {((valuationOptions?.options) || []).map((opt: { value: string; label: string }) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>

@@ -651,14 +651,14 @@ async def get_report_summary(
 @router.get("/pe_analysis/report_detail")
 async def get_report_detail(
     db: AsyncSession = Depends(get_db),
-    filter_type: str = Query(..., description="valuation, pe_range, or sector"),
-    filter_value: str = Query(...),
+    filter_type: str = Query("all"),
+    filter_value: str = Query(""),
     year: Optional[str] = Query(None),
     quarter: Optional[str] = Query(None),
     exchange: Optional[str] = Query(None),
     sector: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200),
+    per_page: int = Query(50, ge=1, le=500),
 ):
     """Drill-down detail — returns stocks matching a specific filter slice."""
     conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "qr.extraction_status = 'completed'"]
@@ -696,13 +696,16 @@ async def get_report_detail(
     rows = await db.execute(text(base_sql), params)
     all_data = [dict(r._mapping) for r in rows.fetchall()]
 
-    if filter_type == "valuation":
-        filtered = [r for r in all_data if canonicalize_valuation(r.get("valuation")) == filter_value.upper()]
-    elif filter_type == "pe_range":
+    if filter_type == "valuation" and filter_value:
+        target = filter_value.upper()
+        filtered = [r for r in all_data if
+                    canonicalize_valuation(r.get("valuation")) == target or
+                    (r.get("valuation") or "").upper() == target]
+    elif filter_type == "pe_range" and filter_value:
         parts = filter_value.replace("+", "-9999").split("-")
         lo, hi = float(parts[0]), float(parts[1])
         filtered = [r for r in all_data if r.get("pe") and lo <= r["pe"] < hi]
-    elif filter_type == "sector":
+    elif filter_type == "sector" and filter_value:
         filtered = [r for r in all_data if (r.get("sector") or "Unknown") == filter_value]
     else:
         filtered = all_data
