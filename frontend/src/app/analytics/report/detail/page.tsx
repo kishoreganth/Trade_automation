@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useReportDetail, usePEFilters } from "@/hooks/usePEAnalysis";
 import { fmtNumber } from "@/lib/utils";
@@ -28,6 +28,14 @@ type SortKey = "company" | "pe" | "cmp" | "target" | "sector" | "valuation" | "s
 type SortDir = "asc" | "desc";
 
 export default function ReportDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-6 animate-pulse">Loading...</div>}>
+      <ReportDetailContent />
+    </Suspense>
+  );
+}
+
+function ReportDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 

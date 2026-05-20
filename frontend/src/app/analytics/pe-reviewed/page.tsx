@@ -5,7 +5,7 @@ import { PETable } from "@/components/PETable";
 import { ColumnsDropdown } from "@/components/ColumnsDropdown";
 import { FormulasModal } from "@/components/FormulasModal";
 import { usePEFilters, usePEAnalysis } from "@/hooks/usePEAnalysis";
-import { CheckCircle2, RefreshCw, Download, Search, X, ChevronDown, Filter } from "lucide-react";
+import { CheckCircle2, RefreshCw, Download, Search, X, ChevronDown } from "lucide-react";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { triggerJob, exportPEAnalysisCSV, fetchValuationOptions } from "@/lib/api";
 import toast from "react-hot-toast";
