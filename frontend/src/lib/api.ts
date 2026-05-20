@@ -87,8 +87,27 @@ export async function fetchPEFilters() {
   return data;
 }
 
-export async function fetchReportSummary() {
-  const { data } = await api.get("/pe_analysis/report_summary");
+export async function fetchReportSummary(params?: {
+  year?: string;
+  quarter?: string;
+  exchange?: string;
+  sector?: string;
+}) {
+  const { data } = await api.get("/pe_analysis/report_summary", { params });
+  return data;
+}
+
+export async function fetchReportDetail(params: {
+  filter_type: string;
+  filter_value: string;
+  year?: string;
+  quarter?: string;
+  exchange?: string;
+  sector?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const { data } = await api.get("/pe_analysis/report_detail", { params });
   return data;
 }
 

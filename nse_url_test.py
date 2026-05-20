@@ -1022,8 +1022,6 @@ async def init_db():
         await db.execute("PRAGMA busy_timeout=10000")
         await db.execute("PRAGMA temp_store=MEMORY")
         await db.execute("PRAGMA mmap_size=268435456")
-        qr_count = await db.execute("SELECT COUNT(*) FROM quarterly_results")
-        logger.info(f"quarterly_results table: {(await qr_count.fetchone())[0]} rows")
 
         # Create table with basic structure first
         await db.execute("""
@@ -1373,6 +1371,9 @@ async def init_db():
                     )
                     logger.info(f"Updated default admin password to new default (deploy sync)")
         
+        qr_count = await db.execute("SELECT COUNT(*) FROM quarterly_results")
+        logger.info(f"quarterly_results table: {(await qr_count.fetchone())[0]} rows")
+
         await db.commit()
     logger.info("Messages database initialized")
 

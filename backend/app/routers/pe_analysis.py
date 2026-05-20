@@ -536,28 +536,55 @@ async def get_pe_filters(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/pe_analysis/report_summary")
-async def get_report_summary(db: AsyncSession = Depends(get_db)):
+async def get_report_summary(
+    db: AsyncSession = Depends(get_db),
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    exchange: Optional[str] = Query(None),
+    sector: Optional[str] = Query(None),
+):
     """Aggregated analytics report — all computation server-side."""
-    cached_result = await cache_get("report:summary")
+    cache_key = f"report:summary:{year or ''}:{quarter or ''}:{exchange or ''}:{sector or ''}"
+    cached_result = await cache_get(cache_key)
     if cached_result:
         return cached_result
 
-    # Get all reviewed results (deduplicated to best-per-stock)
-    rows = await db.execute(text("""
-        SELECT DISTINCT ON (stock_symbol)
-            stock_symbol, pe, cmp, valuation, recommendation, target_price,
-            financial_year, quarter, exchange
-        FROM quarterly_results
-        WHERE valuation IS NOT NULL AND valuation != '' AND extraction_status = 'completed'
-        ORDER BY stock_symbol, financial_year DESC, quarter DESC
-    """))
+    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "qr.extraction_status = 'completed'"]
+    params: dict = {}
+
+    if year:
+        fy_year = _fy_to_year(year)
+        if fy_year:
+            conditions.append("qr.financial_year ~ :fy_pattern")
+            params["fy_pattern"] = f"(^|FY){fy_year % 100:02d}$|^{fy_year}$|{fy_year - 1}-{fy_year % 100:02d}$"
+    if quarter:
+        conditions.append("qr.quarter = :quarter")
+        params["quarter"] = quarter
+    if exchange:
+        conditions.append("qr.exchange = :exchange")
+        params["exchange"] = exchange
+    if sector:
+        conditions.append("COALESCE(s.sector, '') ILIKE :sector")
+        params["sector"] = f"%{sector}%"
+
+    where_clause = " AND ".join(conditions)
+
+    rows = await db.execute(text(f"""
+        SELECT DISTINCT ON (qr.stock_symbol)
+            qr.stock_symbol, qr.company_name, qr.pe, qr.cmp, qr.valuation,
+            qr.recommendation, qr.target_price, qr.financial_year, qr.quarter,
+            qr.exchange, COALESCE(s.sector, 'Unknown') AS sector
+        FROM quarterly_results qr
+        LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
+        WHERE {where_clause}
+        ORDER BY qr.stock_symbol, qr.financial_year DESC, qr.quarter DESC
+    """), params)
     data = [dict(r._mapping) for r in rows.fetchall()]
 
     if not data:
         return {"summary": {}, "pe_distribution": [], "valuation_counts": {},
                 "sector_summary": [], "top_cheapest": [], "top_expensive": []}
 
-    # Compute aggregations
     pe_values = [r["pe"] for r in data if r["pe"] and r["pe"] > 0]
     avg_pe = sum(pe_values) / len(pe_values) if pe_values else 0
     sorted_pe = sorted(pe_values)
@@ -568,7 +595,6 @@ async def get_report_summary(db: AsyncSession = Depends(get_db)):
         v = canonicalize_valuation(r.get("valuation")) or "UNKNOWN"
         valuation_counts[v] = valuation_counts.get(v, 0) + 1
 
-    # PE distribution buckets
     buckets = [(0, 10), (10, 20), (20, 30), (30, 50), (50, 100), (100, 9999)]
     pe_distribution = []
     for lo, hi in buckets:
@@ -576,20 +602,19 @@ async def get_report_summary(db: AsyncSession = Depends(get_db)):
         count = sum(1 for p in pe_values if lo <= p < hi)
         pe_distribution.append({"range": label, "count": count})
 
-    # Sector summary — `cheap` = bullish-tone (CHEAP + UNDER_VALUED), `expensive` = bearish-tone.
     sector_map: dict = {}
     for r in data:
-        sector = r.get("sector") or "Unknown"
-        if sector not in sector_map:
-            sector_map[sector] = {"sector": sector, "count": 0, "pe_sum": 0, "cheap": 0, "expensive": 0}
-        sector_map[sector]["count"] += 1
+        sec = r.get("sector") or "Unknown"
+        if sec not in sector_map:
+            sector_map[sec] = {"sector": sec, "count": 0, "pe_sum": 0, "cheap": 0, "expensive": 0}
+        sector_map[sec]["count"] += 1
         if r["pe"]:
-            sector_map[sector]["pe_sum"] += r["pe"]
+            sector_map[sec]["pe_sum"] += r["pe"]
         tone = valuation_tone(r.get("valuation"))
         if tone == VALUATION_TONE_BULLISH:
-            sector_map[sector]["cheap"] += 1
+            sector_map[sec]["cheap"] += 1
         elif tone == VALUATION_TONE_BEARISH:
-            sector_map[sector]["expensive"] += 1
+            sector_map[sec]["expensive"] += 1
 
     sector_summary = []
     for s in sector_map.values():
@@ -598,7 +623,6 @@ async def get_report_summary(db: AsyncSession = Depends(get_db)):
         sector_summary.append(s)
     sector_summary.sort(key=lambda x: x["count"], reverse=True)
 
-    # Top 10
     with_pe = [r for r in data if r["pe"] and r["pe"] > 0]
     top_cheapest = sorted(with_pe, key=lambda x: x["pe"])[:10]
     top_expensive = sorted(with_pe, key=lambda x: x["pe"], reverse=True)[:10]
@@ -612,8 +636,79 @@ async def get_report_summary(db: AsyncSession = Depends(get_db)):
         "top_expensive": top_expensive,
     }
 
-    await cache_set("report:summary", result, ttl=30)
+    await cache_set(cache_key, result, ttl=30)
     return result
+
+
+@router.get("/pe_analysis/report_detail")
+async def get_report_detail(
+    db: AsyncSession = Depends(get_db),
+    filter_type: str = Query(..., description="valuation, pe_range, or sector"),
+    filter_value: str = Query(...),
+    year: Optional[str] = Query(None),
+    quarter: Optional[str] = Query(None),
+    exchange: Optional[str] = Query(None),
+    sector: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Drill-down detail — returns stocks matching a specific filter slice."""
+    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "qr.extraction_status = 'completed'"]
+    params: dict = {}
+
+    if year:
+        fy_year = _fy_to_year(year)
+        if fy_year:
+            conditions.append("qr.financial_year ~ :fy_pattern")
+            params["fy_pattern"] = f"(^|FY){fy_year % 100:02d}$|^{fy_year}$|{fy_year - 1}-{fy_year % 100:02d}$"
+    if quarter:
+        conditions.append("qr.quarter = :quarter")
+        params["quarter"] = quarter
+    if exchange:
+        conditions.append("qr.exchange = :exchange")
+        params["exchange"] = exchange
+    if sector:
+        conditions.append("COALESCE(s.sector, '') ILIKE :sector_filter")
+        params["sector_filter"] = f"%{sector}%"
+
+    where_clause = " AND ".join(conditions)
+
+    base_sql = f"""
+        SELECT DISTINCT ON (qr.stock_symbol)
+            qr.stock_symbol, qr.company_name, qr.pe, qr.cmp, qr.valuation,
+            qr.recommendation, qr.target_price, qr.financial_year, qr.quarter,
+            qr.exchange, COALESCE(s.sector, 'Unknown') AS sector
+        FROM quarterly_results qr
+        LEFT JOIN stocks s ON s.symbol = qr.stock_symbol
+        WHERE {where_clause}
+        ORDER BY qr.stock_symbol, qr.financial_year DESC, qr.quarter DESC
+    """
+
+    rows = await db.execute(text(base_sql), params)
+    all_data = [dict(r._mapping) for r in rows.fetchall()]
+
+    if filter_type == "valuation":
+        filtered = [r for r in all_data if canonicalize_valuation(r.get("valuation")) == filter_value.upper()]
+    elif filter_type == "pe_range":
+        parts = filter_value.replace("+", "-9999").split("-")
+        lo, hi = float(parts[0]), float(parts[1])
+        filtered = [r for r in all_data if r.get("pe") and lo <= r["pe"] < hi]
+    elif filter_type == "sector":
+        filtered = [r for r in all_data if (r.get("sector") or "Unknown") == filter_value]
+    else:
+        filtered = all_data
+
+    total = len(filtered)
+    offset = (page - 1) * per_page
+    page_data = filtered[offset:offset + per_page]
+
+    return {
+        "results": page_data,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+    }
 
 
 @router.get("/pe_formulas")
