@@ -51,6 +51,29 @@ def _fy_to_year(fy: str) -> int:
     return 0
 
 
+def _resolved_symbol_sql(qr: str = "qr", s1: str = "s1", s2: str = "s2") -> str:
+    """Canonical NSE symbol for a quarterly_results row.
+
+    Numeric stock_symbol values are BSE scrip codes and must resolve via
+    bse_token (s2). Using COALESCE(s1, s2) first would match a stocks row whose
+    symbol is the scrip code (e.g. 524091) instead of the NSE ticker (CARYSIL).
+    """
+    return f"""CASE
+      WHEN {qr}.stock_symbol ~ '^\\d+$'
+        THEN COALESCE({s2}.symbol, {qr}.stock_symbol)
+      ELSE COALESCE({s1}.symbol, {qr}.stock_symbol)
+    END"""
+
+
+def _resolved_stock_field_sql(field: str, qr: str = "qr", s1: str = "s1", s2: str = "s2") -> str:
+    """Resolve a stocks column using the same numeric-vs-NSE join priority."""
+    return f"""CASE
+      WHEN {qr}.stock_symbol ~ '^\\d+$'
+        THEN COALESCE({s2}.{field}, {s1}.{field})
+      ELSE COALESCE({s1}.{field}, {s2}.{field})
+    END"""
+
+
 def _dedup_history(history: list[dict]) -> list[dict]:
     """Keep only the latest row per (quarter, normalized_fy) combo."""
     seen: dict[tuple, dict] = {}
@@ -242,15 +265,15 @@ async def get_pe_analysis(
     # on both PE Pending and PE Reviewed simultaneously.
     if valuation_filter == "pending":
         scope_conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
-        scope_conditions.append("""
+        scope_conditions.append(f"""
             NOT EXISTS (
                 SELECT 1 FROM quarterly_results r
                 LEFT JOIN stocks rs1 ON rs1.symbol = r.stock_symbol
                 LEFT JOIN stocks rs2 ON rs2.bse_token = CASE
                     WHEN r.stock_symbol ~ '^\\d+$' THEN CAST(r.stock_symbol AS INT)
                 END
-                WHERE COALESCE(rs1.symbol, rs2.symbol, r.stock_symbol)
-                    = COALESCE(s1.symbol, s2.symbol, qr.stock_symbol)
+                WHERE {_resolved_symbol_sql("r", "rs1", "rs2")}
+                    = {_resolved_symbol_sql("qr", "s1", "s2")}
                   AND r.quarter = qr.quarter
                   AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
                   AND r.valuation IS NOT NULL AND r.valuation != ''
@@ -328,11 +351,11 @@ async def get_pe_analysis(
             ) AS fy_eps_stored,
             (qr.fy_eps_diluted_consolidated IS NOT NULL
              OR qr.fy_eps_basic_consolidated IS NOT NULL) AS fy_from_consolidated,
-            COALESCE(s1.symbol, s2.symbol) AS resolved_symbol,
-            COALESCE(s1.sector, s2.sector) AS sector,
-            COALESCE(s1.sub_sector, s2.sub_sector) AS sub_sector,
+            {_resolved_symbol_sql()} AS resolved_symbol,
+            {_resolved_stock_field_sql("sector")} AS sector,
+            {_resolved_stock_field_sql("sub_sector")} AS sub_sector,
             ROW_NUMBER() OVER (
-              PARTITION BY COALESCE(s1.symbol, s2.symbol, qr.stock_symbol)
+              PARTITION BY {_resolved_symbol_sql()}
               ORDER BY qr.financial_year DESC, qr.quarter DESC,
                 CASE WHEN qr.extraction_status = 'completed' THEN 0 ELSE 1 END,
                 qr.id DESC
