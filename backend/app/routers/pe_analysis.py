@@ -245,7 +245,12 @@ async def get_pe_analysis(
         scope_conditions.append("""
             NOT EXISTS (
                 SELECT 1 FROM quarterly_results r
-                WHERE r.stock_symbol = qr.stock_symbol
+                LEFT JOIN stocks rs1 ON rs1.symbol = r.stock_symbol
+                LEFT JOIN stocks rs2 ON rs2.bse_token = CASE
+                    WHEN r.stock_symbol ~ '^\\d+$' THEN CAST(r.stock_symbol AS INT)
+                END
+                WHERE COALESCE(rs1.symbol, rs2.symbol, r.stock_symbol)
+                    = COALESCE(s1.symbol, s2.symbol, qr.stock_symbol)
                   AND r.quarter = qr.quarter
                   AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
                   AND r.valuation IS NOT NULL AND r.valuation != ''
