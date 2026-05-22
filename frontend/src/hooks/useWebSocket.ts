@@ -63,6 +63,12 @@ export function useWebSocket() {
         case "ai_analysis_complete":
           queueInvalidate("pe-analysis");
           break;
+        case "concall_insight_ready":
+          queueInvalidate("concall-insight", "ai-insights-list");
+          break;
+        case "announcement_insight_ready":
+          queueInvalidate("announcement-insight", "ai-insights-list");
+          break;
       }
     },
     [queueInvalidate]

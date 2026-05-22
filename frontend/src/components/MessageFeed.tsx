@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useMessages } from "@/hooks/useMessages";
-import { ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, AlertTriangle, RefreshCw } from "lucide-react";
+import { useConcallInsight } from "@/hooks/useConcallInsights";
+import { useAnnouncementInsight } from "@/hooks/useInsights";
+import { ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, AlertTriangle, RefreshCw, Sparkles } from "lucide-react";
+import { ConcallInsightCard } from "./ConcallInsightCard";
+import { AIInsightCard } from "./AIInsightCard";
 
 interface MessageFeedProps {
   option?: string;
@@ -77,47 +81,146 @@ export function MessageFeed({ option = "all", filters = {} }: MessageFeedProps) 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {messages.map((msg: Record<string, string>) => (
-              <tr key={msg.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
-                  {msg.timestamp
-                    ? new Date(msg.timestamp).toLocaleString("en-US", {
-                        month: "numeric",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: true,
-                      })
-                    : ""}
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className={msg.exchange === "BSE" ? "badge-bse" : "badge-nse"}>
-                    {msg.exchange || "NSE"}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-primary font-semibold">{msg.symbol || "\u2014"}</td>
-                <td className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate">{msg.company_name || "\u2014"}</td>
-                <td className="px-4 py-2.5 text-gray-500 text-xs">{msg.sector || "\u2014"}</td>
-                <td className="px-4 py-2.5 text-gray-600 text-xs max-w-[300px] truncate">{msg.description || msg.message || "\u2014"}</td>
-                <td className="px-4 py-2.5">
-                  {msg.file_url ? (
-                    <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs hover:underline flex items-center gap-1">
-                      View File <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : (
-                    <span className="text-gray-300 text-xs">{"\u2014"}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {messages.map((msg: Record<string, string>) => {
+              const isConcall = option === "concall" || option === "result_concall" || msg.option === "concall" || msg.option === "result_concall";
+              const isAnnouncement = option === "investor_presentation" || option === "monthly_business_update"
+                || msg.option === "investor_presentation" || msg.option === "monthly_business_update";
+              const announcementType = (msg.option === "investor_presentation" || option === "investor_presentation")
+                ? "investor_presentation" as const
+                : "monthly_business_update" as const;
+              return (
+                <MessageRow key={msg.id} msg={msg} isConcall={isConcall} isAnnouncement={isAnnouncement} announcementType={announcementType} />
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       <Pagination page={page} totalPages={totalPages} total={total} perPage={perPage} onPageChange={setPage} position="bottom" />
     </div>
+  );
+}
+
+function ExtractionStatusBadge({ status }: { status: string | undefined | null }) {
+  if (!status) return null;
+  const config: Record<string, { bg: string; text: string; label: string; pulse?: boolean }> = {
+    pending: { bg: "bg-amber-100", text: "text-amber-700", label: "QUEUED", pulse: true },
+    queued: { bg: "bg-amber-100", text: "text-amber-700", label: "QUEUED", pulse: true },
+    processing: { bg: "bg-blue-100", text: "text-blue-700", label: "EXTRACTING", pulse: true },
+    completed: { bg: "bg-green-100", text: "text-green-700", label: "SUCCESS" },
+    failed: { bg: "bg-red-100", text: "text-red-700", label: "FAILED" },
+  };
+  const c = config[status];
+  if (!c) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${c.bg} ${c.text}`}>
+      {c.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+      {c.label}
+    </span>
+  );
+}
+
+function MessageRow({ msg, isConcall, isAnnouncement, announcementType }: {
+  msg: Record<string, string>;
+  isConcall: boolean;
+  isAnnouncement: boolean;
+  announcementType: "investor_presentation" | "monthly_business_update";
+}) {
+  const [showInsight, setShowInsight] = useState(false);
+  const hasAI = (isConcall || isAnnouncement) && msg.id;
+
+  const msgId = hasAI ? Number(msg.id) : null;
+  const concallQuery = useConcallInsight(isConcall && showInsight ? msgId : null, showInsight);
+  const announcementQuery = useAnnouncementInsight(isAnnouncement && showInsight ? msgId : null, showInsight);
+  const insightStatus = isConcall
+    ? concallQuery.data?.extraction_status
+    : isAnnouncement
+    ? announcementQuery.data?.extraction_status
+    : undefined;
+
+  return (
+    <>
+      <tr className="hover:bg-gray-50 transition-colors">
+        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+          {msg.timestamp
+            ? new Date(msg.timestamp).toLocaleString("en-US", {
+                month: "numeric",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+              })
+            : ""}
+        </td>
+        <td className="px-4 py-2.5">
+          <span className={msg.exchange === "BSE" ? "badge-bse" : "badge-nse"}>
+            {msg.exchange || "NSE"}
+          </span>
+        </td>
+        <td className="px-4 py-2.5 text-primary font-semibold">{msg.symbol || "\u2014"}</td>
+        <td className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate">{msg.company_name || "\u2014"}</td>
+        <td className="px-4 py-2.5 text-gray-500 text-xs">{msg.sector || "\u2014"}</td>
+        <td className="px-4 py-2.5 text-gray-600 text-xs max-w-[400px] truncate">
+          {msg.description || msg.message || "\u2014"}
+        </td>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            {msg.file_url ? (
+              <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs hover:underline flex items-center gap-1">
+                View File <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <span className="text-gray-300 text-xs">{"\u2014"}</span>
+            )}
+            {hasAI && (
+              <>
+                <ExtractionStatusBadge status={insightStatus} />
+                <button
+                  onClick={() => setShowInsight(!showInsight)}
+                  className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors border ${
+                    showInsight
+                      ? isAnnouncement ? "bg-violet-100 text-violet-700 border-violet-200" : "bg-indigo-100 text-indigo-700 border-indigo-200"
+                      : isAnnouncement ? "bg-violet-50 text-violet-600 hover:bg-violet-100 border-violet-100" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-100"
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  AI
+                </button>
+              </>
+            )}
+          </div>
+        </td>
+      </tr>
+      {isConcall && showInsight && msg.id && (
+        <tr>
+          <td colSpan={7} className="px-4 py-0 bg-gray-50/50">
+            <ConcallInsightCard
+              messageId={Number(msg.id)}
+              symbol={msg.symbol || ""}
+              fileUrl={msg.file_url}
+              companyName={msg.company_name}
+              exchange={msg.exchange}
+            />
+          </td>
+        </tr>
+      )}
+      {isAnnouncement && showInsight && msg.id && (
+        <tr>
+          <td colSpan={7} className="px-4 py-0 bg-gray-50/50">
+            <AIInsightCard
+              messageId={Number(msg.id)}
+              symbol={msg.symbol || ""}
+              fileUrl={msg.file_url}
+              companyName={msg.company_name}
+              exchange={msg.exchange}
+              announcementType={announcementType}
+            />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

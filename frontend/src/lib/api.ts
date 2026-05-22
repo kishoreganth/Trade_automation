@@ -217,6 +217,79 @@ export async function executeOrder(order: { symbol: string; action: string; qty:
   return data;
 }
 
+// ─── Concall Insights ───
+
+export async function fetchConcallInsightByMessage(messageId: number) {
+  const { data } = await api.get(`/concall/insights/by-message/${messageId}`);
+  return data;
+}
+
+export async function fetchConcallInsights(params?: {
+  page?: number;
+  per_page?: number;
+  symbol?: string;
+  quarter?: string;
+  financial_year?: string;
+}) {
+  const { data } = await api.get("/concall/insights", { params });
+  return data;
+}
+
+export async function triggerConcallExtraction(body: {
+  symbol: string;
+  pdf_url: string;
+  exchange?: string;
+  company_name?: string;
+  message_id?: number;
+}) {
+  const { data } = await api.post("/concall/extract", body);
+  return data;
+}
+
+// ─── Announcement Insights ───
+
+export async function fetchAnnouncementInsightByMessage(messageId: number) {
+  const { data } = await api.get(`/insights/announcements/by-message/${messageId}`);
+  return data;
+}
+
+export async function fetchAnnouncementInsights(params?: {
+  page?: number;
+  per_page?: number;
+  announcement_type?: string;
+  symbol?: string;
+  quarter?: string;
+  financial_year?: string;
+}) {
+  const { data } = await api.get("/insights/announcements", { params });
+  return data;
+}
+
+export async function fetchAllInsights(params?: {
+  page?: number;
+  per_page?: number;
+  insight_type?: string;
+  symbol?: string;
+  quarter?: string;
+  financial_year?: string;
+  status?: string;
+}) {
+  const { data } = await api.get("/insights/all", { params });
+  return data;
+}
+
+export async function triggerAnnouncementExtraction(body: {
+  symbol: string;
+  pdf_url: string;
+  announcement_type: string;
+  exchange?: string;
+  company_name?: string;
+  message_id?: number;
+}) {
+  const { data } = await api.post("/insights/extract", body);
+  return data;
+}
+
 // ─── Export ───
 
 export async function exportPEAnalysisCSV(params: Record<string, string>) {

@@ -49,4 +49,18 @@ BEAT_SCHEDULE = {
         "schedule": 300.0,
         "options": {"queue": "cpu_queue"},
     },
+
+    # ─── Retry stuck concall extractions (every 2 min) ───
+    "retry-stuck-concall": {
+        "task": "worker.tasks.concall.retry_stuck_concall_extractions",
+        "schedule": 120.0,
+        "options": {"queue": "cpu_queue"},
+    },
+
+    # ─── Retry stuck announcement extractions (every 2 min) ───
+    "retry-stuck-announcements": {
+        "task": "worker.tasks.announcement_insight.retry_stuck_announcement_extractions",
+        "schedule": 120.0,
+        "options": {"queue": "cpu_queue"},
+    },
 }

@@ -5,13 +5,17 @@ import { FilterPanel } from "@/components/FilterPanel";
 import { useMessageStats } from "@/hooks/useMessages";
 import { MessageSquare, Hash, Clock, Calendar } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState, useCallback } from "react";
+import { Suspense, useState, useCallback, useEffect } from "react";
 
 function DashboardContent() {
   const searchParams = useSearchParams();
   const filter = searchParams.get("filter") || "all";
   const { data: stats } = useMessageStats();
   const [feedFilters, setFeedFilters] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setFeedFilters({});
+  }, [filter]);
 
   const handleFilterChange = useCallback((key: string, value: string) => {
     setFeedFilters((prev) => ({ ...prev, [key]: value }));
@@ -55,7 +59,7 @@ function DashboardContent() {
         />
       </div>
 
-      <FilterPanel filters={feedFilters} onChange={handleFilterChange} />
+      <FilterPanel key={filter} filters={feedFilters} onChange={handleFilterChange} />
 
       <MessageFeed option={filter} filters={feedFilters} />
     </div>

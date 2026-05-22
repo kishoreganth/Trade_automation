@@ -101,6 +101,7 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
                 "company_name": company_name,
                 "description": description,
                 "file_url": file_url,
+                "option": option,
                 "exchange": "NSE",
                 "timestamp": ann_time.isoformat(),
             }
@@ -112,6 +113,43 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
         await invalidate_messages()
         for item in new_items:
             await notify_new_message(item)
+
+    # Dispatch concall extraction for concall/result_concall items
+    concall_items = [
+        i for i in new_items
+        if i.get("option") in ("concall", "result_concall") and i.get("file_url")
+    ]
+    if concall_items:
+        from worker.tasks.concall import run_concall_extraction
+        for item in concall_items:
+            run_concall_extraction.delay(
+                stock_symbol=item["symbol"],
+                pdf_url=item["file_url"],
+                exchange="NSE",
+                company_name=item.get("company_name", ""),
+                announcement_date=item.get("timestamp"),
+                message_id=item.get("id"),
+            )
+        logger.info(f"Dispatched {len(concall_items)} NSE concall extractions")
+
+    # Dispatch announcement insight extraction for investor_presentation + monthly_business_update
+    ann_insight_items = [
+        i for i in new_items
+        if i.get("option") in ("investor_presentation", "monthly_business_update") and i.get("file_url")
+    ]
+    if ann_insight_items:
+        from worker.tasks.announcement_insight import run_announcement_extraction
+        for item in ann_insight_items:
+            run_announcement_extraction.delay(
+                stock_symbol=item["symbol"],
+                pdf_url=item["file_url"],
+                announcement_type=item["option"],
+                exchange="NSE",
+                company_name=item.get("company_name", ""),
+                announcement_date=item.get("timestamp"),
+                message_id=item.get("id"),
+            )
+        logger.info(f"Dispatched {len(ann_insight_items)} NSE announcement insight extractions")
 
     logger.info(f"NSE: processed {len(announcements)}, new: {len(new_items)}")
     return new_items

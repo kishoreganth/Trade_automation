@@ -21,6 +21,7 @@ import {
   LogOut,
   User,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMessageStats } from "@/hooks/useMessages";
@@ -39,6 +40,7 @@ const feedItems = [
 const analyticsItems = [
   { label: "PE Pending", href: "/analytics/pe-pending", icon: Clock },
   { label: "PE Reviewed", href: "/analytics/pe-reviewed", icon: CheckCircle2 },
+  { label: "AI Insights", href: "/analytics/ai-insights", icon: Sparkles },
   { label: "Analytics Report", href: "/analytics/report", icon: BarChartBig },
 ];
 

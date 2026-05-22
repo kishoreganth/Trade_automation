@@ -174,6 +174,13 @@ async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:
             ann_time = _parse_bse_datetime(news_dt)
             option = classify_announcement(subject)
 
+            # Dedup: skip if this exact message already exists
+            existing_msg = await db.execute(text(
+                "SELECT id FROM messages WHERE symbol = :sym AND file_url = :url LIMIT 1"
+            ), {"sym": symbol, "url": pdf_url})
+            if existing_msg.first() is not None:
+                continue
+
             result = await db.execute(text("""
                 INSERT INTO messages (chat_id, message, timestamp, symbol, company_name, description, file_url, option, exchange)
                 VALUES (:cid, :msg, :ts, :sym, :cn, :desc, :url, :opt, 'BSE')
@@ -199,6 +206,43 @@ async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:
         await invalidate_messages()
         for item in new_items:
             await notify_new_message(item)
+
+    # Dispatch concall extraction for concall/result_concall items
+    concall_items = [
+        i for i in new_items
+        if i.get("option") in ("concall", "result_concall") and i.get("file_url")
+    ]
+    if concall_items:
+        from worker.tasks.concall import run_concall_extraction
+        for item in concall_items:
+            run_concall_extraction.delay(
+                stock_symbol=item["symbol"],
+                pdf_url=item["file_url"],
+                exchange=item.get("exchange", "BSE"),
+                company_name=item.get("company_name", ""),
+                announcement_date=item.get("timestamp"),
+                message_id=item.get("id"),
+            )
+        logger.info(f"Dispatched {len(concall_items)} concall extractions")
+
+    # Dispatch announcement insight extraction for investor_presentation + monthly_business_update
+    ann_insight_items = [
+        i for i in new_items
+        if i.get("option") in ("investor_presentation", "monthly_business_update") and i.get("file_url")
+    ]
+    if ann_insight_items:
+        from worker.tasks.announcement_insight import run_announcement_extraction
+        for item in ann_insight_items:
+            run_announcement_extraction.delay(
+                stock_symbol=item["symbol"],
+                pdf_url=item["file_url"],
+                announcement_type=item["option"],
+                exchange=item.get("exchange", "BSE"),
+                company_name=item.get("company_name", ""),
+                announcement_date=item.get("timestamp"),
+                message_id=item.get("id"),
+            )
+        logger.info(f"Dispatched {len(ann_insight_items)} announcement insight extractions")
 
     logger.info(f"BSE all: processed {len(bse_data)}, new: {len(new_items)}")
     return new_items

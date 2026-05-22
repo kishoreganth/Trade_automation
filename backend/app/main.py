@@ -14,7 +14,7 @@ from .config import get_settings
 from .database import engine
 from .websocket import ws_manager, websocket_endpoint
 from .cache import get_redis
-from .routers import messages, pe_analysis, jobs, auth, stocks, config, orders
+from .routers import messages, pe_analysis, jobs, auth, stocks, config, orders, concall, insights
 from .middleware.metrics import router as metrics_router, MetricsMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.logging_mw import RequestLoggingMiddleware, setup_logging
@@ -44,6 +44,8 @@ app.include_router(jobs.router)
 app.include_router(stocks.router)
 app.include_router(config.router)
 app.include_router(orders.router)
+app.include_router(concall.router)
+app.include_router(insights.router)
 app.include_router(metrics_router)
 
 # Middleware stack (executed bottom-to-top: CORS → Security → Logging → Metrics → RateLimit)

@@ -48,6 +48,8 @@ app.conf.update(
         "worker.tasks.announcements.*": {"queue": "io_queue"},
         "worker.tasks.quotes.*": {"queue": "io_queue"},
         "worker.tasks.extraction.*": {"queue": "cpu_queue"},
+        "worker.tasks.concall.*": {"queue": "cpu_queue"},
+        "worker.tasks.announcement_insight.*": {"queue": "cpu_queue"},
     },
 
     # Default queue for unrouted tasks
@@ -68,6 +70,8 @@ app.conf.update(
 app.conf.include = [
     "worker.tasks.announcements",
     "worker.tasks.extraction",
+    "worker.tasks.concall",
+    "worker.tasks.announcement_insight",
     "worker.tasks.quotes",
 ]
 
