@@ -188,8 +188,16 @@ class WebSocketManager:
 
     async def _listen_redis(self):
         """Subscribe to Redis PubSub and forward events to local connections."""
+        pubsub = None
         while True:
             try:
+                if pubsub:
+                    try:
+                        await pubsub.unsubscribe()
+                        await pubsub.aclose()
+                    except Exception:
+                        pass
+                    pubsub = None
                 pubsub = await subscribe_ws_events()
                 async for raw_msg in pubsub.listen():
                     if raw_msg["type"] != "message":
@@ -200,10 +208,16 @@ class WebSocketManager:
                     except (json.JSONDecodeError, TypeError):
                         continue
             except asyncio.CancelledError:
+                if pubsub:
+                    try:
+                        await pubsub.unsubscribe()
+                        await pubsub.aclose()
+                    except Exception:
+                        pass
                 break
             except Exception as e:
                 logger.error(f"PubSub listener error: {e}")
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
 
 
 # Singleton
