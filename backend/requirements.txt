@@ -24,6 +24,8 @@ celery[redis]
 aiohttp
 aiofiles
 httpx
+nse[server]
+bse
 pandas
 python-dotenv
 python-multipart

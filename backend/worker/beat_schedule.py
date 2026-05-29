@@ -3,6 +3,7 @@ Celery Beat schedule — replaces all asyncio.create_task() periodic loops.
 
 Current in-process schedule:
   Job 1: NSE equities       — every 60s, offset 0s
+  Job 5: NSE SME            — every 60s, offset 10s
   Job 2: BSE all            — every 60s, offset 20s
   Job 3: BSE results        — every 60s, offset 40s
   Job 4: BSE board meeting  — every 60s, offset 50s
@@ -19,6 +20,11 @@ BEAT_SCHEDULE = {
         "task": "worker.tasks.announcements.fetch_nse_equities",
         "schedule": 60.0,
         "options": {"queue": "io_queue", "countdown": 0},
+    },
+    "fetch-nse-sme": {
+        "task": "worker.tasks.announcements.fetch_nse_sme",
+        "schedule": 60.0,
+        "options": {"queue": "io_queue", "countdown": 10},
     },
     "fetch-bse-all": {
         "task": "worker.tasks.announcements.fetch_bse_all_announcements",

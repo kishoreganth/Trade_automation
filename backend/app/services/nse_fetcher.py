@@ -1,13 +1,16 @@
 """
 NSE corporate announcements fetcher.
-Extracted from: nse_url_test.py (run_periodic_task_equities, CA_equities flow)
+Uses NseIndiaApi library (nse[server]) with from_date/to_date for full-day coverage.
+Supports equities and SME segments with subject-based financial result filtering.
 """
 
+import asyncio
 import logging
+import tempfile
 from typing import List, Dict
 from datetime import datetime, timezone, timedelta
 
-import httpx
+from nse import NSE
 from sqlalchemy import text
 
 from ..database import get_db_session
@@ -17,29 +20,96 @@ from .bse_fetcher import classify_announcement
 
 logger = logging.getLogger(__name__)
 
-NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
-NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json",
-}
+IST = timezone(timedelta(hours=5, minutes=30))
+
+_NSE_LIB_DOWNLOAD_DIR = tempfile.mkdtemp(prefix="nse_lib_")
+
+NSE_PDF_BASE = "https://www.nseindia.com/corporate/content/"
+
+# ---------------------------------------------------------------------------
+# Subject-based financial result detection
+# ---------------------------------------------------------------------------
+
+_EXCLUDE_SUBJECTS = (
+    "clarification",
+    "reply to clarification",
+    "reasons for delayed",
+    "non-submission",
+)
+
+
+def _is_financial_result(ann: dict) -> bool:
+    """
+    Determine if an NSE announcement is a financial result filing.
+
+    Level 1 -- direct subject match (catches all NSE dropdown subjects):
+      Equities: "Audited Financial Results", "Financial Results",
+                "Financial Results Updates", "Financial Results update",
+                "Financial Results/Other business matters",
+                "Option to submit Standalone/Consolidated Financial Results"
+      SME:      "Financial Result Updates", "Financial Results Updates",
+                "Financial Results/Other business matters",
+                "Option to submit Standalone/Consolidated Financial Results"
+
+    Level 2 -- board meeting fallback:
+      desc == "Outcome of Board Meeting" AND attchmntText contains
+      "financial result" (catches results filed under board outcomes)
+    """
+    desc = ann.get("desc", "").lower()
+    detail = ann.get("attchmntText", "").lower()
+
+    if any(ex in desc for ex in _EXCLUDE_SUBJECTS):
+        return False
+
+    if "intimation" in desc:
+        return False
+
+    if "financial result" in desc:
+        return True
+
+    if "outcome of board meeting" in desc:
+        if "financial result" in detail:
+            return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Fetch
+# ---------------------------------------------------------------------------
+
+def _fetch_via_nse_lib(segment: str) -> List[Dict]:
+    """
+    Sync helper -- fetches ALL announcements for today using the nse library.
+    Uses from_date/to_date to get the full day (not just latest 20).
+    """
+    today = datetime.now()
+    try:
+        with NSE(_NSE_LIB_DOWNLOAD_DIR, server=True) as nse:
+            data = nse.announcements(
+                index=segment,
+                from_date=today,
+                to_date=today,
+            )
+            rows = data if isinstance(data, list) else []
+            logger.info(f"NSE lib ({segment}): fetched {len(rows)} announcements for today")
+            return rows
+    except Exception as e:
+        logger.error(f"NSE lib fetch failed ({segment}): {type(e).__name__}: {e}")
+        return []
 
 
 async def fetch_nse_announcements(segment: str = "equities") -> List[Dict]:
     """
-    Fetch latest corporate announcements from NSE API.
+    Fetch all corporate announcements for today from NSE API.
     Returns list of raw announcement dicts.
     """
-    params = {"index": segment}
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(NSE_ANNOUNCEMENTS_URL, params=params, headers=NSE_HEADERS)
-            resp.raise_for_status()
-            data = resp.json()
-            return data if isinstance(data, list) else []
-    except Exception as e:
-        logger.error(f"NSE fetch failed ({segment}): {e}")
-        return []
+    return await asyncio.to_thread(_fetch_via_nse_lib, segment)
 
+
+# ---------------------------------------------------------------------------
+# Process -- feed + notifications (shared by equities and SME)
+# ---------------------------------------------------------------------------
 
 async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
     """
@@ -65,7 +135,6 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
             if not symbol:
                 continue
 
-            # Dedup: check if this exact announcement already exists
             existing = await db.execute(text(
                 "SELECT id FROM messages WHERE symbol = :s AND description = :d AND file_url = :f LIMIT 1"
             ), {"s": symbol, "d": description, "f": file_url})
@@ -73,7 +142,6 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
             if existing.fetchone():
                 continue
 
-            # Save to messages table — use actual announcement time from NSE
             ann_time = _parse_nse_datetime(ann.get("an_dt") or ann.get("dt") or "")
             option = classify_announcement(description)
             result = await db.execute(text("""
@@ -114,7 +182,6 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
         for item in new_items:
             await notify_new_message(item)
 
-    # Dispatch concall extraction for concall/result_concall items
     concall_items = [
         i for i in new_items
         if i.get("option") in ("concall", "result_concall") and i.get("file_url")
@@ -132,7 +199,6 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
             )
         logger.info(f"Dispatched {len(concall_items)} NSE concall extractions")
 
-    # Dispatch announcement insight extraction for investor_presentation + monthly_business_update
     ann_insight_items = [
         i for i in new_items
         if i.get("option") in ("investor_presentation", "monthly_business_update") and i.get("file_url")
@@ -155,24 +221,40 @@ async def process_nse_announcements(announcements: List[Dict]) -> List[Dict]:
     return new_items
 
 
-IST = timezone(timedelta(hours=5, minutes=30))
+# ---------------------------------------------------------------------------
+# Extraction filter -- Equities
+# ---------------------------------------------------------------------------
 
-_NSE_RESULT_KEYWORDS = (
-    "financial result",
-    "quarterly result",
-    "audited result",
-    "unaudited result",
-    "outcome of board meeting",
-)
-
-NSE_PDF_BASE = "https://www.nseindia.com/corporate/content/"
-
-
-async def process_nse_for_extraction(announcements: List[Dict]) -> List[Dict]:
+async def process_nse_eq_for_extraction(announcements: List[Dict]) -> List[Dict]:
     """
-    Filter NSE announcements for quarterly results and prepare them for extraction.
-    - Keyword filter on desc field
-    - Excludes 'intimation' notices
+    Filter NSE equities announcements for quarterly results and prepare for extraction.
+    Uses _is_financial_result() for subject-based + board-meeting-fallback filtering.
+    """
+    return await _process_nse_for_extraction(announcements, segment_label="equities")
+
+
+# ---------------------------------------------------------------------------
+# Extraction filter -- SME
+# ---------------------------------------------------------------------------
+
+async def process_nse_sme_for_extraction(announcements: List[Dict]) -> List[Dict]:
+    """
+    Filter NSE SME announcements for quarterly results and prepare for extraction.
+    Same filtering logic as equities via _is_financial_result().
+    """
+    return await _process_nse_for_extraction(announcements, segment_label="sme")
+
+
+# ---------------------------------------------------------------------------
+# Shared extraction filter implementation
+# ---------------------------------------------------------------------------
+
+async def _process_nse_for_extraction(
+    announcements: List[Dict], segment_label: str = "equities"
+) -> List[Dict]:
+    """
+    Shared implementation for EQ and SME extraction filtering.
+    - Uses _is_financial_result() for subject + board-meeting-fallback check
     - Deduplicates against bse_announcements_log (reused for NSE)
     - Inserts pending placeholder in quarterly_results
     - Returns items ready for extraction dispatch
@@ -193,23 +275,18 @@ async def process_nse_for_extraction(announcements: List[Dict]) -> List[Dict]:
             if not symbol or not pdf_file:
                 continue
 
-            desc_lower = description.lower()
-
-            # Keyword filter: must contain at least one result keyword
-            if not any(kw in desc_lower for kw in _NSE_RESULT_KEYWORDS):
+            if not _is_financial_result(ann):
                 continue
 
-            # Exclude intimation notices (advance meeting notices, no actual results)
-            if "intimation" in desc_lower:
-                continue
-
-            # Build full PDF URL if it's a relative path
             if pdf_file.startswith("http"):
                 pdf_url = pdf_file
             else:
-                pdf_url = f"https://www.nseindia.com{pdf_file}" if pdf_file.startswith("/") else f"{NSE_PDF_BASE}{pdf_file}"
+                pdf_url = (
+                    f"https://www.nseindia.com{pdf_file}"
+                    if pdf_file.startswith("/")
+                    else f"{NSE_PDF_BASE}{pdf_file}"
+                )
 
-            # Dedup via bse_announcements_log (reused for NSE)
             result = await db.execute(text("""
                 INSERT INTO bse_announcements_log
                 (scrip_code, company_name, announcement_type, announcement_date, subject, pdf_url, exchange, processed, created_at)
@@ -223,9 +300,8 @@ async def process_nse_for_extraction(announcements: List[Dict]) -> List[Dict]:
             new_row = result.scalar()
 
             if new_row is None:
-                continue  # duplicate
+                continue
 
-            # Insert pending placeholder in quarterly_results
             ann_time = _parse_nse_datetime(an_dt)
             ann_time = ann_time.replace(hour=0, minute=0, second=0, microsecond=0)
             quarter, fy = _quarter_fy_for_today()
@@ -258,17 +334,24 @@ async def process_nse_for_extraction(announcements: List[Dict]) -> List[Dict]:
     if extraction_items:
         await invalidate_pe_analysis()
 
-    logger.info(f"NSE extraction filter: {len(announcements)} checked, {len(extraction_items)} new for extraction")
+    logger.info(
+        f"NSE extraction filter ({segment_label}): "
+        f"{len(announcements)} checked, {len(extraction_items)} new for extraction"
+    )
     return extraction_items
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _quarter_fy_for_today() -> tuple[str, str]:
     """Best-guess (quarter, financial_year) for current reporting cycle.
     Indian results are reported AFTER quarter end:
-      Apr–Jun  -> Q4 of (y-1)-(y)
-      Jul–Sep  -> Q1 of (y)-(y+1)
-      Oct–Dec  -> Q2 of (y)-(y+1)
-      Jan–Mar  -> Q3 of (y-1)-(y)"""
+      Apr-Jun  -> Q4 of (y-1)-(y)
+      Jul-Sep  -> Q1 of (y)-(y+1)
+      Oct-Dec  -> Q2 of (y)-(y+1)
+      Jan-Mar  -> Q3 of (y-1)-(y)"""
     now = datetime.now(IST)
     y, m = now.year, now.month
     if 4 <= m <= 6:

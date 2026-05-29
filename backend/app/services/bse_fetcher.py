@@ -4,11 +4,15 @@ Extracted from: nse_url_test.py (fetch_bse_announcements, process_bse_ca_data,
     process_bse_results_data, process_bse_board_meeting_data)
 """
 
+import asyncio
 import logging
+import tempfile
 from typing import List, Dict
 from datetime import datetime, timezone, timedelta
 
 import httpx
+from bse import BSE
+from bse.constants import CATEGORY
 from sqlalchemy import text
 
 from ..database import get_db_session
@@ -81,21 +85,99 @@ def classify_announcement(subject: str) -> str:
     return "all"
 
 
+_BSE_LIB_DOWNLOAD_DIR = tempfile.mkdtemp(prefix="bse_lib_")
+
+_BSE_CATEGORY_MAP = {
+    "result": CATEGORY.RESULT,
+    "board_meeting": CATEGORY.BOARD_MEETING,
+}
+
+
+_MAX_BSE_PAGES_SAFETY = 200  # ~10,000 rows — hard ceiling to prevent infinite loops
+
+
+def _fetch_via_bse_lib(category: str) -> List[Dict]:
+    """
+    Sync helper — fetches ALL announcements for a category using the `bse`
+    Python library.  Paginates until every row reported by ROWCNT is collected.
+    """
+    bse_category = _BSE_CATEGORY_MAP.get(category)
+    if bse_category is None:
+        raise ValueError(f"Unsupported bse-lib category: {category}")
+
+    today = datetime.now()
+    all_rows: List[Dict] = []
+
+    try:
+        with BSE(_BSE_LIB_DOWNLOAD_DIR) as bse_client:
+            total_count = 0
+            page_no = 1
+
+            while page_no <= _MAX_BSE_PAGES_SAFETY:
+                res = bse_client.announcements(
+                    page_no=page_no,
+                    from_date=today,
+                    to_date=today,
+                    segment="equity",
+                    category=bse_category,
+                )
+                table = res.get("Table", [])
+                if not table:
+                    break
+
+                if page_no == 1:
+                    table1 = res.get("Table1", [])
+                    if table1:
+                        total_count = table1[0].get("ROWCNT", 0)
+                    logger.info(
+                        f"BSE lib ({category}): {total_count} total announcements reported"
+                    )
+
+                all_rows.extend(table)
+
+                if total_count and len(all_rows) >= total_count:
+                    break
+                if len(table) < 50:
+                    break
+
+                page_no += 1
+    except Exception as e:
+        logger.error(
+            f"BSE lib fetch failed ({category}, page {page_no}): "
+            f"{type(e).__name__}: {e or '<no message>'}"
+        )
+
+    logger.info(f"BSE lib ({category}): fetched {len(all_rows)}/{total_count} rows across {page_no} pages")
+    return all_rows
+
+
 async def fetch_bse_announcements(category: str = "all", max_pages: int = 10) -> List[Dict]:
     """
-    Fetch ALL BSE corporate announcements by category (paginated).
+    Fetch BSE corporate announcements by category (paginated).
     category: 'all', 'result', 'board_meeting'
+
+    - 'result' and 'board_meeting' use the `bse` Python library — fetches
+      ALL pages (driven by ROWCNT, no artificial cap).
+    - 'all' uses direct httpx calls to the BSE API (capped by max_pages).
     """
+    if category in _BSE_CATEGORY_MAP:
+        return await asyncio.to_thread(_fetch_via_bse_lib, category)
+
+    return await _fetch_bse_all_httpx(max_pages)
+
+
+async def _fetch_bse_all_httpx(max_pages: int = 10) -> List[Dict]:
+    """Fetch all BSE announcements via httpx (original direct-API path)."""
     today = datetime.now().strftime("%Y%m%d")
-    cat_code = _category_code(category)
     all_rows: List[Dict] = []
+    page_no = 1
 
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             for page_no in range(1, max_pages + 1):
                 params = {
                     "pageno": str(page_no),
-                    "strCat": cat_code,
+                    "strCat": "-1",
                     "strPrevDate": today,
                     "strScrip": "",
                     "strSearch": "P",
@@ -113,21 +195,11 @@ async def fetch_bse_announcements(category: str = "all", max_pages: int = 10) ->
                     break
     except Exception as e:
         logger.error(
-            f"BSE fetch failed ({category}, page {page_no}): "
+            f"BSE httpx fetch failed (all, page {page_no}): "
             f"{type(e).__name__}: {e or '<no message>'}"
         )
 
     return all_rows
-
-
-def _category_code(category: str) -> str:
-    """Map friendly category name to BSE API code."""
-    mapping = {
-        "all": "-1",
-        "result": "Result",
-        "board_meeting": "Board Meeting",
-    }
-    return mapping.get(category, "-1")
 
 
 async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:

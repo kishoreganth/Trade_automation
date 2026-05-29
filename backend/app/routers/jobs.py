@@ -10,6 +10,7 @@ from ..cache import publish_ws_event
 from worker.tasks.quotes import fetch_quotes_manual
 from worker.tasks.announcements import (
     fetch_nse_equities,
+    fetch_nse_sme,
     fetch_bse_all_announcements,
     fetch_bse_results,
 )
@@ -28,6 +29,9 @@ async def start_job(job_type: str):
 
     elif job_type == "fetch_nse":
         fetch_nse_equities.delay()
+
+    elif job_type == "fetch_nse_sme":
+        fetch_nse_sme.delay()
 
     elif job_type == "fetch_bse":
         fetch_bse_all_announcements.delay()

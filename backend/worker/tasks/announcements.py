@@ -13,7 +13,8 @@ from app.cache import init_redis
 from app.services.nse_fetcher import (
     fetch_nse_announcements,
     process_nse_announcements,
-    process_nse_for_extraction,
+    process_nse_eq_for_extraction,
+    process_nse_sme_for_extraction,
 )
 from app.services.bse_fetcher import (
     fetch_bse_announcements,
@@ -71,8 +72,49 @@ async def _do_fetch_nse_equities():
     announcements = await fetch_nse_announcements(segment="equities")
     new_items = await process_nse_announcements(announcements)
 
-    # Dispatch extraction for NSE quarterly results (keyword-filtered)
-    extraction_items = await process_nse_for_extraction(announcements)
+    # Dispatch extraction for NSE equities quarterly results (subject-filtered)
+    extraction_items = await process_nse_eq_for_extraction(announcements)
+    for item in extraction_items:
+        run_quarterly_extraction.delay(
+            stock_symbol=item["symbol"],
+            pdf_url=item["pdf_url"],
+            exchange="NSE",
+            company_name=item.get("company_name", ""),
+            announcement_date=item.get("announcement_date"),
+        )
+
+    return len(new_items)
+
+
+@shared_task(
+    name="worker.tasks.announcements.fetch_nse_sme",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
+    acks_late=True,
+)
+def fetch_nse_sme(self):
+    """
+    Job 5: Fetch NSE corporate announcements (SME segment).
+    """
+    try:
+        logger.info("Starting NSE SME fetch...")
+        _run_async(_do_fetch_nse_sme())
+        logger.info("NSE SME fetch completed")
+    except Exception as exc:
+        logger.error(f"NSE SME fetch failed: {exc}")
+        raise self.retry(exc=exc)
+
+
+async def _do_fetch_nse_sme():
+    """Async implementation for NSE SME announcements."""
+    await _ensure_redis()
+
+    announcements = await fetch_nse_announcements(segment="sme")
+    new_items = await process_nse_announcements(announcements)
+
+    # Dispatch extraction for NSE SME quarterly results (subject-filtered)
+    extraction_items = await process_nse_sme_for_extraction(announcements)
     for item in extraction_items:
         run_quarterly_extraction.delay(
             stock_symbol=item["symbol"],

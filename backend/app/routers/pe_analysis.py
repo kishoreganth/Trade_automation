@@ -924,7 +924,15 @@ async def update_pe_analysis(
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
+    # When a valuation is being assigned to a failed/error/pending row,
+    # auto-promote extraction_status to 'completed' so it can move to PE Reviewed.
+    promote_status = False
+    if "valuation" in updates and updates["valuation"]:
+        promote_status = True
+
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    if promote_status:
+        set_clause += ", extraction_status = CASE WHEN extraction_status IN ('failed', 'error', 'pending') THEN 'completed' ELSE extraction_status END"
     updates["sym"] = symbol
 
     if row_id is not None:
