@@ -32,11 +32,9 @@ async def load_gsheet_stocks():
     Load stock list from Google Sheet.
     Returns pandas DataFrame with columns: SYMBOL, EXCHANGE, etc.
     """
-    # gsheet_stock_get is a legacy module mounted at runtime and may
-    # initialize Google credentials on import — keep lazy so API startup
-    # doesn't depend on it.
+    # gsheet_stock_get is now a sibling module in app/services/
     try:
-        from gsheet_stock_get import GSheetStockClient
+        from .gsheet_stock_get import GSheetStockClient
         client = GSheetStockClient()
         df = await asyncio.to_thread(client.get_stocks_df)
         return df
@@ -123,7 +121,7 @@ async def update_gsheet_with_prices(stocks_df, quotes: Dict[str, float]):
     """Update Google Sheet with fetched prices."""
     try:
         # Lazy: see note in load_gsheet_stocks().
-        from gsheet_stock_get import GSheetStockClient
+        from .gsheet_stock_get import GSheetStockClient
         client = GSheetStockClient()
 
         for symbol, price in quotes.items():

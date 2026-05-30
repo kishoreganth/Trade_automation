@@ -225,10 +225,19 @@ The document may have TWO tables: Standalone and Consolidated (check the title o
 
 **TABLE STRUCTURE:**
 Each table typically has 4-6+ data columns:
-- 3 columns under "Quarter ended" header (individual quarterly periods)
-- 0-2 columns under "Six Month ended" / "Nine Month ended" header (cumulative periods — NOT always present)
+- 3 columns under "Quarter ended" / "3 Months Ended" header (individual quarterly periods)
+- 0-2 columns under "Six Month ended" / "Nine Month ended" / "Half Year Ended" header (cumulative periods — NOT always present)
 - 1 column under "Year Ended" header (full year annual data)
 You MUST extract ALL columns as separate entries — quarterly, cumulative, AND annual.
+
+**HALF-YEAR REPORTS — CRITICAL:**
+Some companies (especially smaller ones) report half-yearly instead of quarterly.
+If the table header says "Half Year Ended" or "Half Year" or "6 Months Ended":
+- ALL "Half Year Ended" columns are cumulative (period_type = "six_month"), NOT quarterly.
+- "Half Year Ended 30-Sep-20XX" → period_type = "six_month", quarter = "Q2"
+- "Half Year Ended 31-Mar-20XX" → period_type = "six_month", quarter = "Q4"
+- Do NOT treat any half-year column as period_type = "quarter".
+- For half-year reports, there will be NO quarterly entries — that is correct.
 
 **ROW STRUCTURE (top to bottom in each table):**
 Row 1: "Revenue from Operations" — this is the FIRST income row
@@ -241,16 +250,18 @@ Then expense rows, then profit rows, then tax, then EPS at bottom.
 
 **face_value:** Read from the row label text "Face Value Rs. X/- Each".
 
-**Quarter & Financial Year mapping (Indian FY):**
-- June ending → Q1, FY = next March's year
-- September ending → Q2, FY = next March's year
-- December ending → Q3, FY = next March's year
-- March ending → Q4, FY = same year
+**Quarter & Financial Year mapping (Indian FY — April to March):**
+Indian financial year runs April 1 to March 31. FY 2025-26 = April 2025 to March 2026.
+- Period ending June (30.06.20XX) → Q1 of FY ending next March
+- Period ending September (30.09.20XX) → Q2 of FY ending next March
+- Period ending December (31.12.20XX) → Q3 of FY ending next March
+- Period ending March (31.03.20XX) → Q4 of FY ending same March
 - Year Ended column → period_type = "annual", quarter = "FY"
+Examples: 30.06.2025 → Q1, FY="2026". 31.12.2025 → Q3, FY="2026". 31.03.2026 → Q4, FY="2026".
 
 **period_type mapping for cumulative columns:**
-- "Six Month ended" column → period_type = "six_month", quarter = same as matching quarterly date (Q2)
-- "Nine Month ended" column → period_type = "nine_month", quarter = same as matching quarterly date (Q3)
+- "Six Month ended" / "Half Year Ended" column → period_type = "six_month", quarter = quarter matching the end-month (Sep→Q2, Mar→Q4)
+- "Nine Month ended" column → period_type = "nine_month", quarter = quarter matching the end-month (Dec→Q3)
 - These are FULL entries with ALL rows extracted (revenue, expenses, PAT, EPS, etc.), same schema as quarterly entries.
 
 IMPORTANT: Return ONLY raw JSON. No markdown, no code blocks.
@@ -287,9 +298,10 @@ If a page is NOT a financial results table, IGNORE it completely.
 }
 
 Rules:
-- Extract EVERY data column as a separate entry: quarterly columns + cumulative columns (six_month/nine_month) + annual column.
+- Extract EVERY data column as a separate entry: quarterly columns + cumulative columns (six_month/nine_month/half_year) + annual column.
 - A Q3 PDF typically has: 3 quarterly + 2 nine_month + 1 annual = 6 entries per table.
 - A Q2 PDF typically has: 3 quarterly + 2 six_month + 1 annual = 6 entries per table.
+- A half-year PDF typically has: 0 quarterly + 2-3 six_month + 1-2 annual entries per table.
 - null for dash (-) or blank cells. Never use 0 or 0.0 for dashes.
 - Return numbers exactly as printed in the document."""
 
@@ -297,11 +309,12 @@ Rules:
 _STEP_BY_STEP = (
     "\nSTEP-BY-STEP EXTRACTION:\n"
     "1. Each image = one table (Standalone or Consolidated). Identify which from the title.\n"
-    "2. Locate ALL data columns: quarterly + cumulative (Six/Nine Month ended) + annual (Year Ended).\n"
-    "3. For EACH column (including cumulative), extract ALL rows as a full entry with the correct period_type.\n"
-    "4. Cumulative columns get period_type 'six_month' or 'nine_month', with quarter matching the date.\n"
-    "5. Do NOT skip any column. Do NOT skip the Year Ended column.\n"
-    "6. VERIFY per column: Total Income ≈ Revenue + Other Income."
+    "2. CHECK if the header says 'Half Year Ended' / 'Half Year' — if yes, ALL data columns are period_type='six_month', NOT 'quarter'.\n"
+    "3. Locate ALL data columns: quarterly (3 Months Ended) + cumulative (Six/Nine Month/Half Year ended) + annual (Year Ended).\n"
+    "4. For EACH column (including cumulative), extract ALL rows as a full entry with the correct period_type.\n"
+    "5. Cumulative columns get period_type 'six_month' or 'nine_month', with quarter matching the end-month.\n"
+    "6. Do NOT skip any column. Do NOT skip the Year Ended column.\n"
+    "7. VERIFY per column: Total Income ≈ Revenue + Other Income."
 )
 
 
@@ -379,7 +392,6 @@ def _derive_quarter(period_ended: Optional[str], financial_year: Optional[str]) 
     for key, q in month_name_map.items():
         if key in pe_lower:
             return q
-    # Handle numeric dates like 31-03-2026, 2026-03-31, 31/03/2026
     m = re.search(r'(\d{1,4})[-/.](\d{1,2})[-/.](\d{2,4})', period_ended)
     if m:
         parts = [int(m.group(i)) for i in (1, 2, 3)]
@@ -393,6 +405,105 @@ def _derive_quarter(period_ended: Optional[str], financial_year: Optional[str]) 
         if mm in month_q:
             return month_q[mm]
     return None
+
+
+_QUARTER_ORDER = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
+
+
+def _fy_sort_key(fy: str) -> int:
+    """Convert FY string to a comparable integer (ending calendar year).
+    '2025-26' → 2026, '2024-25' → 2025."""
+    if not fy:
+        return 0
+    m = re.match(r"(\d{4})-(\d{2})$", fy)
+    if m:
+        return 2000 + int(m.group(2)) if int(m.group(2)) < 100 else int(m.group(2))
+    m = re.match(r"(\d{4})$", fy)
+    if m:
+        return int(m.group(1))
+    return 0
+
+
+def _quarter_fy_from_announcement_date(ann_dt: Optional[datetime]) -> tuple[Optional[str], Optional[str]]:
+    """Derive expected (quarter, financial_year) from announcement date.
+    Indian results are announced AFTER the quarter ends:
+      Apr-Jun  → Q4 of FY (y-1)-(y)   (Jan-Mar results)
+      Jul-Sep  → Q1 of FY (y)-(y+1)   (Apr-Jun results)
+      Oct-Dec  → Q2 of FY (y)-(y+1)   (Jul-Sep results)
+      Jan-Mar  → Q3 of FY (y-1)-(y)   (Oct-Dec results)
+    """
+    if ann_dt is None:
+        return None, None
+    y, m = ann_dt.year, ann_dt.month
+    if 4 <= m <= 6:
+        return "Q4", f"{y - 1}-{str(y)[-2:]}"
+    if 7 <= m <= 9:
+        return "Q1", f"{y}-{str(y + 1)[-2:]}"
+    if 10 <= m <= 12:
+        return "Q2", f"{y}-{str(y + 1)[-2:]}"
+    return "Q3", f"{y - 1}-{str(y)[-2:]}"
+
+
+def _select_current_quarter(
+    period_map: Dict,
+    ann_dt: Optional[datetime],
+) -> Dict:
+    """Pick the single current-quarter entry from a period_map that may
+    contain multiple (quarter, fy) entries extracted from a multi-column PDF.
+
+    Strategy (Indian FY calendar):
+    1. Filter to quarterly entries only (Q1-Q4), exclude FY/annual.
+    2. Derive the expected quarter from announcement date.
+    3. If the expected (quarter, fy) exists in the map, use it.
+    4. Otherwise fall back to the entry with the latest period-ended date.
+    5. If the map only has cumulative/annual entries (half-year reports),
+       synthesise a quarterly entry from the best six_month data.
+
+    Returns a period_map with exactly 1 entry.
+    """
+    quarterly_entries = {
+        (q, fy): data for (q, fy), data in period_map.items()
+        if q in _QUARTER_ORDER
+    }
+
+    if not quarterly_entries:
+        return period_map
+
+    expected_q, expected_fy = _quarter_fy_from_announcement_date(ann_dt)
+
+    if expected_q and expected_fy and (expected_q, expected_fy) in quarterly_entries:
+        chosen = (expected_q, expected_fy)
+        logger.info(
+            f"Current quarter: {chosen[0]} {chosen[1]} "
+            f"(matched announcement date)"
+        )
+        return {chosen: quarterly_entries[chosen]}
+
+    def _sort_key(item):
+        (q, fy), data = item
+        fy_rank = _fy_sort_key(fy)
+        q_rank = _QUARTER_ORDER.get(q, 0)
+        pe_date = _parse_period_date(data.get("period_ended", ""))
+        return (fy_rank, q_rank, pe_date)
+
+    chosen_key = max(quarterly_entries.keys(), key=lambda k: _sort_key((k, quarterly_entries[k])))
+
+    if expected_q and expected_fy:
+        expected_rank = (_fy_sort_key(expected_fy), _QUARTER_ORDER.get(expected_q, 0))
+        chosen_rank = (_fy_sort_key(chosen_key[1]), _QUARTER_ORDER.get(chosen_key[0], 0))
+        gap = (expected_rank[0] * 4 + expected_rank[1]) - (chosen_rank[0] * 4 + chosen_rank[1])
+        if gap >= 2:
+            logger.warning(
+                f"Quarter mismatch: AI extracted {chosen_key[0]} {chosen_key[1]} "
+                f"but announcement date suggests {expected_q} {expected_fy} "
+                f"(gap={gap} quarters). Using AI extraction but flagging."
+            )
+
+    logger.info(
+        f"Current quarter: {chosen_key[0]} {chosen_key[1]} "
+        f"(latest period by FY calendar)"
+    )
+    return {chosen_key: quarterly_entries[chosen_key]}
 
 
 def _parse_period_date(column_header: str) -> datetime:
@@ -414,8 +525,9 @@ def _parse_period_date(column_header: str) -> datetime:
 
 
 def _calculate_full_year_eps(periods: List[Dict], eps_key: str = "eps_basic") -> Dict:
-    """Compute FY EPS estimate.
-    Q1 -> Q1*4 | Q2 -> N6*2 or (Q1+Q2)*2 | Q3 -> N9*4/3 or sum*4/n | Q4/FY -> annual."""
+    """Compute FY EPS estimate using Indian FY calendar (April-March).
+    Q1 -> Q1*4 | Q2 -> N6*2 or (Q1+Q2)*2 | Q3 -> N9*4/3 or sum*4/n | Q4/FY -> annual.
+    Also handles half-year-only reports (no quarterly periods, only six_month)."""
     if not periods:
         return {}
 
@@ -423,6 +535,19 @@ def _calculate_full_year_eps(periods: List[Dict], eps_key: str = "eps_basic") ->
     annual = [p for p in periods if p.get("period_type") == "annual"]
     nine_month = [p for p in periods if p.get("period_type") == "nine_month"]
     six_month = [p for p in periods if p.get("period_type") == "six_month"]
+
+    # Handle half-year-only reports: no quarterly data but six_month exists
+    if not quarterly and not annual and six_month:
+        six_month.sort(key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True)
+        latest_h = six_month[0]
+        h_q = (latest_h.get("quarter") or "").upper()
+        h_fy = latest_h.get("financial_year", "")
+        h_eps = latest_h.get(eps_key)
+        result = {"current_quarter": h_q, "financial_year": h_fy, "formula": None, "value": None}
+        if h_eps is not None:
+            result["formula"] = "N6*2"
+            result["value"] = round(h_eps * 2, 4)
+        return result
 
     if not quarterly and not annual:
         return {}
@@ -441,6 +566,14 @@ def _calculate_full_year_eps(periods: List[Dict], eps_key: str = "eps_basic") ->
         if nm:
             cum_eps = nm[0].get(eps_key)
     elif current_q == "Q2" and six_month:
+        sm = sorted(
+            [p for p in six_month if p.get("financial_year") == current_fy],
+            key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True,
+        )
+        if sm:
+            cum_eps = sm[0].get(eps_key)
+    elif current_q == "Q4" and six_month:
+        # For Q4, check if there's a full-year six_month (H2) that could help
         sm = sorted(
             [p for p in six_month if p.get("financial_year") == current_fy],
             key=lambda p: _parse_period_date(p.get("column_header", "")), reverse=True,
@@ -642,9 +775,10 @@ async def save_quarterly_result(
 ) -> List[int]:
     """
     Process AI response with standalone_periods + consolidated_periods arrays.
-    Builds period_map (quarterly + annual rows), injects cumulative EPS,
-    computes FY-EPS estimates, and UPSERTs one row per (quarter, financial_year).
-    Returns list of inserted/updated row IDs.
+    Uses ALL extracted periods for FY-EPS calculation, then selects ONLY the
+    current quarter (latest by Indian FY calendar) and UPSERTs exactly 1 row.
+    Handles half-year-only reports by synthesising from cumulative data.
+    Returns list of inserted/updated row IDs (always 1 element).
     """
     if not extraction_data:
         raise ValueError(f"AI extraction returned empty for {stock_symbol}")
@@ -721,35 +855,66 @@ async def save_quarterly_result(
     _add(standalone_periods, "standalone", cum_map_s)
     _add(consolidated_periods, "consolidated", cum_map_c)
 
-    for (q, fy), cum in cum_map_s.items():
-        if (q, fy) in period_map and period_map[(q, fy)]["standalone"]:
-            period_map[(q, fy)]["standalone"]["cumulative_eps_basic"] = _to_float(cum.get("eps_basic"))
-            period_map[(q, fy)]["standalone"]["cumulative_eps_diluted"] = _to_float(cum.get("eps_diluted"))
-    for (q, fy), cum in cum_map_c.items():
-        if (q, fy) in period_map and period_map[(q, fy)]["consolidated"]:
-            period_map[(q, fy)]["consolidated"]["cumulative_eps_basic"] = _to_float(cum.get("eps_basic"))
-            period_map[(q, fy)]["consolidated"]["cumulative_eps_diluted"] = _to_float(cum.get("eps_diluted"))
+    now = datetime.now(timezone.utc)
+    ann_dt = _parse_announcement_date(announcement_date) or _normalize_to_ist_midnight(now)
+
+    # --- Handle half-year-only reports (no quarterly columns) ---
+    # If the PDF is half-yearly, period_map may be empty (all columns went
+    # into cum_map as six_month). Synthesise a quarterly entry from the
+    # latest cumulative data so PE Pending still gets a row.
+    if not period_map and (cum_map_s or cum_map_c):
+        best_cum_key = None
+        for cm in (cum_map_s, cum_map_c):
+            for key in cm:
+                if best_cum_key is None:
+                    best_cum_key = key
+                else:
+                    if (_fy_sort_key(key[1]), _QUARTER_ORDER.get(key[0], 0)) > \
+                       (_fy_sort_key(best_cum_key[1]), _QUARTER_ORDER.get(best_cum_key[0], 0)):
+                        best_cum_key = key
+        if best_cum_key:
+            q, fy = best_cum_key
+            period_map[best_cum_key] = {
+                "period_ended": None,
+                "standalone": cum_map_s.get(best_cum_key),
+                "consolidated": cum_map_c.get(best_cum_key),
+            }
+            logger.info(
+                f"Half-year report for {stock_symbol}: synthesised {q} {fy} "
+                f"entry from cumulative data"
+            )
 
     if not period_map:
         raise ValueError(f"No mappable (quarter, fy) entries for {stock_symbol}")
 
-    now = datetime.now(timezone.utc)
-    ann_dt = _parse_announcement_date(announcement_date) or _normalize_to_ist_midnight(now)
+    # --- Select ONLY the current quarter (1 row per announcement) ---
+    period_map = _select_current_quarter(period_map, ann_dt)
+
+    # Attach cumulative EPS to the selected entry
+    for (q, fy) in period_map:
+        if (q, fy) in cum_map_s and period_map[(q, fy)].get("standalone"):
+            cum = cum_map_s[(q, fy)]
+            period_map[(q, fy)]["standalone"]["cumulative_eps_basic"] = _to_float(cum.get("eps_basic"))
+            period_map[(q, fy)]["standalone"]["cumulative_eps_diluted"] = _to_float(cum.get("eps_diluted"))
+        if (q, fy) in cum_map_c and period_map[(q, fy)].get("consolidated"):
+            cum = cum_map_c[(q, fy)]
+            period_map[(q, fy)]["consolidated"]["cumulative_eps_basic"] = _to_float(cum.get("eps_basic"))
+            period_map[(q, fy)]["consolidated"]["cumulative_eps_diluted"] = _to_float(cum.get("eps_diluted"))
+
     raw_ai_str = json.dumps(extraction_data)
 
     inserted_ids: List[int] = []
-    first_row = True
 
     async with get_db_session() as db:
         for (quarter, fy), data in period_map.items():
-            sd = data["standalone"]
-            cd = data["consolidated"]
+            sd = data.get("standalone")
+            cd = data.get("consolidated")
             params = {
                 "sym": stock_symbol,
                 "cn": ai_company_name,
                 "q": quarter,
                 "fy": fy,
-                "pe": data["period_ended"],
+                "pe": data.get("period_ended"),
                 "ebs": (sd or {}).get("eps_basic"),
                 "eds": (sd or {}).get("eps_diluted"),
                 "ebc": (cd or {}).get("eps_basic"),
@@ -766,7 +931,7 @@ async def save_quarterly_result(
                 "cum_ed_c": (cd or {}).get("cumulative_eps_diluted"),
                 "sd": json.dumps(sd) if sd else None,
                 "cd": json.dumps(cd) if cd else None,
-                "rar": raw_ai_str if first_row else None,
+                "rar": raw_ai_str,
                 "pdf": pdf_url,
                 "ex": exchange,
                 "units": units,
@@ -777,11 +942,8 @@ async def save_quarterly_result(
             row_id = result.scalar()
             if row_id is not None:
                 inserted_ids.append(row_id)
-            first_row = False
 
-        # Cleanup: any leftover 'pending' placeholder rows for this same PDF
-        # whose (quarter, fy, ann_date) didn't match what the AI produced are
-        # now orphans — drop them so PE Pending doesn't show stuck QUEUED rows.
+        # Cleanup orphaned 'pending' placeholder rows for this PDF
         if inserted_ids and pdf_url:
             await db.execute(text("""
                 DELETE FROM quarterly_results
@@ -794,7 +956,8 @@ async def save_quarterly_result(
         await db.commit()
 
     logger.info(
-        f"Saved {len(inserted_ids)} period rows for {stock_symbol} "
+        f"Saved 1 current-quarter row for {stock_symbol}: "
+        f"{list(period_map.keys())[0] if period_map else '?'} "
         f"(FY-EPS basic_s={fy_basic_s} diluted_c={fy_diluted_c})"
     )
 

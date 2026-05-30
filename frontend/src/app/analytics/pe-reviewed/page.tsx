@@ -10,6 +10,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { triggerJob, exportPEAnalysisCSV, fetchValuationOptions } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useFilterStore } from "@/stores/filterStore";
 
 const ALL_COLUMNS = [
   { key: "date", label: "Date" },
@@ -47,20 +48,29 @@ function getDefaultFilters() {
   return { year: String(fy), quarter, exchange: "BSE" };
 }
 
+const VIEW_KEY = "pe-reviewed";
+
 export default function PEReviewedPage() {
-  const [filters, setFilters] = useState<Record<string, string>>(getDefaultFilters);
-  const [search, setSearch] = useState("");
-  const [sectors, setSectors] = useState<string[]>([]);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [perPage, setPerPage] = useState(50);
+  const { getViewFilters, setViewFilters } = useFilterStore();
+  const saved = getViewFilters(VIEW_KEY);
+
+  const [filters, setFilters] = useState<Record<string, string>>(saved?.filters ?? getDefaultFilters);
+  const [search, setSearch] = useState(saved?.search ?? "");
+  const [sectors, setSectors] = useState<string[]>(saved?.sectors ?? []);
+  const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(saved?.dateTo ?? "");
+  const [perPage, setPerPage] = useState(saved?.perPage ?? 50);
   const [showFormulas, setShowFormulas] = useState(false);
   const [visibleCols, setVisibleCols] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
-  const [remarkFilter, setRemarkFilter] = useState("");
-  const [signalFilter, setSignalFilter] = useState("");
+  const [remarkFilter, setRemarkFilter] = useState(saved?.remarkFilter ?? "");
+  const [signalFilter, setSignalFilter] = useState(saved?.signalFilter ?? "");
   const { data: filterOptions } = usePEFilters();
   const { data: valuationOptions } = useQuery({ queryKey: ["valuation-options"], queryFn: fetchValuationOptions, staleTime: 60_000 });
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setViewFilters(VIEW_KEY, { filters, search, sectors, dateFrom, dateTo, perPage, remarkFilter, signalFilter });
+  }, [filters, search, sectors, dateFrom, dateTo, perPage, remarkFilter, signalFilter, setViewFilters]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));

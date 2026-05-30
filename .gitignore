@@ -21,7 +21,10 @@ images_test/
 downloads/
 downloads_concall/
 downloads_test/
+bse_downloads/
+nse_downloads/
 temp_uploads/
+corporate_announcements/
 
 # Exclude log files
 app.log
@@ -81,6 +84,14 @@ yarn-error.log*
 env/
 venv/
 ENV/
+
+# Celery runtime state
+celerybeat-schedule*
+backend/celerybeat-schedule*
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
 
 # Python build and distribution (root-anchored so they don't shadow frontend/src/lib)
 /build/

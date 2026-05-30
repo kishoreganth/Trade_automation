@@ -584,12 +584,38 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
   const isDirty = JSON.stringify(form) !== JSON.stringify(originalForm);
 
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showMoveToPending, setShowMoveToPending] = useState(false);
+  const [moveToPendingSaving, setMoveToPendingSaving] = useState(false);
 
   const confirmClose = () => {
     if (isDirty) {
       setShowConfirm(true);
     } else {
       onClose();
+    }
+  };
+
+  const handleRemarkChange = (v: string) => {
+    if (!v && originalForm.valuation) {
+      setShowMoveToPending(true);
+    } else {
+      set("valuation", v);
+    }
+  };
+
+  const confirmMoveToPending = async () => {
+    setMoveToPendingSaving(true);
+    try {
+      const rowId = row.id != null ? Number(row.id) : undefined;
+      await updatePEAnalysis(symbol, { valuation: "" }, rowId);
+      toast.success(`${symbol} moved to PE Pending`);
+      setShowMoveToPending(false);
+      onSaved();
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || "Failed to update");
+    } finally {
+      setMoveToPendingSaving(false);
     }
   };
 
@@ -610,7 +636,11 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
       if (form.pe) payload.pe = parseFloat(form.pe);
       if (form.recommendation) payload.recommendation = form.recommendation;
       if (form.target_price) payload.target_price = parseFloat(form.target_price);
-      if (form.valuation) payload.valuation = form.valuation;
+      if (form.valuation) {
+        payload.valuation = form.valuation;
+      } else if (originalForm.valuation && !form.valuation) {
+        payload.valuation = "";
+      }
       if (form.comments) payload.comments = form.comments;
       if (form.sector) payload.sector = form.sector;
       if (form.sub_sector) payload.sub_sector = form.sub_sector;
@@ -703,7 +733,7 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
           </DrawerField>
 
           <DrawerField label="Remark">
-            <RemarkSelect value={form.valuation} onChange={(v) => set("valuation", v)} />
+            <RemarkSelect value={form.valuation} onChange={handleRemarkChange} />
           </DrawerField>
 
           <DrawerField label="Comments">
@@ -735,6 +765,39 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
                 </button>
                 <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600">
                   Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Move to PE Pending confirm */}
+        {showMoveToPending && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[2px] rounded-lg">
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 mx-6 p-6 max-w-[320px] w-full animate-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900">Move to PE Pending?</p>
+              </div>
+              <p className="text-xs text-gray-500 mb-5 leading-relaxed">
+                Clearing the remark will move <span className="font-semibold text-gray-700">{symbol}</span> back to the PE Pending list.
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setShowMoveToPending(false)}
+                  disabled={moveToPendingSaving}
+                  className="px-3.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmMoveToPending}
+                  disabled={moveToPendingSaving}
+                  className="px-3.5 py-1.5 text-xs font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  {moveToPendingSaving ? "Moving..." : "Move to Pending"}
                 </button>
               </div>
             </div>

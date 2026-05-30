@@ -24,9 +24,10 @@ if sys.stderr.encoding != 'utf-8':
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DOTENV_PATH = PROJECT_ROOT / ".env"
 
-# Add project root to path for imports (gsheet_stock_get, place_order, neo_main_login, etc.)
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Add backend/app/services to path for imports (gsheet_stock_get, place_order, neo_main_login, neo_login)
+SERVICES_DIR = Path(__file__).resolve().parents[1] / "services"
+if str(SERVICES_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVICES_DIR))
 
 # Load .env explicitly from project root
 from dotenv import load_dotenv
