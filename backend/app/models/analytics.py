@@ -20,7 +20,7 @@ class Stock(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     nse_token = Column(Integer)
     bse_token = Column(Integer)
-    isin = Column(String, unique=True)
+    isin = Column(String, index=True)
     nse_symbol = Column(String)
     bse_scrip_code = Column(String)
     nse_series = Column(String)
