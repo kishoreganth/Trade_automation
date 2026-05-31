@@ -22,6 +22,10 @@ from worker.tasks.extraction import run_quarterly_extraction
 
 router = APIRouter(prefix="/api", tags=["pe_analysis"])
 
+# Feature flag: set to False to disable cross-exchange deduplication.
+# When False, ALL rows are shown (no hiding behind ROW_NUMBER).
+DEDUP_ENABLED = False
+
 
 def _quarter_index(q: str) -> int:
     return {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}.get(q, 0)
@@ -287,21 +291,22 @@ async def get_pe_analysis(
     # on both PE Pending and PE Reviewed simultaneously.
     if valuation_filter == "pending":
         scope_conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
-        scope_conditions.append(f"""
-            NOT EXISTS (
-                SELECT 1 FROM quarterly_results r
-                LEFT JOIN stocks rs1 ON rs1.symbol = r.stock_symbol
-                LEFT JOIN stocks rs2 ON rs2.bse_token = CASE
-                    WHEN r.stock_symbol ~ '^\\d+$' THEN CAST(r.stock_symbol AS INT)
-                END
-                WHERE {_resolved_symbol_sql("r", "rs1", "rs2")}
-                    = {_resolved_symbol_sql("qr", "s1", "s2")}
-                  AND r.quarter = qr.quarter
-                  AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
-                  AND r.valuation IS NOT NULL AND r.valuation != ''
-                  AND (r.extraction_status = 'completed' OR r.user_reviewed = TRUE)
-            )
-        """)
+        if DEDUP_ENABLED:
+            scope_conditions.append(f"""
+                NOT EXISTS (
+                    SELECT 1 FROM quarterly_results r
+                    LEFT JOIN stocks rs1 ON rs1.symbol = r.stock_symbol
+                    LEFT JOIN stocks rs2 ON rs2.bse_token = CASE
+                        WHEN r.stock_symbol ~ '^\\d+$' THEN CAST(r.stock_symbol AS INT)
+                    END
+                    WHERE {_resolved_symbol_sql("r", "rs1", "rs2")}
+                        = {_resolved_symbol_sql("qr", "s1", "s2")}
+                      AND r.quarter = qr.quarter
+                      AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
+                      AND r.valuation IS NOT NULL AND r.valuation != ''
+                      AND (r.extraction_status = 'completed' OR r.user_reviewed = TRUE)
+                )
+            """)
     elif valuation_filter == "reviewed":
         scope_conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
         scope_conditions.append("(qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE)")
@@ -394,16 +399,18 @@ async def get_pe_analysis(
 
     outer_where = f"AND {outer_filter}" if outer_filter else ""
 
+    rn_filter = "rn = 1" if DEDUP_ENABLED else "TRUE"
+
     count_sql = f"""
         {dedup_cte}
-        SELECT COUNT(*) FROM ranked WHERE rn = 1 {outer_where}
+        SELECT COUNT(*) FROM ranked WHERE {rn_filter} {outer_where}
     """
     count_row = await db.execute(text(count_sql), params)
     total = count_row.scalar()
 
     data_sql = f"""
         {dedup_cte}
-        SELECT * FROM ranked WHERE rn = 1 {outer_where}
+        SELECT * FROM ranked WHERE {rn_filter} {outer_where}
         ORDER BY COALESCE(announcement_date, created_at) DESC
         LIMIT :limit OFFSET :offset
     """
