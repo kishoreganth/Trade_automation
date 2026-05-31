@@ -22,7 +22,9 @@ def upgrade() -> None:
     op.add_column("stocks", sa.Column("market_segment", sa.String, nullable=True))
     op.add_column("stocks", sa.Column("industry_group", sa.String, nullable=True))
 
-    op.create_index("idx_stocks_isin", "stocks", ["isin"], unique=True)
+    op.execute(
+        "CREATE UNIQUE INDEX idx_stocks_isin ON stocks (isin) WHERE isin IS NOT NULL"
+    )
     op.create_index("idx_stocks_nse_symbol", "stocks", ["nse_symbol"])
     op.create_index("idx_stocks_market_segment", "stocks", ["market_segment"])
 
