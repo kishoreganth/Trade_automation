@@ -60,7 +60,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time", "X-RateLimit-Remaining"],
+    expose_headers=["X-Request-ID", "X-Response-Time", "X-RateLimit-Remaining", "X-App-Version"],
 )
 
 

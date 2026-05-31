@@ -1,13 +1,18 @@
 """
-Security middleware — adds hardened HTTP headers, XSS/clickjacking protection.
+Security middleware — adds hardened HTTP headers, XSS/clickjacking protection,
+and an X-App-Version header so the frontend can detect backend redeployments.
 """
+
+import os
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+BUILD_VERSION = os.environ.get("BUILD_VERSION", "dev")
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Adds security headers to all responses."""
+    """Adds security headers + app version to all responses."""
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "websocket":
@@ -17,6 +22,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+
+        response.headers["X-App-Version"] = BUILD_VERSION
 
         # Prevent MIME-type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"

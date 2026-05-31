@@ -14,9 +14,33 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let _knownAppVersion: string | null = null;
+let _reloadScheduled = false;
+
+function checkAppVersion(version: string | undefined) {
+  if (typeof window === "undefined" || _reloadScheduled) return;
+  if (!version || version === "dev") return;
+
+  if (_knownAppVersion === null) {
+    _knownAppVersion = version;
+    return;
+  }
+  if (version !== _knownAppVersion) {
+    _reloadScheduled = true;
+    console.warn(`[auto-reload] Backend updated: ${_knownAppVersion} → ${version}`);
+    window.location.reload();
+  }
+}
+
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    checkAppVersion(res.headers["x-app-version"] as string | undefined);
+    return res;
+  },
   (error) => {
+    if (error.response?.headers) {
+      checkAppVersion(error.response.headers["x-app-version"] as string | undefined);
+    }
     const status = error.response?.status;
     if (status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("session_token");

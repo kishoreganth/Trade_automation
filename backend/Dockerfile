@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ARG BUILD_VERSION=dev
+ENV BUILD_VERSION=${BUILD_VERSION}
+
 # System dependencies for pdf2image, opencv, poppler
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
