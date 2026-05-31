@@ -186,7 +186,7 @@ async def download_and_convert_pdf(pdf_url: str) -> List[bytes]:
         return []
 
     try:
-        filtered, total, has_text = _select_financial_pages(pdf_bytes)
+        filtered, total, has_text = await asyncio.to_thread(_select_financial_pages, pdf_bytes)
     except Exception as e:
         logger.error(f"PDF page-selection failed: {e}")
         return []
@@ -198,7 +198,7 @@ async def download_and_convert_pdf(pdf_url: str) -> List[bytes]:
         page_indices = list(range(min(total, 6)))
         mode = "fallback" if has_text else "image-pdf"
 
-    images = _render_pages_to_png(pdf_bytes, page_indices)
+    images = await asyncio.to_thread(_render_pages_to_png, pdf_bytes, page_indices)
     logger.info(
         f"PDF: {total} pages total, {len(filtered)} keyword-matched, "
         f"selected {len(images)} ({mode})"
@@ -211,11 +211,15 @@ async def download_and_convert_pdf_full(pdf_url: str, max_pages: int = 12) -> Li
     pdf_bytes = await download_pdf_bytes(pdf_url)
     if pdf_bytes is None:
         return []
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    n = min(doc.page_count, max_pages)
-    doc.close()
-    images = _render_pages_to_png(pdf_bytes, list(range(n)))
-    logger.info(f"PDF (full fallback): {n} pages rendered")
+
+    def _get_page_count_and_render(data: bytes, limit: int) -> List[bytes]:
+        doc = fitz.open(stream=data, filetype="pdf")
+        n = min(doc.page_count, limit)
+        doc.close()
+        return _render_pages_to_png(data, list(range(n)))
+
+    images = await asyncio.to_thread(_get_page_count_and_render, pdf_bytes, max_pages)
+    logger.info(f"PDF (full fallback): {len(images)} pages rendered")
     return images
 
 
@@ -858,30 +862,49 @@ async def save_quarterly_result(
     now = datetime.now(timezone.utc)
     ann_dt = _parse_announcement_date(announcement_date) or _normalize_to_ist_midnight(now)
 
-    # --- Handle half-year-only reports (no quarterly columns) ---
-    # If the PDF is half-yearly, period_map may be empty (all columns went
-    # into cum_map as six_month). Synthesise a quarterly entry from the
-    # latest cumulative data so PE Pending still gets a row.
-    if not period_map and (cum_map_s or cum_map_c):
-        best_cum_key = None
-        for cm in (cum_map_s, cum_map_c):
-            for key in cm:
-                if best_cum_key is None:
-                    best_cum_key = key
-                else:
-                    if (_fy_sort_key(key[1]), _QUARTER_ORDER.get(key[0], 0)) > \
-                       (_fy_sort_key(best_cum_key[1]), _QUARTER_ORDER.get(best_cum_key[0], 0)):
-                        best_cum_key = key
-        if best_cum_key:
-            q, fy = best_cum_key
-            period_map[best_cum_key] = {
+    # --- Handle half-year-only reports (no quarterly Q1-Q4 columns) ---
+    # If the PDF is half-yearly, period_map may only have FY/annual entries
+    # (all half-year columns went into cum_map as six_month). Synthesise a
+    # quarterly entry from the latest cumulative data so PE Pending gets a row.
+    # Uses announcement date as the primary quarter signal.
+    has_quarterly = any(q in _QUARTER_ORDER for (q, _fy) in period_map)
+    if not has_quarterly and (cum_map_s or cum_map_c):
+        exp_q, exp_fy = _quarter_fy_from_announcement_date(ann_dt)
+        chosen_cum_key = None
+
+        # Priority 1: match expected quarter from announcement date
+        if exp_q and exp_fy and ((exp_q, exp_fy) in cum_map_s or (exp_q, exp_fy) in cum_map_c):
+            chosen_cum_key = (exp_q, exp_fy)
+            logger.info(
+                f"Half-year report for {stock_symbol} ({ai_company_name}): "
+                f"matched {exp_q} {exp_fy} from announcement date {ann_dt}"
+            )
+
+        # Priority 2: latest cumulative entry by FY calendar
+        if not chosen_cum_key:
+            for cm in (cum_map_s, cum_map_c):
+                for key in cm:
+                    if chosen_cum_key is None:
+                        chosen_cum_key = key
+                    else:
+                        if (_fy_sort_key(key[1]), _QUARTER_ORDER.get(key[0], 0)) > \
+                           (_fy_sort_key(chosen_cum_key[1]), _QUARTER_ORDER.get(chosen_cum_key[0], 0)):
+                            chosen_cum_key = key
+
+        # Priority 3: use announcement date even if no matching cum data
+        if not chosen_cum_key and exp_q and exp_fy:
+            chosen_cum_key = (exp_q, exp_fy)
+
+        if chosen_cum_key:
+            q, fy = chosen_cum_key
+            period_map[chosen_cum_key] = {
                 "period_ended": None,
-                "standalone": cum_map_s.get(best_cum_key),
-                "consolidated": cum_map_c.get(best_cum_key),
+                "standalone": cum_map_s.get(chosen_cum_key),
+                "consolidated": cum_map_c.get(chosen_cum_key),
             }
             logger.info(
-                f"Half-year report for {stock_symbol}: synthesised {q} {fy} "
-                f"entry from cumulative data"
+                f"Half-year fallback for {stock_symbol} ({ai_company_name}): "
+                f"synthesised {q} {fy} from cumulative data"
             )
 
     if not period_map:

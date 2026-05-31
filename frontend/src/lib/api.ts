@@ -34,8 +34,11 @@ export default api;
 // ─── Health ───
 
 export async function fetchHealth() {
-  const { data } = await axios.get("/health", { timeout: 5_000 });
-  return data;
+  const resp = await axios.get("/health", {
+    timeout: 5_000,
+    validateStatus: (s) => s === 200 || s === 503,
+  });
+  return resp.data;
 }
 
 // ─── Messages ───
@@ -275,6 +278,11 @@ export async function fetchAllInsights(params?: {
   status?: string;
 }) {
   const { data } = await api.get("/insights/all", { params });
+  return data;
+}
+
+export async function fetchAIInsightsSummary() {
+  const { data } = await api.get("/insights/ai/summary");
   return data;
 }
 

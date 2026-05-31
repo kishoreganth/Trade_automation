@@ -1,6 +1,6 @@
 "use client";
 
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWebSocketStatus } from "@/hooks/useWebSocket";
 import { cn } from "@/lib/utils";
 import { Settings, Maximize2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,7 +14,7 @@ interface HealthPayload {
 }
 
 export function TopBar() {
-  const { status, lastUpdate } = useWebSocket();
+  const { status, lastUpdate } = useWebSocketStatus();
 
   const { data: health, isError: healthError } = useQuery<HealthPayload>({
     queryKey: ["health"],

@@ -37,29 +37,60 @@ async def get_messages(
     params: dict = {"limit": per_page, "offset": offset}
 
     if option != "all":
-        where += " AND option = :option"
+        where += " AND m.option = :option"
         params["option"] = option
 
     if exchange:
-        where += " AND exchange = :exchange"
+        where += " AND m.exchange = :exchange"
         params["exchange"] = exchange
 
     if sector:
-        where += " AND sector = :sector"
+        where += " AND (m.sector = :sector OR COALESCE(s1.sector, s2.sector) = :sector)"
         params["sector"] = sector
 
     if search:
-        where += " AND (symbol ILIKE :search OR company_name ILIKE :search OR sector ILIKE :search)"
+        where += " AND (m.symbol ILIKE :search OR m.company_name ILIKE :search OR m.sector ILIKE :search)"
         params["search"] = f"%{search}%"
 
-    count_row = await db.execute(text(f"SELECT COUNT(*) FROM messages {where}"), params)
+    # Two separate LEFT JOINs instead of OR — lets Postgres use indexes on both.
+    # s1 matches NSE symbols, s2 matches BSE scrip codes (numeric symbols).
+    join_clause = """
+        FROM messages m
+        LEFT JOIN stocks s1 ON s1.symbol = m.symbol
+        LEFT JOIN stocks s2 ON m.symbol ~ '^\\d+$' AND s2.bse_scrip_code = m.symbol
+    """
+
+    count_row = await db.execute(text(f"""
+        SELECT COUNT(*) {join_clause} {where}
+    """), params)
     total = count_row.scalar()
 
     rows = await db.execute(text(f"""
-        SELECT id, chat_id, message, timestamp, symbol, company_name,
-               description, file_url, option, sector, exchange
-        FROM messages {where}
-        ORDER BY timestamp DESC
+        SELECT m.id, m.chat_id, m.message, m.timestamp, m.symbol, m.company_name,
+               m.description, m.file_url, m.option,
+               COALESCE(s1.sector, s2.sector, m.sector) AS sector,
+               m.exchange,
+               CASE
+                 WHEN m.exchange = 'BSE' THEN
+                   CASE
+                     WHEN COALESCE(s1.bse_series, s2.bse_series) IN ('M', 'MT') THEN 'BSE_SME'
+                     WHEN COALESCE(s1.bse_series, s2.bse_series) IS NOT NULL
+                          AND COALESCE(s1.bse_series, s2.bse_series) != '' THEN 'BSE_EQ'
+                     WHEN COALESCE(s1.nse_series, s2.nse_series) IN ('SM', 'ST') THEN 'BSE_SME'
+                     WHEN COALESCE(s1.nse_series, s2.nse_series) IN ('EQ', 'BE') THEN 'BSE_EQ'
+                     ELSE NULL
+                   END
+                 ELSE
+                   CASE
+                     WHEN COALESCE(s1.nse_series, s2.nse_series) IN ('SM', 'ST') THEN 'NSE_SME'
+                     WHEN COALESCE(s1.nse_series, s2.nse_series) IS NOT NULL
+                          AND COALESCE(s1.nse_series, s2.nse_series) != '' THEN 'NSE_EQ'
+                     ELSE COALESCE(s1.market_segment, s2.market_segment)
+                   END
+               END AS market_segment
+        {join_clause}
+        {where}
+        ORDER BY m.timestamp DESC
         LIMIT :limit OFFSET :offset
     """), params)
 

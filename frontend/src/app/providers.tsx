@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import toast, { Toaster, useToasterStore } from "react-hot-toast";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { WebSocketProvider } from "@/hooks/useWebSocket";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 
 const MAX_TOASTS = 3;
@@ -15,11 +15,6 @@ function ToastLimiter() {
     toasts.filter((t) => t.visible).slice(MAX_TOASTS).forEach((t) => toast.dismiss(t.id));
   }, [toasts]);
   return null;
-}
-
-function WebSocketProvider({ children }: { children: React.ReactNode }) {
-  useWebSocket();
-  return <>{children}</>;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {

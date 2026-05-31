@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { AIInsightsTable } from "@/components/AIInsightsTable";
-import { useAIInsightsList } from "@/hooks/useAIInsightsList";
-import { useQueryClient } from "@tanstack/react-query";
+import { fetchAIInsightsSummary } from "@/lib/api";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 
 const TYPE_OPTIONS = [
   { value: "", label: "All Types" },
@@ -35,22 +35,23 @@ export default function AIInsightsPage() {
     per_page: perPage,
   };
 
-  // Summary counts
-  const { data: allData } = useAIInsightsList({ per_page: 1 });
-  const { data: completedData } = useAIInsightsList({ per_page: 1, status: "completed" });
-  const { data: pendingData } = useAIInsightsList({ per_page: 1, status: "pending" });
-  const { data: processingData } = useAIInsightsList({ per_page: 1, status: "processing" });
-  const { data: failedData } = useAIInsightsList({ per_page: 1, status: "failed" });
+  // Summary counts — single endpoint
+  const { data: summary } = useQuery({
+    queryKey: ["ai-insights-summary"],
+    queryFn: fetchAIInsightsSummary,
+    staleTime: 15_000,
+  });
 
   const counts = {
-    total: allData?.total || 0,
-    completed: completedData?.total || 0,
-    pending: (pendingData?.total || 0) + (processingData?.total || 0),
-    failed: failedData?.total || 0,
+    total: summary?.total || 0,
+    completed: summary?.completed || 0,
+    pending: summary?.in_progress || 0,
+    failed: summary?.failed || 0,
   };
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["ai-insights-list"] });
+    queryClient.invalidateQueries({ queryKey: ["ai-insights-summary"] });
   };
 
   return (

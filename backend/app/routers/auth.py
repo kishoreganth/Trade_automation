@@ -7,7 +7,7 @@ import secrets
 import hashlib
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
@@ -59,10 +59,11 @@ async def login(body: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout(user: dict = Depends(get_current_user)):
-    """Invalidate session."""
-    # Token is already validated by get_current_user
-    # We need the actual token to delete it
+async def logout(request: Request, user: dict = Depends(get_current_user)):
+    """Invalidate session in Redis."""
+    token = request.headers.get("X-Session-Token", "")
+    if token:
+        await session_delete(token)
     return {"success": True}
 
 

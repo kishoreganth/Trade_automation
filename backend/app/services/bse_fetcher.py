@@ -215,42 +215,62 @@ async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:
     new_items = []
 
     async with get_db_session() as db:
+        # Step 1: Filter valid rows and prepare announcement log params
+        valid_rows = []
         for row in bse_data:
             scrip_code = str(row.get("SCRIP_CD", "")).strip()
+            if not scrip_code:
+                continue
             company_name = row.get("SLONGNAME", row.get("NEWSID", "")).strip()
             subject = row.get("NEWSSUB", "").strip()
             news_dt = row.get("NEWS_DT", "").strip()
             pdf_url = _build_bse_pdf_url(row.get("ATTACHMENTNAME", ""))
+            valid_rows.append({
+                "scrip_code": scrip_code, "company_name": company_name,
+                "subject": subject, "news_dt": news_dt, "pdf_url": pdf_url,
+            })
 
-            if not scrip_code:
-                continue
+        if not valid_rows:
+            return []
 
-            # Dedup via DB (INSERT OR IGNORE on unique constraint)
-            try:
+        # Step 2: Bulk insert into bse_announcements_log (ON CONFLICT DO NOTHING)
+        ann_params = [
+            {"sc": r["scrip_code"], "cn": r["company_name"], "at": "all",
+             "ad": r["news_dt"], "sub": r["subject"], "pdf": r["pdf_url"]}
+            for r in valid_rows
+        ]
+        try:
+            for params in ann_params:
                 await db.execute(text("""
                     INSERT INTO bse_announcements_log
                     (scrip_code, company_name, announcement_type, announcement_date, subject, pdf_url, exchange, processed, created_at)
                     VALUES (:sc, :cn, :at, :ad, :sub, :pdf, 'BSE', 0, NOW())
                     ON CONFLICT (scrip_code, announcement_type, pdf_url) DO NOTHING
-                """), {
-                    "sc": scrip_code, "cn": company_name, "at": "all",
-                    "ad": news_dt, "sub": subject, "pdf": pdf_url,
-                })
-                await db.commit()
-            except Exception:
-                await db.rollback()
-                continue
+                """), params)
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
-            # Save to messages — use actual announcement time from BSE
-            symbol = await _scrip_to_symbol(db, scrip_code, company_name)
-            ann_time = _parse_bse_datetime(news_dt)
-            option = classify_announcement(subject)
+        # Step 3: Resolve symbols (uses in-memory cache, hits DB only on miss)
+        for r in valid_rows:
+            r["symbol"] = await _scrip_to_symbol(db, r["scrip_code"], r["company_name"])
+            r["ann_time"] = _parse_bse_datetime(r["news_dt"])
+            r["option"] = classify_announcement(r["subject"])
 
-            # Dedup: skip if this exact message already exists
-            existing_msg = await db.execute(text(
-                "SELECT id FROM messages WHERE symbol = :sym AND file_url = :url LIMIT 1"
-            ), {"sym": symbol, "url": pdf_url})
-            if existing_msg.first() is not None:
+        # Step 4: Bulk check existing messages
+        pdf_urls = [r["pdf_url"] for r in valid_rows]
+        symbols = [r["symbol"] for r in valid_rows]
+        existing_set = set()
+        if pdf_urls:
+            existing_result = await db.execute(
+                text("SELECT symbol, file_url FROM messages WHERE file_url = ANY(:urls)"),
+                {"urls": pdf_urls}
+            )
+            existing_set = {(row.symbol, row.file_url) for row in existing_result.fetchall()}
+
+        # Step 5: Insert new messages in batch
+        for r in valid_rows:
+            if (r["symbol"], r["pdf_url"]) in existing_set:
                 continue
 
             result = await db.execute(text("""
@@ -258,26 +278,27 @@ async def process_bse_ca_data(bse_data: List[Dict]) -> List[Dict]:
                 VALUES (:cid, :msg, :ts, :sym, :cn, :desc, :url, :opt, 'BSE')
                 RETURNING id
             """), {
-                "cid": "bse_corporate", "msg": f"{symbol}: {subject}",
-                "ts": ann_time, "sym": symbol, "cn": company_name,
-                "desc": subject, "url": pdf_url, "opt": option,
+                "cid": "bse_corporate", "msg": f"{r['symbol']}: {r['subject']}",
+                "ts": r["ann_time"], "sym": r["symbol"], "cn": r["company_name"],
+                "desc": r["subject"], "url": r["pdf_url"], "opt": r["option"],
             })
             msg_id = result.scalar()
-            await db.commit()
 
             item = {
-                "id": msg_id, "symbol": symbol, "company_name": company_name,
-                "description": subject, "file_url": pdf_url, "option": option,
-                "exchange": "BSE", "timestamp": ann_time.isoformat(),
+                "id": msg_id, "symbol": r["symbol"], "company_name": r["company_name"],
+                "description": r["subject"], "file_url": r["pdf_url"], "option": r["option"],
+                "exchange": "BSE", "timestamp": r["ann_time"].isoformat(),
             }
             new_items.append(item)
 
-            await send_announcement_notification(symbol, company_name, subject, "BSE")
+        if new_items:
+            await db.commit()
 
     if new_items:
         await invalidate_messages()
         for item in new_items:
             await notify_new_message(item)
+            await send_announcement_notification(item["symbol"], item["company_name"], item["description"], "BSE")
 
     # Dispatch concall extraction for concall/result_concall items
     concall_items = [

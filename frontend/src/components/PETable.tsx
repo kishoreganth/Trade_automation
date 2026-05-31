@@ -32,6 +32,23 @@ interface PETableProps {
   filters?: Record<string, string>;
   perPage?: number;
   visibleColumns?: string[];
+  onTotalChange?: (total: number) => void;
+}
+
+function SegmentBadge({ segment }: { segment?: string | null }) {
+  if (!segment) return <span className="text-gray-400">—</span>;
+  const labels: Record<string, string> = {
+    NSE_EQ: "NSE EQ", NSE_SME: "NSE SME",
+    BSE_EQ: "BSE EQ", BSE_SME: "BSE SME",
+  };
+  const isSME = segment.includes("SME");
+  return (
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${
+      isSME ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-600"
+    }`}>
+      {labels[segment] || segment}
+    </span>
+  );
 }
 
 function cleanStr(val: unknown): string | null {
@@ -63,7 +80,7 @@ function cleanNum(val: unknown): number | null {
   return null;
 }
 
-export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleColumns }: PETableProps) {
+export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleColumns, onTotalChange }: PETableProps) {
   const show = (col: string) => !visibleColumns || visibleColumns.includes(col);
   const [page, setPage] = useState(1);
   const [drawerRow, setDrawerRow] = useState<Record<string, unknown> | null>(null);
@@ -76,6 +93,10 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
   const confirm = useConfirm();
   const params = { page, per_page: perPage, valuation_filter: valuationFilter, ...filters };
   const { data, isLoading, isError, error, refetch, isFetching } = usePEAnalysis(params);
+
+  useEffect(() => {
+    if (data?.total != null && onTotalChange) onTotalChange(data.total);
+  }, [data?.total, onTotalChange]);
 
   const handleDelete = async (symbol: string) => {
     const ok = await confirm({
@@ -240,6 +261,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
               {show("date") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${dateColW} ${stickyDate}`}>Date</th>}
               {show("stock") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${stockColW} ${stickyStock}`}>Stock</th>}
               {show("exch") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Exch</th>}
+              {show("segment") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Segment</th>}
               {show("quarter") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Quarter</th>}
               {show("year") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Year</th>}
               {show("qtr_eps") && <th className="text-right px-3 py-2 font-medium whitespace-nowrap bg-amber-100 text-amber-800">Qtr EPS</th>}
@@ -303,6 +325,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
                     <StatusBadge status={row.extraction_status as string} error={cleanStr(row.extraction_error)} />
                   </td>}
                   {show("exch") && <td className="px-3 py-2"><span className={row.exchange === "BSE" ? "badge-bse" : "badge-nse"}>{cleanStr(row.exchange) || "BSE"}</span></td>}
+                  {show("segment") && <td className="px-3 py-2"><SegmentBadge segment={row.market_segment as string} /></td>}
                   {show("quarter") && <td className="px-3 py-2 text-gray-600">{cleanStr(row.quarter) || "—"}</td>}
                   {show("year") && <td className="px-3 py-2 text-gray-600">{cleanStr(row.financial_year) || "—"}</td>}
                   {show("qtr_eps") && <td className="px-3 py-2 text-right font-mono bg-amber-50"><ColorNum value={qtrEps} /></td>}

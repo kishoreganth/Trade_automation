@@ -199,26 +199,26 @@ function InsightRow({ row }: { row: Record<string, unknown> }) {
         <tr>
           <td colSpan={10} className="px-4 py-3 bg-gray-50/50">
             <div className="space-y-2">
-              {row.executive_summary && (
+              {row.executive_summary ? (
                 <div>
                   <span className="text-[10px] font-semibold text-gray-500 uppercase">Executive Summary</span>
-                  <p className="text-sm text-gray-700 mt-0.5">{row.executive_summary as string}</p>
+                  <p className="text-sm text-gray-700 mt-0.5">{String(row.executive_summary)}</p>
                 </div>
-              )}
-              {row.investment_thesis && (
+              ) : null}
+              {row.investment_thesis ? (
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50/50 border border-indigo-100">
                   <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
                   <div>
                     <span className="text-[10px] font-semibold text-indigo-600 uppercase">Investment Thesis</span>
-                    <p className="text-sm text-gray-700 mt-0.5">{row.investment_thesis as string}</p>
+                    <p className="text-sm text-gray-700 mt-0.5">{String(row.investment_thesis)}</p>
                   </div>
                 </div>
-              )}
-              {row.management_outlook && (
+              ) : null}
+              {row.management_outlook ? (
                 <div className="text-xs text-gray-600">
-                  <span className="font-medium">Outlook:</span> {row.management_outlook as string}
+                  <span className="font-medium">Outlook:</span> {String(row.management_outlook)}
                 </div>
-              )}
+              ) : null}
             </div>
           </td>
         </tr>

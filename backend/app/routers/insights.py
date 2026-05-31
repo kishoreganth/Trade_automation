@@ -332,3 +332,38 @@ async def get_all_insights(
         "per_page": per_page,
         "total_pages": (total + per_page - 1) // per_page if total > 0 else 1,
     }
+
+
+@router.get("/ai/summary")
+async def ai_insights_summary(db: AsyncSession = Depends(get_db)):
+    """Return aggregated status counts for all AI insights (concall + announcement)."""
+    sql = """
+        SELECT
+            COALESCE(SUM(total), 0) AS total,
+            COALESCE(SUM(completed), 0) AS completed,
+            COALESCE(SUM(in_progress), 0) AS in_progress,
+            COALESCE(SUM(failed), 0) AS failed
+        FROM (
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE extraction_status = 'completed') AS completed,
+                COUNT(*) FILTER (WHERE extraction_status IN ('pending', 'processing')) AS in_progress,
+                COUNT(*) FILTER (WHERE extraction_status = 'failed') AS failed
+            FROM concall_insights
+            UNION ALL
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE extraction_status = 'completed') AS completed,
+                COUNT(*) FILTER (WHERE extraction_status IN ('pending', 'processing')) AS in_progress,
+                COUNT(*) FILTER (WHERE extraction_status = 'failed') AS failed
+            FROM announcement_insights
+        ) sub
+    """
+    row = await db.execute(text(sql))
+    r = row.first()
+    return {
+        "total": r.total if r else 0,
+        "completed": r.completed if r else 0,
+        "in_progress": r.in_progress if r else 0,
+        "failed": r.failed if r else 0,
+    }

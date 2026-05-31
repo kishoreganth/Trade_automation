@@ -3,6 +3,7 @@ Concall (conference call) transcript extraction service.
 Extracts actionable investment insights from earnings call PDFs using text extraction + AI.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -38,6 +39,19 @@ def _is_concall_transcript(text_content: str) -> bool:
     return hits >= _MIN_CONCALL_KEYWORDS
 
 
+def _extract_text_sync(pdf_bytes: bytes) -> Optional[str]:
+    """Synchronous PDF text extraction — runs in thread pool."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    full_text = []
+    for page_idx in range(doc.page_count):
+        page_text = doc.load_page(page_idx).get_text("text")
+        if page_text.strip():
+            full_text.append(page_text)
+    doc.close()
+    combined = "\n\n".join(full_text)
+    return combined if combined.strip() else None
+
+
 async def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
     """Download PDF and extract full text content using PyMuPDF."""
     pdf_bytes = await download_pdf_bytes(pdf_url)
@@ -45,19 +59,9 @@ async def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         return None
 
     try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        full_text = []
-        for page_idx in range(doc.page_count):
-            page_text = doc.load_page(page_idx).get_text("text")
-            if page_text.strip():
-                full_text.append(page_text)
-        doc.close()
-
-        combined = "\n\n".join(full_text)
-        if not combined.strip():
+        combined = await asyncio.to_thread(_extract_text_sync, pdf_bytes)
+        if combined is None:
             logger.warning(f"PDF has no text layer: {pdf_url}")
-            return None
-
         return combined
     except Exception as e:
         logger.error(f"PDF text extraction failed ({pdf_url}): {e}")

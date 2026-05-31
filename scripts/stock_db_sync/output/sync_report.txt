@@ -1,0 +1,157 @@
+================================================================================
+  STOCK DB SYNC — DRY-RUN REPORT
+  Generated: 2026-05-31 11:42:48
+================================================================================
+
+  DB rows (current):       3480
+  Canonical stocks (target): 5985
+
+--------------------------------------------------------------------------------
+  PHASE A: MERGE DUPLICATES — 596 pairs
+--------------------------------------------------------------------------------
+
+  NSE Symbol           BSE Scrip    Company                                  ISIN
+  ──────────────────── ──────────── ──────────────────────────────────────── ───────────────
+  5PAISA               540776       5Paisa Capital Limited                   INE618L01018
+  63MOONS              526881       63 moons technologies limited            INE111B01023
+  ADVANIHOTR           523269       Advani Hotels & Resorts (India) Limited  INE199C01026
+  ADVENZYMES           540025       Advanced Enzyme Technologies Limited     INE837H01020
+  AGARIND              531921       Agarwal Industrial Corporation Limited   INE204E01012
+  AHLUCONT             532811       Ahluwalia Contracts (India) Limited      INE758C01029
+  ALICON               531147       Alicon Castalloy Limited                 INE062D01024
+  ALKYLAMINE           506767       Alkyl Amines Chemicals Limited           INE150B01039
+  AMBIKCO              531978       Ambika Cotton Mills Limited              INE540G01014
+  APCOTEXIND           523694       Apcotex Industries Limited               INE116A01032
+  APOLLO               540879       Apollo Micro Systems Limited             INE713T01028
+  APOLLOPIPE           531761       Apollo Pipes Limited                     INE126J01016
+  ARCHIES              532212       Archies Limited                          INE731A01020
+  ARMANFIN             531179       Arman Financial Services Limited         INE109C01017
+  ARVINDFASN           542484       Arvind Fashions Limited                  INE955V01021
+  ASAL                 520119       Automotive Stampings and Assemblies Limi INE900C01027
+  ASALCBR              507526       Associated Alcohols & Breweries Ltd.     INE073G01016
+  ASIANHOTNR           500023       Asian Hotels (North) Limited             INE363A01022
+  ASTRON               540824       Astron Paper & Board Mill Limited        INE646X01014
+  ATLASCYCLE           505029       Atlas Cycles (Haryana) Limited           INE446A01025
+  ATULAUTO             531795       Atul Auto Limited                        INE951D01028
+  AVANTIFEED           512573       Avanti Feeds Limited                     INE871C01038
+  BAGFILMS             532507       B.A.G Films and Media Limited            INE116D01028
+  BAJAJCON             533229       Bajaj Consumer Care Limited              INE933K01021
+  BAJAJELEC            500031       Bajaj Electricals Limited                INE193E01025
+  BAJAJHIND            500032       Bajaj Hindusthan Sugar Limited           INE306A01021
+  BALKRISHNA           539251       Balkrishna Paper Mills Limited           INE875R01011
+  BALMLAWRIE           523319       Balmer Lawrie & Company Limited          INE164A01016
+  BANG                 532946       Bang Overseas Limited                    INE863I01016
+  BCG                  532368       Brightcom Group Limited                  INE425B01027
+  BEDMUTHA             533270       Bedmutha Industries Limited              INE844K01012
+  BFINVEST             533303       BF Investment Limited                    INE878K01010
+  BFUTILITIE           532430       BF Utilities Limited                     INE243D01012
+  BHAGERIA             530803       Bhageria Industries Limited              INE354C01027
+  BHANDARI             512608       Bhandari Hosiery Exports Limited         INE474E01029
+  BHARATWIRE           539799       Bharat Wire Ropes Limited                INE316L01019
+  BIRLACORPN           500335       Birla Corporation Limited                INE340A01012
+  BIRLAMONEY           532974       Aditya Birla Money Limited               INE865C01022
+  BLKASHYAP            532719       B. L. Kashyap and Sons Limited           INE350H01032
+  BLUECOAST            531495       Blue Coast Hotels Limited                INE472B01011
+  BOMDYEING            500020       Bombay Dyeing & Mfg Company Limited      INE032A01023
+  BORORENEW            502219       BOROSIL RENEWABLES LIMITED               INE666D01022
+  BPL                  500074       BPL Limited                              INE110A01019
+  BSL                  514045       BSL Limited                              INE594B01012
+  CALSOFT              532386       California Software Company Limited      INE526B01014
+  CAMLINFINE           532834       Camlin Fine Sciences Limited             INE052I01032
+  CARERATING           534804       CARE Ratings Limited                     INE752H01013
+  CENTEXT              500083       Century Extrusions Limited               INE281A01026
+  CENTRUM              501150       Centrum Capital Limited                  INE660C01027
+  CHEMBOND             530871       Chembond Material Technologies Limited   INE995D01025
+  ... and 546 more
+
+  Action: Keep NSE row, move quarterly_results/insights refs, delete BSE row.
+
+--------------------------------------------------------------------------------
+  PHASE B: UPDATE EXISTING — 2242 rows
+--------------------------------------------------------------------------------
+
+  Columns being updated:
+    isin                  2242 rows
+    market_segment        2242 rows
+    industry_group        2202 rows
+    bse_scrip_code        2201 rows
+    sub_sector            2194 rows
+    nse_symbol            2168 rows
+    nse_token             2153 rows
+    nse_series            2153 rows
+    bse_series            2083 rows
+    bse_token             2069 rows
+    sector                1986 rows
+    exchange              1119 rows
+
+  Sample updates (first 20):
+  Symbol               Columns Changed
+  ──────────────────── ──────────────────────────────────────────────────
+  21STCENMGM           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  3MINDIA              isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  5PAISA               isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  63MOONS              isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  533292               isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, industry_group, sub_sector, exchange
+  AARTIIND             isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ABB                  isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ABCAPITAL            isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ABFRL                isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ACC                  isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ADANIENT             isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ATGL                 isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ADANIGREEN           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ADANIPORTS           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ADANIPOWER           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  519183               isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, industry_group, sub_sector, exchange
+  ADVANIHOTR           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  ADVENZYMES           isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  AGARIND              isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector
+  533227               isin, nse_symbol, bse_scrip_code, nse_token, bse_token, nse_series, bse_series, market_segment, sector, industry_group, sub_sector, exchange
+  ... and 2222 more
+
+--------------------------------------------------------------------------------
+  PHASE C: INSERT NEW — 3743 stocks
+--------------------------------------------------------------------------------
+
+  By market segment:
+    NSE_EQ           2310
+    NSE_SME           826
+    BSE_EQ            569
+    BSE_SME            38
+
+  Sample inserts (first 20):
+  Symbol               Segment      Sector               Company
+  ──────────────────── ──────────── ──────────────────── ──────────────────────────────
+  20MICRONS            NSE_EQ       MINING & MATERIALS   20 Microns Limited
+  3PLAND               NSE_EQ       CAPITAL MARKET       3P Land Holdings Limited
+  AARTIDRUGS           NSE_EQ       PHARMA               Aarti Drugs Limited
+  AAVAS                NSE_EQ       NBFC                 Aavas Financiers Limited
+  ABBOTINDIA           NSE_EQ       PHARMA               Abbott India Limited
+  ABSLBANETF           NSE_EQ       -                    BIRLASLAMC - ABSLBANETF
+  ABSLNN50ET           NSE_EQ       -                    BIRLASLAMC - ABSLNN50ET
+  ACCELYA              NSE_EQ       IT                   Accelya Solutions India Limite
+  ACE                  NSE_EQ       AUTO                 Action Construction Equipment 
+  ADROITINFO           NSE_EQ       IT                   Adroit Infotech Limited
+  ADSL                 NSE_EQ       IT                   Allied Digital Services Limite
+  AFFLE                NSE_EQ       IT                   Affle 3i Limited
+  AGRITECH             NSE_EQ       FMCG                 Agri-Tech (India) Limited
+  AGROPHOS             NSE_EQ       AGRO                 Agro Phos India Limited
+  AHLWEST              NSE_EQ       -                    Asian Hotels (West) Limited
+  AIRAN                NSE_EQ       IT                   Airan Limited
+  AJMERA               NSE_EQ       REALTY               Ajmera Realty & Infra India Li
+  AKASH                NSE_EQ       Construction & Infra Akash Infra-Projects Limited
+  AKSHARCHEM           NSE_EQ       CHEMICAL             AksharChem India Limited
+  AKSHOPTFBR           NSE_EQ       TELECOM              Aksh Optifibre Limited
+  ... and 3723 more
+
+--------------------------------------------------------------------------------
+  SUMMARY
+--------------------------------------------------------------------------------
+  Current DB rows:     3480
+  Duplicates removed:  596
+  Rows updated:        2242
+  New rows inserted:   3743
+  Expected final rows: 6627
+
+  To apply: python -m scripts.stock_db_sync.sync_stocks --apply
+================================================================================

@@ -74,6 +74,28 @@ def _resolved_stock_field_sql(field: str, qr: str = "qr", s1: str = "s1", s2: st
     END"""
 
 
+def _resolved_market_segment_sql(qr: str = "qr", s1: str = "s1", s2: str = "s2") -> str:
+    """Derive market_segment consistent with the quarterly result's exchange."""
+    return f"""CASE
+      WHEN {qr}.exchange = 'BSE' THEN
+        CASE
+          WHEN COALESCE({s1}.bse_series, {s2}.bse_series) IN ('M', 'MT') THEN 'BSE_SME'
+          WHEN COALESCE({s1}.bse_series, {s2}.bse_series) IS NOT NULL
+               AND COALESCE({s1}.bse_series, {s2}.bse_series) != '' THEN 'BSE_EQ'
+          WHEN COALESCE({s1}.nse_series, {s2}.nse_series) IN ('SM', 'ST') THEN 'BSE_SME'
+          WHEN COALESCE({s1}.nse_series, {s2}.nse_series) IN ('EQ', 'BE') THEN 'BSE_EQ'
+          ELSE NULL
+        END
+      ELSE
+        CASE
+          WHEN COALESCE({s1}.nse_series, {s2}.nse_series) IN ('SM', 'ST') THEN 'NSE_SME'
+          WHEN COALESCE({s1}.nse_series, {s2}.nse_series) IS NOT NULL
+               AND COALESCE({s1}.nse_series, {s2}.nse_series) != '' THEN 'NSE_EQ'
+          ELSE {_resolved_stock_field_sql("market_segment", qr, s1, s2)}
+        END
+    END"""
+
+
 def _dedup_history(history: list[dict]) -> list[dict]:
     """Keep only the latest row per (quarter, normalized_fy) combo."""
     seen: dict[tuple, dict] = {}
@@ -354,6 +376,7 @@ async def get_pe_analysis(
             {_resolved_symbol_sql()} AS resolved_symbol,
             {_resolved_stock_field_sql("sector")} AS sector,
             {_resolved_stock_field_sql("sub_sector")} AS sub_sector,
+            {_resolved_market_segment_sql()} AS market_segment,
             ROW_NUMBER() OVER (
               PARTITION BY {_resolved_symbol_sql()}
               ORDER BY qr.financial_year DESC, qr.quarter DESC,

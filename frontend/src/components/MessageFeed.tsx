@@ -8,6 +8,22 @@ import { ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, A
 import { ConcallInsightCard } from "./ConcallInsightCard";
 import { AIInsightCard } from "./AIInsightCard";
 
+function SegmentBadge({ segment }: { segment?: string | null }) {
+  if (!segment) return <span className="text-gray-400">—</span>;
+  const labels: Record<string, string> = {
+    NSE_EQ: "NSE EQ", NSE_SME: "NSE SME",
+    BSE_EQ: "BSE EQ", BSE_SME: "BSE SME",
+  };
+  const isSME = segment.includes("SME");
+  return (
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${
+      isSME ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-600"
+    }`}>
+      {labels[segment] || segment}
+    </span>
+  );
+}
+
 interface MessageFeedProps {
   option?: string;
   filters?: Record<string, string>;
@@ -73,6 +89,7 @@ export function MessageFeed({ option = "all", filters = {} }: MessageFeedProps) 
             <tr className="border-b border-gray-200 text-[11px] text-gray-600 uppercase font-bold bg-gray-50">
               <th className="text-left px-4 py-2.5 font-semibold">Time</th>
               <th className="text-left px-4 py-2.5 font-semibold">Exchange</th>
+              <th className="text-left px-4 py-2.5 font-semibold">Segment</th>
               <th className="text-left px-4 py-2.5 font-semibold">Symbol</th>
               <th className="text-left px-4 py-2.5 font-semibold">Company</th>
               <th className="text-left px-4 py-2.5 font-semibold">Sector</th>
@@ -158,6 +175,9 @@ function MessageRow({ msg, isConcall, isAnnouncement, announcementType }: {
           <span className={msg.exchange === "BSE" ? "badge-bse" : "badge-nse"}>
             {msg.exchange || "NSE"}
           </span>
+        </td>
+        <td className="px-4 py-2.5">
+          <SegmentBadge segment={msg.market_segment} />
         </td>
         <td className="px-4 py-2.5 text-primary font-semibold">{msg.symbol || "\u2014"}</td>
         <td className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate">{msg.company_name || "\u2014"}</td>

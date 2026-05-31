@@ -174,10 +174,18 @@ async def publish_ws_event(event: dict):
 async def subscribe_ws_events():
     """
     Subscribe to WebSocket broadcast channel.
-    Returns an async generator that yields parsed events.
+    Uses a dedicated connection with no socket timeout so the blocking
+    listen() call doesn't raise TimeoutError when idle.
     """
-    r = get_redis()
-    pubsub = r.pubsub()
+    pool = redis.ConnectionPool.from_url(
+        settings.REDIS_URL,
+        max_connections=2,
+        decode_responses=True,
+        socket_timeout=None,
+        socket_connect_timeout=10,
+    )
+    client = redis.Redis(connection_pool=pool)
+    pubsub = client.pubsub()
     await pubsub.subscribe(WS_CHANNEL)
     return pubsub
 

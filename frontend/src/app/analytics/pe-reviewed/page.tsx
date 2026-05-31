@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { PETable } from "@/components/PETable";
 import { ColumnsDropdown } from "@/components/ColumnsDropdown";
 import { FormulasModal } from "@/components/FormulasModal";
-import { usePEFilters, usePEAnalysis } from "@/hooks/usePEAnalysis";
+import { usePEFilters } from "@/hooks/usePEAnalysis";
 import { CheckCircle2, RefreshCw, Download, Search, X, ChevronDown } from "lucide-react";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { triggerJob, exportPEAnalysisCSV, fetchValuationOptions } from "@/lib/api";
@@ -16,6 +16,7 @@ const ALL_COLUMNS = [
   { key: "date", label: "Date" },
   { key: "stock", label: "Stock" },
   { key: "exch", label: "Exchange" },
+  { key: "segment", label: "Segment" },
   { key: "quarter", label: "Quarter" },
   { key: "year", label: "Year" },
   { key: "qtr_eps", label: "Qtr EPS" },
@@ -64,6 +65,7 @@ export default function PEReviewedPage() {
   const [visibleCols, setVisibleCols] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
   const [remarkFilter, setRemarkFilter] = useState(saved?.remarkFilter ?? "");
   const [signalFilter, setSignalFilter] = useState(saved?.signalFilter ?? "");
+  const [totalStocks, setTotalStocks] = useState(0);
   const { data: filterOptions } = usePEFilters();
   const { data: valuationOptions } = useQuery({ queryKey: ["valuation-options"], queryFn: fetchValuationOptions, staleTime: 60_000 });
   const queryClient = useQueryClient();
@@ -89,9 +91,6 @@ export default function PEReviewedPage() {
   if (dateTo) allFilters.date_to = dateTo;
   if (remarkFilter) allFilters.valuation = remarkFilter;
   if (signalFilter) allFilters.signal = signalFilter;
-
-  const { data: peData } = usePEAnalysis({ page: 1, per_page: perPage, valuation_filter: "reviewed", ...allFilters });
-  const totalStocks = peData?.total || 0;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["pe-analysis"] });
@@ -137,7 +136,7 @@ export default function PEReviewedPage() {
     <div className="space-y-2 h-full flex flex-col">
       <div className="flex items-center gap-2">
         <CheckCircle2 className="w-4 h-4 text-green-600" />
-        <h2 className="text-sm font-semibold text-gray-900">PE Reviewed — Q4 FY26 Results</h2>
+        <h2 className="text-sm font-semibold text-gray-900">PE Reviewed — {filters.quarter || "All"} {filters.year ? `FY${filters.year.slice(-2)}` : ""} Results</h2>
       </div>
 
       {/* Row 1: SHOW, Year, Quarter, Exchange */}
@@ -229,7 +228,7 @@ export default function PEReviewedPage() {
       <FormulasModal open={showFormulas} onClose={() => setShowFormulas(false)} />
 
       <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-        <PETable valuationFilter="reviewed" filters={allFilters} perPage={perPage} visibleColumns={visibleCols} />
+        <PETable valuationFilter="reviewed" filters={allFilters} perPage={perPage} visibleColumns={visibleCols} onTotalChange={setTotalStocks} />
       </div>
     </div>
   );

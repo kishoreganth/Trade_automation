@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, createContext, useContext, type ReactNode } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 type ConnectionStatus = "connected" | "reconnecting" | "disconnected";
@@ -10,11 +10,18 @@ interface WSEvent {
   [key: string]: unknown;
 }
 
+interface WSContextValue {
+  status: ConnectionStatus;
+  lastUpdate: string | null;
+}
+
+const WebSocketContext = createContext<WSContextValue>({ status: "disconnected", lastUpdate: null });
+
 const WS_PING_MS = 15_000;
 const RECONNECT_MS = 3_000;
 const INVALIDATE_DEBOUNCE_MS = 1500;
 
-export function useWebSocket() {
+function useWebSocketConnection() {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -78,7 +85,7 @@ export function useWebSocket() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const backendHost = process.env.NEXT_PUBLIC_WS_URL || "localhost:8000";
+    const backendHost = process.env.NEXT_PUBLIC_WS_URL || window.location.host;
     const ws = new WebSocket(`${protocol}//${backendHost}/ws`);
 
     ws.onopen = () => {
@@ -123,4 +130,13 @@ export function useWebSocket() {
   }, [connect]);
 
   return { status, lastUpdate };
+}
+
+export function WebSocketProvider({ children }: { children: ReactNode }) {
+  const value = useWebSocketConnection();
+  return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>;
+}
+
+export function useWebSocketStatus() {
+  return useContext(WebSocketContext);
 }

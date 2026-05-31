@@ -7,6 +7,7 @@ import asyncio
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from .lifespan import lifespan
@@ -91,12 +92,15 @@ async def health_check():
         _check_redis(), _check_postgres(), _check_ws()
     )
     overall = "ok" if redis_status == "ok" and pg_status == "ok" else "degraded"
-    return {
+    payload = {
         "status": overall,
         "postgres": pg_status,
         "redis": redis_status,
         "websocket": ws_metrics,
     }
+    if overall != "ok":
+        return JSONResponse(content=payload, status_code=503)
+    return payload
 
 
 @app.websocket("/ws")
