@@ -299,12 +299,12 @@ async def get_pe_analysis(
                   AND r.quarter = qr.quarter
                   AND RIGHT(r.financial_year, 2) = RIGHT(qr.financial_year, 2)
                   AND r.valuation IS NOT NULL AND r.valuation != ''
-                  AND r.extraction_status = 'completed'
+                  AND (r.extraction_status = 'completed' OR r.user_reviewed = TRUE)
             )
         """)
     elif valuation_filter == "reviewed":
         scope_conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
-        scope_conditions.append("qr.extraction_status = 'completed'")
+        scope_conditions.append("(qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE)")
     elif valuation_filter == "failed":
         scope_conditions.append("qr.extraction_status IN ('failed', 'error')")
     if year:
@@ -380,7 +380,7 @@ async def get_pe_analysis(
             ROW_NUMBER() OVER (
               PARTITION BY {_resolved_symbol_sql()}
               ORDER BY qr.financial_year DESC, qr.quarter DESC,
-                CASE WHEN qr.extraction_status = 'completed' THEN 0 ELSE 1 END,
+                CASE WHEN qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE THEN 0 ELSE 1 END,
                 qr.id DESC
             ) AS rn
           FROM quarterly_results qr
@@ -422,7 +422,7 @@ async def get_pe_analysis(
               COALESCE(cumulative_eps_diluted_consolidated, cumulative_eps_basic_consolidated,
                        cumulative_eps_diluted_standalone, cumulative_eps_basic_standalone) AS cum_eps
             FROM quarterly_results
-            WHERE stock_symbol = ANY(:syms) AND extraction_status = 'completed'
+            WHERE stock_symbol = ANY(:syms) AND (extraction_status = 'completed' OR user_reviewed = TRUE)
             ORDER BY stock_symbol, financial_year, quarter, id
         """), {"syms": symbols})
         for h in hist_rows.fetchall():
@@ -608,7 +608,7 @@ async def get_report_summary(
     if cached_result:
         return cached_result
 
-    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "qr.extraction_status = 'completed'"]
+    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "(qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE)"]
     params: dict = {}
 
     if year:
@@ -719,7 +719,7 @@ async def get_report_detail(
     per_page: int = Query(50, ge=1, le=500),
 ):
     """Drill-down detail — returns stocks matching a specific filter slice."""
-    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "qr.extraction_status = 'completed'"]
+    conditions = ["qr.valuation IS NOT NULL", "qr.valuation != ''", "(qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE)"]
     params: dict = {}
 
     if year:
@@ -947,14 +947,16 @@ async def update_pe_analysis(
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
-    # When a valuation is being assigned to a failed/error/pending row,
-    # auto-promote extraction_status to 'completed' so it can move to PE Reviewed.
+    # When a valuation is assigned, mark user_reviewed so the row appears
+    # on PE Reviewed immediately (even if extraction is still processing).
+    # Also auto-promote extraction_status for failed/error/pending rows.
     promote_status = False
     if "valuation" in updates and updates["valuation"]:
         promote_status = True
 
     set_clause = ", ".join(f"{k} = :{k}" for k in updates)
     if promote_status:
+        set_clause += ", user_reviewed = TRUE"
         set_clause += ", extraction_status = CASE WHEN extraction_status IN ('failed', 'error', 'pending') THEN 'completed' ELSE extraction_status END"
     updates["sym"] = symbol
 

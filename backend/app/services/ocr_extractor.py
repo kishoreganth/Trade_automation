@@ -1028,7 +1028,7 @@ async def run_ai_stock_analysis(stock_symbol: str, analysis_type: str = "valuati
                    eps_diluted_consolidated, eps_diluted_standalone,
                    cmp, pe, valuation
             FROM quarterly_results
-            WHERE stock_symbol = :sym AND extraction_status = 'completed'
+            WHERE stock_symbol = :sym AND (extraction_status = 'completed' OR user_reviewed = TRUE)
             ORDER BY financial_year DESC, quarter DESC
             LIMIT 8
         """), {"sym": stock_symbol})
