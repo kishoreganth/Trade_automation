@@ -2,8 +2,8 @@
 
 import { usePEAnalysis, usePEFilters } from "@/hooks/usePEAnalysis";
 import { fmtCurrency, fmtNumber } from "@/lib/utils";
-import { useState, useEffect, useRef } from "react";
-import { deletePEAnalysis, updatePEAnalysis, retriggerPEExtraction, fetchValuationOptions } from "@/lib/api";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { deletePEAnalysis, updatePEAnalysis, retriggerPEExtraction, fetchValuationOptions, bulkIgnorePE } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2, Pencil, X, ExternalLink, AlertTriangle, RefreshCw, RotateCw } from "lucide-react";
@@ -87,8 +87,23 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
   const [retriggering, setRetriggering] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
 
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const lastClickedIdx = useRef<number | null>(null);
+  const shiftHeld = useRef(false);
+  const isPending = valuationFilter === "pending";
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Shift") shiftHeld.current = true; };
+    const up = (e: KeyboardEvent) => { if (e.key === "Shift") shiftHeld.current = false; };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, []);
+
   const filtersKey = JSON.stringify(filters) + valuationFilter + perPage;
-  useEffect(() => { setPage(1); }, [filtersKey]);
+  useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [filtersKey]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page]);
 
   const confirm = useConfirm();
   const params = { page, per_page: perPage, valuation_filter: valuationFilter, ...filters };
@@ -97,6 +112,32 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
   useEffect(() => {
     if (data?.total != null && onTotalChange) onTotalChange(data.total);
   }, [data?.total, onTotalChange]);
+
+  const toggleOne = useCallback((id: number, idx: number, isShift: boolean, allIds: number[]) => {
+    const lastIdx = lastClickedIdx.current;
+    lastClickedIdx.current = idx;
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (isShift && lastIdx !== null) {
+        const start = Math.min(lastIdx, idx);
+        const end = Math.max(lastIdx, idx);
+        for (let i = start; i <= end; i++) {
+          if (allIds[i] != null) next.add(allIds[i]);
+        }
+      } else {
+        if (next.has(id)) next.delete(id); else next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback((allIds: number[]) => {
+    setSelectedIds((prev) => {
+      const allOn = allIds.length > 0 && allIds.every((id) => prev.has(id));
+      return allOn ? new Set<number>() : new Set(allIds);
+    });
+  }, []);
 
   const handleDelete = async (symbol: string) => {
     const ok = await confirm({
@@ -161,6 +202,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
     try {
       await updatePEAnalysis(symbol, { valuation: "ignore" }, rowId);
       queryClient.invalidateQueries({ queryKey: ["pe-analysis"] });
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(rowId); return next; });
       toast.success(`${symbol} marked as IGNORE`);
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -231,10 +273,45 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
     else toast.error(`Queued ${ok}, failed ${bad}`);
   };
 
+  // ── Bulk selection (PE Pending only) ──
+  const allIds = rows.map((r: Record<string, unknown>) => r.id as number);
+  const allSelected = isPending && allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+
+  const handleBulkIgnore = async () => {
+    if (selectedIds.size === 0) return;
+    const n = selectedIds.size;
+    const confirmed = await confirm({
+      title: "Skip selected stocks",
+      message: `Mark ${n} stock${n === 1 ? "" : "s"} as IGNORE? They will move to PE Reviewed.`,
+      confirmLabel: `Skip ${n} stock${n === 1 ? "" : "s"}`,
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+    setBulkProcessing(true);
+    try {
+      const result = await bulkIgnorePE(Array.from(selectedIds));
+      queryClient.invalidateQueries({ queryKey: ["pe-analysis"] });
+      setSelectedIds(new Set());
+      if (result.skipped > 0) {
+        toast.success(`Skipped ${result.updated} stock${result.updated === 1 ? "" : "s"} (${result.skipped} already reviewed)`);
+      } else {
+        toast.success(`Skipped ${result.updated} stock${result.updated === 1 ? "" : "s"}`);
+      }
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || "Bulk skip failed");
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   const dateColW = "w-[90px] min-w-[90px] max-w-[90px]";
   const stockColW = "w-[160px] min-w-[160px] max-w-[160px]";
-  const stickyDate = "sticky left-0 z-10";
-  const stickyStock = "sticky left-[90px] z-10 border-r-2 border-r-slate-400";
+  const stickyDate = isPending ? "sticky left-[40px] z-10" : "sticky left-0 z-10";
+  const stickyStock = isPending
+    ? "sticky left-[130px] z-10 border-r-2 border-r-slate-400"
+    : "sticky left-[90px] z-10 border-r-2 border-r-slate-400";
 
   return (
     <div className="flex flex-col h-full">
@@ -252,12 +329,44 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
         </div>
       )}
 
+      {isPending && selectedIds.size > 0 && (
+        <div className="px-3 py-2 bg-blue-50 border-y border-blue-200 flex items-center gap-3 text-xs">
+          <span className="font-semibold text-blue-800">{selectedIds.size} selected</span>
+          <button
+            onClick={handleBulkIgnore}
+            disabled={bulkProcessing}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-slate-600 hover:bg-slate-700 text-white font-medium transition-colors disabled:opacity-50"
+          >
+            {bulkProcessing && <RotateCw className="w-3 h-3 animate-spin" />}
+            Skip {selectedIds.size} Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            disabled={bulkProcessing}
+            className="text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <PEPagination page={page} totalPages={totalPages} total={totalCount} perPage={perPage} onPageChange={setPage} position="top" />
 
       <div className="flex-1 min-h-0 overflow-auto relative">
         <table className="w-max min-w-full text-xs border-collapse">
           <thead className="sticky top-0 z-20">
             <tr className="border-b border-gray-200 text-[11px] text-gray-600 uppercase font-bold">
+              {isPending && (
+                <th className="w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 bg-gray-50 sticky left-0 z-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => toggleAll(allIds)}
+                    disabled={bulkProcessing || allIds.length === 0}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary accent-primary cursor-pointer"
+                  />
+                </th>
+              )}
               {show("date") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${dateColW} ${stickyDate}`}>Date</th>}
               {show("stock") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${stockColW} ${stickyStock}`}>Stock</th>}
               {show("exch") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Exch</th>}
@@ -284,7 +393,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rows.map((row: Record<string, unknown>) => {
+            {rows.map((row: Record<string, unknown>, rowIdx: number) => {
               const pe = cleanNum(row.pe);
               const cmp = cleanNum(row.cmp);
               const target = cleanNum(row.target_price);
@@ -313,8 +422,31 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
               const fmtDate = dateObj ? dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
               const fmtTime = dateObj ? dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : "";
 
+              const rowId = row.id as number;
+
               return (
-                <tr key={row.id as number} className="hover:bg-gray-50/80 transition-colors group">
+                <tr key={rowId} className={`hover:bg-gray-50/80 transition-colors group ${isPending && selectedIds.has(rowId) ? "bg-blue-50/60" : ""}`}>
+                  {isPending && (
+                    <td
+                      className="w-[40px] min-w-[40px] max-w-[40px] px-2 py-2 bg-white group-hover:bg-gray-50 sticky left-0 z-10 text-center cursor-pointer select-none"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleOne(rowId, rowIdx, e.shiftKey, allIds);
+                      }}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded border-2 mx-auto flex items-center justify-center transition-colors ${
+                        selectedIds.has(rowId)
+                          ? "bg-primary border-primary"
+                          : "border-gray-300 hover:border-gray-400"
+                      }`}>
+                        {selectedIds.has(rowId) && (
+                          <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   {show("date") && <td className={`px-3 py-2 text-gray-500 whitespace-nowrap bg-white group-hover:bg-gray-50 ${dateColW} ${stickyDate}`}>
                     <div className="text-[11px]">{fmtDate}</div>
                     {fmtTime && <div className="text-[9px] text-gray-400">{fmtTime}</div>}
@@ -346,7 +478,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
                       <ValuationBadge value={valuation} pending={valuationFilter === "pending"} />
                       {valuationFilter === "pending" && !valuation && (
                         <button
-                          onClick={() => handleIgnore(row.stock_symbol as string, Number(row.id))}
+                          onClick={() => handleIgnore(row.stock_symbol as string, rowId)}
                           className="text-[11px] px-2.5 py-0.5 rounded-full border-2 border-slate-400 text-slate-700 hover:border-slate-600 hover:text-slate-900 hover:bg-slate-100 font-bold tracking-wide transition-all"
                           title="Mark as ignored — moves to PE Reviewed"
                         >
@@ -366,7 +498,6 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
                   {show("actions") && <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       {(() => {
-                        const rowId = Number(row.id);
                         const status = String(row.extraction_status || "");
                         const hasPdf = Boolean(row.source_pdf_url);
                         const isRetrying = retriggering.has(rowId);
@@ -657,7 +788,11 @@ function EditDrawer({ row, onClose, onSaved }: { row: Record<string, unknown>; o
       if (form.cmp) payload.cmp = parseFloat(form.cmp);
       if (form.manual_fy_eps) payload.manual_fy_eps = parseFloat(form.manual_fy_eps);
       if (form.pe) payload.pe = parseFloat(form.pe);
-      if (form.recommendation) payload.recommendation = form.recommendation;
+      if (form.recommendation) {
+        payload.recommendation = form.recommendation;
+      } else if (originalForm.recommendation && !form.recommendation) {
+        payload.recommendation = "";
+      }
       if (form.target_price) payload.target_price = parseFloat(form.target_price);
       if (form.valuation) {
         payload.valuation = form.valuation;

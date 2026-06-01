@@ -155,6 +155,11 @@ export async function updatePEAnalysis(
   return data;
 }
 
+export async function bulkIgnorePE(rowIds: number[]) {
+  const { data } = await api.post("/pe_analysis/bulk_ignore", { row_ids: rowIds });
+  return data;
+}
+
 export async function retriggerPEExtraction(symbol: string, rowId?: number) {
   const params = rowId ? { row_id: rowId } : undefined;
   const { data } = await api.post(`/pe_analysis/${symbol}/retrigger`, null, { params });

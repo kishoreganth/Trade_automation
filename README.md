@@ -6,181 +6,116 @@ NSE & BSE corporate announcement monitoring platform with quarterly result extra
 
 ---
 
-## Local Development Setup
+## Quick Start
 
-Docker is used **only for PostgreSQL and Redis**. Everything else runs directly in terminal.
+Docker runs **only PostgreSQL + Redis**. Backend and frontend run directly in your terminal.
 
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+ & npm
-- Docker Desktop (for Postgres + Redis)
+- Node.js 18+
+- Docker Desktop
 
----
-
-### 1. Clone & Environment
+### 1. Setup (one-time, run from project root)
 
 ```bash
-cd c:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE
-
-# Create .env from template
 copy .env.example .env
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r backend\requirements.txt
 ```
 
-Edit `.env` and fill in your keys (Telegram, OpenAI, etc.). The defaults work for local Postgres/Redis.
+Edit `.env` with your API keys. Defaults work for local DB/Redis.
 
----
-
-### 2. Start PostgreSQL & Redis (Docker)
-
-The dev override file exposes ports `5432` and `6379` to your host machine:
+### 2. Start DB & Redis (Docker)
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
 ```
 
-Verify they're running with ports exposed:
+### 3. Run Migrations (one-time, from project root)
 
 ```bash
-docker compose ps
-docker exec trade_postgres pg_isready -U trade_user -d automation_trade
-docker exec trade_redis redis-cli ping
-```
-
-> **Important:** Without `-f docker-compose.dev.yml`, ports stay internal to Docker and your local backend can't connect.
-
----
-
-### 3. Python Virtual Environment
-
-```bash
+.venv\Scripts\activate
 cd backend
-python -m venv venv
-
-# Windows (PowerShell)
-.\venv\Scripts\Activate.ps1
-
-# Windows (CMD)
-.\venv\Scripts\activate.bat
-
-# Linux/macOS
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
----
-
-### 4. Run Database Migrations (Alembic)
-
-```bash
-# From backend/ directory, with venv activated
 alembic upgrade head
 ```
 
-This creates all tables, indexes, and seeds the schema.
+> All terminals below assume you start from the **project root** directory.
 
----
-
-### 5. Start the FastAPI Backend
+### 4. Backend API (Terminal 1)
 
 ```bash
-# From backend/ directory
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Health check: http://localhost:8000/health
-
-API docs: http://localhost:8000/docs
-
----
-
-### 6. Start Celery Workers
-
-Open **three separate terminals**, activate the venv in each, and run from `backend/`:
-
-**Terminal 2 — I/O Worker** (fetches NSE/BSE announcements):
-
-```bash
+cd C:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE
+.venv\Scripts\activate
 cd backend
-.\venv\Scripts\Activate.ps1
-celery -A worker.celery_app worker -Q io_queue -c 4 -n io@localhost --pool=solo --loglevel=info
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-**Terminal 3 — CPU Worker** (PDF extraction, OpenAI):
+### 5. Celery IO Worker (Terminal 2)
 
 ```bash
+cd C:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE
+.venv\Scripts\activate
 cd backend
-.\venv\Scripts\Activate.ps1
-celery -A worker.celery_app worker -Q cpu_queue -c 2 -n cpu@localhost --pool=solo --loglevel=info
+python -m celery -A worker.celery_app worker -Q io_queue -c 4 --pool=solo -n io@localhost --loglevel=info
 ```
 
-**Terminal 4 — Beat Scheduler** (triggers periodic fetches every 60s):
+### 6. Celery CPU Worker (Terminal 3)
 
 ```bash
+cd C:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE
+.venv\Scripts\activate
 cd backend
-.\venv\Scripts\Activate.ps1
-celery -A worker.celery_app beat --loglevel=info
+python -m celery -A worker.celery_app worker -Q cpu_queue -c 2 --pool=solo -n cpu@localhost --loglevel=info
 ```
 
-> **Windows note:** Use `--pool=solo` instead of `--pool=prefork` since prefork doesn't work on Windows. For higher concurrency on Windows, use `--pool=threads`.
-
----
-
-### 7. Start the Frontend
+### 7. Celery Beat (Terminal 4)
 
 ```bash
-cd frontend
+cd C:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE
+.venv\Scripts\activate
+cd backend
+python -m celery -A worker.celery_app beat --loglevel=info
+```
+
+### 8. Frontend (Terminal 5)
+
+```bash
+cd C:\Projects\STOCK-HIFI\Project_Market\Automation_TRADE\frontend
 npm install
 npm run dev
 ```
 
-Dashboard: http://localhost:5000
+### Access
+
+| Service | URL |
+|---------|-----|
+| Dashboard | http://localhost:5000 |
+| API Docs | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
 
 ---
 
-## Quick Reference — All Commands
-
-Open 5 terminals side by side:
-
-| Terminal | Directory | Command |
-|----------|-----------|---------|
-| 1 — Docker | root | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis` |
-| 2 — API | `backend/` | `uvicorn app.main:app --reload --port 8000` |
-| 3 — IO Worker | `backend/` | `celery -A worker.celery_app worker -Q io_queue -c 4 --pool=solo -n io@localhost --loglevel=info` |
-| 4 — CPU Worker | `backend/` | `celery -A worker.celery_app worker -Q cpu_queue -c 2 --pool=solo -n cpu@localhost --loglevel=info` |
-| 5 — Beat | `backend/` | `celery -A worker.celery_app beat --loglevel=info` |
-| 6 — Frontend | `frontend/` | `npm run dev` |
-
-> Activate the Python venv (`.\venv\Scripts\Activate.ps1`) in terminals 2, 3, 4, and 5 before running.
-
----
-
-## Stopping Everything
+## Stop Everything
 
 ```bash
-# Stop Celery workers & beat: Ctrl+C in each terminal
-
-# Stop Docker services
+# Ctrl+C in each terminal, then:
 docker compose down
 
-# Stop and remove volumes (full reset)
+# Full reset (wipes DB data):
 docker compose down -v
 ```
 
 ---
 
-## Full Production Deployment (Docker)
-
-To run the entire stack in Docker (no local terminals needed):
+## Production (Full Docker)
 
 ```bash
 docker compose up -d --build
 ```
 
-This starts: Nginx, Frontend, API, Celery IO (x20), Celery CPU (x4), Beat, Postgres, Redis.
-
-Access via: http://localhost:5000
+Runs the entire stack (Nginx, Frontend, API, Workers, Beat, Postgres, Redis) at http://localhost:5000.
 
 ---
 
@@ -207,6 +142,7 @@ Access via: http://localhost:5000
 
 ```
 Automation_TRADE/
+├── .venv/                       # Python venv (project root)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI entry point
@@ -215,8 +151,8 @@ Automation_TRADE/
 │   │   ├── cache.py             # Redis cache + PubSub
 │   │   ├── routers/             # API endpoints
 │   │   ├── services/
-│   │   │   ├── nse_fetcher.py   # NSE announcements (nse lib)
-│   │   │   ├── bse_fetcher.py   # BSE announcements (bse lib + httpx)
+│   │   │   ├── nse_fetcher.py   # NSE announcements
+│   │   │   ├── bse_fetcher.py   # BSE announcements
 │   │   │   └── ocr_extractor.py # PDF → EPS → PE (OpenAI)
 │   │   └── middleware/          # Auth, rate-limit, metrics
 │   ├── worker/
@@ -238,21 +174,12 @@ Automation_TRADE/
 ## Useful Commands
 
 ```bash
-# Run Alembic migration
-cd backend && alembic upgrade head
-
-# Create new migration
+# New DB migration
 cd backend && alembic revision --autogenerate -m "description"
 
-# Check API health
-curl http://localhost:8000/health
-
-# Trigger manual NSE fetch (API running)
+# Trigger manual NSE fetch
 curl -X POST http://localhost:8000/api/jobs/fetch_nse/start
 
 # Run tests
 cd backend && pytest
-
-# Load test
-cd backend && locust -f tests/locustfile.py
 ```
