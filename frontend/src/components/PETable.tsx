@@ -275,7 +275,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
 
   // ── Bulk selection (PE Pending only) ──
   const allIds = rows.map((r: Record<string, unknown>) => r.id as number);
-  const allSelected = isPending && allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const allSelected = isPending && allIds.length > 0 && allIds.every((id: number) => selectedIds.has(id));
 
   const handleBulkIgnore = async () => {
     if (selectedIds.size === 0) return;
