@@ -5,13 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function fmtCurrency(value: number | string): string {
+export function fmtCurrency(value: number | string | null | undefined): string {
+  if (value == null) return "—";
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (isNaN(num)) return "—";
   return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function fmtNumber(value: number | string, decimals = 2): string {
+export function fmtNumber(value: number | string | null | undefined, decimals = 2): string {
+  if (value == null) return "—";
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (isNaN(num)) return "—";
   return num.toLocaleString("en-IN", { maximumFractionDigits: decimals });
