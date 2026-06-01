@@ -6,7 +6,7 @@ Extracted from: nse_url_test.py (/api/pe_analysis, /api/pe_analysis/filters,
 
 import re
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import Optional
@@ -19,6 +19,7 @@ from ..constants import (
     VALUATION_TONE_BULLISH, VALUATION_TONE_BEARISH,
 )
 from worker.tasks.extraction import run_quarterly_extraction
+from ..services.audit_log import log_pe_action
 
 router = APIRouter(prefix="/api", tags=["pe_analysis"])
 
@@ -571,13 +572,15 @@ async def delete_custom_valuation(value: str, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/pe_analysis/bulk_ignore")
-async def bulk_ignore_pe(body: dict, db: AsyncSession = Depends(get_db)):
+async def bulk_ignore_pe(body: dict, request: Request, db: AsyncSession = Depends(get_db)):
     """Mark multiple PE Pending rows as IGNORE in a single atomic transaction.
 
     Accepts {"row_ids": [1, 2, 3, ...]} where each ID is a quarterly_results.id.
     Only updates rows whose valuation is currently NULL/empty (pending), so rows
     that were reviewed between selection and action are safely skipped.
     """
+    req_id = getattr(request.state, "request_id", None) if hasattr(request, "state") else None
+
     row_ids = body.get("row_ids")
     if not row_ids or not isinstance(row_ids, list):
         raise HTTPException(status_code=400, detail="row_ids must be a non-empty list")
@@ -590,6 +593,12 @@ async def bulk_ignore_pe(body: dict, db: AsyncSession = Depends(get_db)):
             int_ids.append(int(rid))
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail=f"Invalid row id: {rid}")
+
+    # Fetch symbols for audit trail before the update
+    pre_rows = await db.execute(text(
+        "SELECT id, stock_symbol, valuation FROM quarterly_results WHERE id = ANY(:ids)"
+    ), {"ids": int_ids})
+    pre_map = {r.id: {"stock_symbol": r.stock_symbol, "valuation": r.valuation} for r in pre_rows.fetchall()}
 
     result = await db.execute(text("""
         UPDATE quarterly_results
@@ -609,8 +618,92 @@ async def bulk_ignore_pe(body: dict, db: AsyncSession = Depends(get_db)):
     updated = result.rowcount
     skipped = len(int_ids) - updated
 
+    # Audit log: one entry per row that was actually updated
+    for rid in int_ids:
+        info = pre_map.get(rid, {})
+        old_val = info.get("valuation")
+        was_pending = not old_val or old_val == ""
+        await log_pe_action(
+            db,
+            stock_symbol=info.get("stock_symbol", "UNKNOWN"),
+            row_id=rid,
+            action="bulk_ignore",
+            old_valuation=old_val,
+            new_valuation="IGNORE" if was_pending else None,
+            old_fields=None,
+            new_fields={"valuation": "ignore", "user_reviewed": True},
+            outcome="success" if was_pending else "skipped",
+            request_id=req_id,
+        )
+
     await invalidate_pe_analysis()
     return {"success": True, "updated": updated, "skipped": skipped}
+
+
+@router.get("/pe_analysis/audit_log")
+async def get_pe_audit_log(
+    db: AsyncSession = Depends(get_db),
+    symbol: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    outcome: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=500),
+):
+    """Query the PE audit log for forensic investigation."""
+    conditions: list[str] = []
+    params: dict = {}
+
+    if symbol:
+        conditions.append("stock_symbol = :symbol")
+        params["symbol"] = symbol.upper()
+    if action:
+        conditions.append("action = :action")
+        params["action"] = action
+    if outcome:
+        conditions.append("outcome = :outcome")
+        params["outcome"] = outcome
+    if date_from:
+        try:
+            df = datetime.strptime(date_from[:10], "%Y-%m-%d")
+            conditions.append("created_at >= :date_from")
+            params["date_from"] = df
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            conditions.append("created_at <= :date_to")
+            params["date_to"] = dt
+        except ValueError:
+            pass
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    offset = (page - 1) * per_page
+    params["limit"] = per_page
+    params["offset"] = offset
+
+    count_row = await db.execute(text(f"SELECT COUNT(*) FROM pe_audit_log {where_clause}"), params)
+    total = count_row.scalar() or 0
+
+    rows = await db.execute(text(f"""
+        SELECT id, stock_symbol, row_id, action, old_valuation, new_valuation,
+               old_fields, new_fields, outcome, error_detail, request_id, created_at
+        FROM pe_audit_log
+        {where_clause}
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """), params)
+    results = [dict(r._mapping) for r in rows.fetchall()]
+
+    return {
+        "results": results,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if total > 0 else 0,
+    }
 
 
 @router.get("/pe_analysis/filters")
@@ -939,8 +1032,10 @@ async def retrigger_pe_extraction(
 
 
 @router.delete("/pe_analysis/{symbol}")
-async def delete_pe_analysis(symbol: str, db: AsyncSession = Depends(get_db)):
+async def delete_pe_analysis(symbol: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Delete all quarterly results for a stock."""
+    req_id = getattr(request.state, "request_id", None) if hasattr(request, "state") else None
+
     result = await db.execute(
         text("DELETE FROM quarterly_results WHERE stock_symbol = :sym"),
         {"sym": symbol},
@@ -950,6 +1045,13 @@ async def delete_pe_analysis(symbol: str, db: AsyncSession = Depends(get_db)):
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
 
+    await log_pe_action(
+        db, symbol, row_id=None, action="delete_stock",
+        old_valuation=None, new_valuation=None,
+        old_fields={"rows_deleted": result.rowcount}, new_fields=None,
+        outcome="success", request_id=req_id,
+    )
+
     await invalidate_pe_analysis()
     return {"success": True, "deleted": result.rowcount}
 
@@ -958,6 +1060,7 @@ async def delete_pe_analysis(symbol: str, db: AsyncSession = Depends(get_db)):
 async def update_pe_analysis(
     symbol: str,
     body: dict,
+    request: Request,
     row_id: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -972,6 +1075,8 @@ async def update_pe_analysis(
     Fallback (no row_id) keeps the legacy "latest row" behavior so any older
     callers / scripts keep working.
     """
+    req_id = getattr(request.state, "request_id", None) if hasattr(request, "state") else None
+
     allowed_fields = [
         "valuation", "recommendation", "comments", "target_price",
         "manual_fy_eps", "manual_fy_eps_formula", "cmp", "pe",
@@ -997,6 +1102,25 @@ async def update_pe_analysis(
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
+    # Fetch current state BEFORE the update for audit trail
+    old_row: dict = {}
+    if row_id is not None:
+        cur = await db.execute(text(
+            "SELECT id, valuation, recommendation, cmp, pe, user_reviewed, comments, target_price "
+            "FROM quarterly_results WHERE id = :rid AND stock_symbol = :sym"
+        ), {"rid": row_id, "sym": symbol})
+    else:
+        cur = await db.execute(text(
+            "SELECT id, valuation, recommendation, cmp, pe, user_reviewed, comments, target_price "
+            "FROM quarterly_results WHERE stock_symbol = :sym "
+            "ORDER BY financial_year DESC, quarter DESC, id DESC LIMIT 1"
+        ), {"sym": symbol})
+    cur_row = cur.first()
+    if cur_row:
+        old_row = dict(cur_row._mapping)
+        if row_id is None:
+            row_id = old_row.get("id")
+
     # When a valuation is assigned, mark user_reviewed so the row appears
     # on PE Reviewed immediately (even if extraction is still processing).
     # Also auto-promote extraction_status for failed/error/pending rows.
@@ -1020,6 +1144,14 @@ async def update_pe_analysis(
             WHERE id = :rid AND stock_symbol = :sym
         """), updates)
         if result.rowcount == 0:
+            await log_pe_action(
+                db, symbol, row_id, action="update_fields",
+                old_valuation=old_row.get("valuation"),
+                new_valuation=updates.get("valuation"),
+                old_fields=old_row, new_fields={k: v for k, v in updates.items() if k not in ("sym", "rid")},
+                outcome="failed", error_detail=f"No row found for {symbol} with id={row_id}",
+                request_id=req_id,
+            )
             raise HTTPException(
                 status_code=404,
                 detail=f"No row found for {symbol} with id={row_id}",
@@ -1036,11 +1168,39 @@ async def update_pe_analysis(
             )
         """), updates)
         if result.rowcount == 0:
+            await log_pe_action(
+                db, symbol, None, action="update_fields",
+                old_valuation=None, new_valuation=updates.get("valuation"),
+                old_fields=None, new_fields={k: v for k, v in updates.items() if k != "sym"},
+                outcome="failed", error_detail=f"No row found for {symbol}",
+                request_id=req_id,
+            )
             raise HTTPException(
                 status_code=404,
                 detail=f"No row found for {symbol}",
             )
     await db.commit()
+
+    # Determine audit action type
+    new_val = updates.get("valuation")
+    if new_val and not old_row.get("valuation"):
+        audit_action = "set_valuation"
+    elif not new_val and "valuation" in updates:
+        audit_action = "clear_valuation"
+    elif new_val and old_row.get("valuation") and new_val != old_row.get("valuation"):
+        audit_action = "change_valuation"
+    else:
+        audit_action = "update_fields"
+
+    await log_pe_action(
+        db, symbol, row_id, action=audit_action,
+        old_valuation=old_row.get("valuation"),
+        new_valuation=new_val,
+        old_fields=old_row,
+        new_fields={k: v for k, v in updates.items() if k not in ("sym", "rid")},
+        outcome="success",
+        request_id=req_id,
+    )
 
     # Update sector/sub_sector in stocks table if provided
     stock_updates = {k: v for k, v in body.items() if k in ("sector", "sub_sector") and v is not None}
