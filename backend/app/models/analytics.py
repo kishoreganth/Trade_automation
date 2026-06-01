@@ -94,6 +94,8 @@ class QuarterlyResult(Base):
     target_price = Column(Float)
     manual_fy_eps = Column(Float)
     manual_fy_eps_formula = Column(String)
+    user_reviewed = Column(Boolean, nullable=False, server_default="false")
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class FailedExtraction(Base):

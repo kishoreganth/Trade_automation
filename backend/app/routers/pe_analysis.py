@@ -570,6 +570,49 @@ async def delete_custom_valuation(value: str, db: AsyncSession = Depends(get_db)
     return {"success": True, "value": canon, "rows_still_using": int(used.scalar() or 0)}
 
 
+@router.post("/pe_analysis/bulk_ignore")
+async def bulk_ignore_pe(body: dict, db: AsyncSession = Depends(get_db)):
+    """Mark multiple PE Pending rows as IGNORE in a single atomic transaction.
+
+    Accepts {"row_ids": [1, 2, 3, ...]} where each ID is a quarterly_results.id.
+    Only updates rows whose valuation is currently NULL/empty (pending), so rows
+    that were reviewed between selection and action are safely skipped.
+    """
+    row_ids = body.get("row_ids")
+    if not row_ids or not isinstance(row_ids, list):
+        raise HTTPException(status_code=400, detail="row_ids must be a non-empty list")
+    if len(row_ids) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 rows per bulk operation")
+
+    int_ids = []
+    for rid in row_ids:
+        try:
+            int_ids.append(int(rid))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail=f"Invalid row id: {rid}")
+
+    result = await db.execute(text("""
+        UPDATE quarterly_results
+        SET valuation = 'ignore',
+            user_reviewed = TRUE,
+            extraction_status = CASE
+                WHEN extraction_status IN ('failed', 'error', 'pending')
+                THEN 'completed' ELSE extraction_status
+            END,
+            updated_at = NOW(),
+            reviewed_at = NOW()
+        WHERE id = ANY(:ids)
+          AND (valuation IS NULL OR valuation = '')
+    """), {"ids": int_ids})
+    await db.commit()
+
+    updated = result.rowcount
+    skipped = len(int_ids) - updated
+
+    await invalidate_pe_analysis()
+    return {"success": True, "updated": updated, "skipped": skipped}
+
+
 @router.get("/pe_analysis/filters")
 async def get_pe_filters(db: AsyncSession = Depends(get_db)):
     """Get available filter options for PE analysis page."""
@@ -965,6 +1008,9 @@ async def update_pe_analysis(
     if promote_status:
         set_clause += ", user_reviewed = TRUE"
         set_clause += ", extraction_status = CASE WHEN extraction_status IN ('failed', 'error', 'pending') THEN 'completed' ELSE extraction_status END"
+        set_clause += ", reviewed_at = CASE WHEN reviewed_at IS NULL THEN NOW() ELSE reviewed_at END"
+    elif "valuation" in updates and not updates["valuation"]:
+        set_clause += ", reviewed_at = NULL"
     updates["sym"] = symbol
 
     if row_id is not None:
