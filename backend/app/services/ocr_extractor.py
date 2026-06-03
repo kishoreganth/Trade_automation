@@ -787,7 +787,7 @@ async def save_quarterly_result(
     if not extraction_data:
         raise ValueError(f"AI extraction returned empty for {stock_symbol}")
 
-    ai_company_name = extraction_data.get("company_name") or company_name
+    ai_company_name = company_name or extraction_data.get("company_name") or ""
     units = extraction_data.get("units")
     standalone_periods = extraction_data.get("standalone_periods") or []
     consolidated_periods = extraction_data.get("consolidated_periods") or []

@@ -618,41 +618,84 @@ _SCRIP_SYMBOL_CACHE: dict[str, str] = {}
 async def _scrip_to_symbol(db, scrip_code: str, company_name: str) -> str:
     """Convert BSE scrip code to trading symbol using stocks table.
 
-    Three-layer resolution:
-    1. bse_token lookup (exact)
-    2. company_name fuzzy match (fallback for missing bse_token)
-    3. Return scrip_code as-is (last resort)
+    Four-layer resolution with cross-validation:
+    1. bse_scrip_code lookup (exact string match — most reliable)
+    2. bse_token lookup with company_name cross-validation
+    3. company_name exact-prefix match (safer than ILIKE contains)
+    4. Return scrip_code as-is (last resort)
     """
     if scrip_code in _SCRIP_SYMBOL_CACHE:
         return _SCRIP_SYMBOL_CACHE[scrip_code]
 
-    # Layer 1: bse_token lookup
+    clean_name = ""
+    if company_name:
+        clean_name = company_name.split(" Limited")[0].split(" Ltd")[0].strip()
+
+    # Layer 1: bse_scrip_code lookup (exact string match)
+    row = await db.execute(
+        text("SELECT symbol, company_name FROM stocks WHERE bse_scrip_code = :sc LIMIT 1"),
+        {"sc": scrip_code},
+    )
+    match = row.first()
+    if match:
+        _SCRIP_SYMBOL_CACHE[scrip_code] = match.symbol
+        return match.symbol
+
+    # Layer 2: bse_token lookup with company_name cross-validation
     try:
         scrip_int = int(scrip_code)
         row = await db.execute(
-            text("SELECT symbol FROM stocks WHERE bse_token = :bse LIMIT 1"),
+            text("SELECT symbol, company_name FROM stocks WHERE bse_token = :bse LIMIT 1"),
             {"bse": scrip_int},
+        )
+        match = row.first()
+        if match:
+            db_name = (match.company_name or "").lower()
+            bse_name = clean_name.lower() if clean_name else ""
+            # Cross-validate: accept only if names share a significant substring
+            if not bse_name or _names_overlap(bse_name, db_name):
+                _SCRIP_SYMBOL_CACHE[scrip_code] = match.symbol
+                return match.symbol
+            else:
+                logger.warning(
+                    "bse_token %s matched symbol %s (%s) but BSE says '%s' — "
+                    "skipping (likely wrong bse_token in stocks table)",
+                    scrip_code, match.symbol, match.company_name, company_name,
+                )
+    except (ValueError, TypeError):
+        pass
+
+    # Layer 3: company_name exact-prefix match (safer than ILIKE contains)
+    if clean_name and len(clean_name) >= 5:
+        row = await db.execute(
+            text(
+                "SELECT symbol FROM stocks "
+                "WHERE company_name ILIKE :pattern "
+                "ORDER BY LENGTH(company_name) ASC LIMIT 1"
+            ),
+            {"pattern": f"{clean_name}%"},
         )
         symbol = row.scalar()
         if symbol:
             _SCRIP_SYMBOL_CACHE[scrip_code] = symbol
             return symbol
-    except (ValueError, TypeError):
-        pass
 
-    # Layer 2: company_name fuzzy match
-    if company_name:
-        clean_name = company_name.split(" Limited")[0].split(" Ltd")[0].strip()
-        if len(clean_name) >= 3:
-            row = await db.execute(
-                text("SELECT symbol FROM stocks WHERE company_name ILIKE :pattern LIMIT 1"),
-                {"pattern": f"%{clean_name}%"},
-            )
-            symbol = row.scalar()
-            if symbol:
-                _SCRIP_SYMBOL_CACHE[scrip_code] = symbol
-                return symbol
-
-    # Layer 3: fallback to scrip code
+    # Layer 4: fallback to scrip code
+    logger.info("No stocks match for BSE scrip %s (%s) — using scrip code as symbol", scrip_code, company_name)
     _SCRIP_SYMBOL_CACHE[scrip_code] = scrip_code
     return scrip_code
+
+
+def _names_overlap(name_a: str, name_b: str) -> bool:
+    """Check if two company names share enough words to be the same entity."""
+    if not name_a or not name_b:
+        return False
+    # Direct substring check
+    if name_a in name_b or name_b in name_a:
+        return True
+    # Word-level overlap: at least 2 significant words must match
+    stop = {"the", "and", "of", "in", "for", "a", "an", "co", "pvt", "private"}
+    words_a = {w for w in name_a.split() if len(w) > 2 and w not in stop}
+    words_b = {w for w in name_b.split() if len(w) > 2 and w not in stop}
+    common = words_a & words_b
+    return len(common) >= 2 or (len(common) == 1 and len(words_a) <= 2)

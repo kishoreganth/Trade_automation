@@ -23,9 +23,9 @@ from ..services.audit_log import log_pe_action
 
 router = APIRouter(prefix="/api", tags=["pe_analysis"])
 
-# Feature flag: set to False to disable cross-exchange deduplication.
+# Feature flag: set to True to enable cross-exchange deduplication.
 # When False, ALL rows are shown (no hiding behind ROW_NUMBER).
-DEDUP_ENABLED = False
+DEDUP_ENABLED = True
 
 
 def _quarter_index(q: str) -> int:
@@ -293,6 +293,7 @@ async def get_pe_analysis(
     if valuation_filter == "pending":
         scope_conditions.append("(qr.valuation IS NULL OR qr.valuation = '')")
         if DEDUP_ENABLED:
+            # Hide rows whose resolved_symbol+quarter+FY already has a reviewed row
             scope_conditions.append(f"""
                 NOT EXISTS (
                     SELECT 1 FROM quarterly_results r
@@ -307,6 +308,15 @@ async def get_pe_analysis(
                       AND r.valuation IS NOT NULL AND r.valuation != ''
                       AND (r.extraction_status = 'completed' OR r.user_reviewed = TRUE)
                 )
+            """)
+            # Hide FY rows when a Q4 row exists for the same stock+year
+            scope_conditions.append(f"""
+                NOT (qr.quarter = 'FY' AND EXISTS (
+                    SELECT 1 FROM quarterly_results q4
+                    WHERE q4.stock_symbol = qr.stock_symbol
+                      AND q4.quarter = 'Q4'
+                      AND RIGHT(q4.financial_year, 2) = RIGHT(qr.financial_year, 2)
+                ))
             """)
     elif valuation_filter == "reviewed":
         scope_conditions.append("qr.valuation IS NOT NULL AND qr.valuation != ''")
@@ -363,9 +373,32 @@ async def get_pe_analysis(
     where_inside = "WHERE " + " AND ".join(scope_conditions) if scope_conditions else ""
     outer_filter = " AND ".join(outer_conditions)
 
-    # Window-function dedup: ONE row per unified stock identity.
+    # Window-function dedup: ONE row per (resolved_symbol, quarter, FY).
     # Two LEFT JOINs (each index-friendly) instead of OR-based JOIN which kills perf.
     # s1 = match by symbol (NSE entries), s2 = match by bse_token (BSE numeric entries).
+    #
+    # PE Reviewed ranking: prefer rows with richest user data (signal, comments,
+    # target_price), then BSE exchange for ties. NEVER hides reviewed rows —
+    # only picks the best representative when dual-listed duplicates exist.
+    # PE Pending ranking: prefer completed extraction, latest announcement.
+    if valuation_filter == "reviewed":
+        rn_order = f"""
+              PARTITION BY {_resolved_symbol_sql()}, qr.quarter, RIGHT(qr.financial_year, 2)
+              ORDER BY
+                CASE WHEN qr.recommendation IS NOT NULL AND qr.recommendation != '' THEN 0 ELSE 1 END,
+                CASE WHEN qr.target_price IS NOT NULL THEN 0 ELSE 1 END,
+                CASE WHEN qr.comments IS NOT NULL AND qr.comments != '' THEN 0 ELSE 1 END,
+                CASE WHEN qr.exchange = 'BSE' THEN 0 ELSE 1 END,
+                qr.announcement_date DESC NULLS LAST,
+                qr.id DESC"""
+    else:
+        rn_order = f"""
+              PARTITION BY {_resolved_symbol_sql()}, qr.quarter, RIGHT(qr.financial_year, 2)
+              ORDER BY
+                CASE WHEN qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE THEN 0 ELSE 1 END,
+                qr.announcement_date DESC NULLS LAST,
+                qr.id DESC"""
+
     dedup_cte = f"""
         WITH ranked AS (
           SELECT qr.*,
@@ -383,11 +416,7 @@ async def get_pe_analysis(
             {_resolved_stock_field_sql("sector")} AS sector,
             {_resolved_stock_field_sql("sub_sector")} AS sub_sector,
             {_resolved_market_segment_sql()} AS market_segment,
-            ROW_NUMBER() OVER (
-              PARTITION BY {_resolved_symbol_sql()}
-              ORDER BY qr.financial_year DESC, qr.quarter DESC,
-                CASE WHEN qr.extraction_status = 'completed' OR qr.user_reviewed = TRUE THEN 0 ELSE 1 END,
-                qr.id DESC
+            ROW_NUMBER() OVER ({rn_order}
             ) AS rn
           FROM quarterly_results qr
           LEFT JOIN stocks s1 ON s1.symbol = qr.stock_symbol
@@ -613,6 +642,36 @@ async def bulk_ignore_pe(body: dict, request: Request, db: AsyncSession = Depend
         WHERE id = ANY(:ids)
           AND (valuation IS NULL OR valuation = '')
     """), {"ids": int_ids})
+
+    # Propagate IGNORE to sibling rows (same resolved_symbol + quarter + FY)
+    # so dual-listed / revised filing counterparts don't remain as ghost pending.
+    if DEDUP_ENABLED and result.rowcount > 0:
+        await db.execute(text(f"""
+            UPDATE quarterly_results
+            SET valuation = 'ignore', user_reviewed = TRUE, updated_at = NOW(),
+                reviewed_at = COALESCE(reviewed_at, NOW()),
+                extraction_status = CASE
+                    WHEN extraction_status IN ('failed', 'error', 'pending')
+                    THEN 'completed' ELSE extraction_status END
+            WHERE (valuation IS NULL OR valuation = '')
+              AND id NOT IN (SELECT UNNEST(:ids))
+              AND EXISTS (
+                  SELECT 1 FROM quarterly_results src
+                  LEFT JOIN stocks ss1 ON ss1.symbol = src.stock_symbol
+                  LEFT JOIN stocks ss2 ON ss2.bse_token = CASE
+                      WHEN src.stock_symbol ~ '^\\d+$' THEN CAST(src.stock_symbol AS INT) END
+                  LEFT JOIN stocks ts1 ON ts1.symbol = quarterly_results.stock_symbol
+                  LEFT JOIN stocks ts2 ON ts2.bse_token = CASE
+                      WHEN quarterly_results.stock_symbol ~ '^\\d+$'
+                      THEN CAST(quarterly_results.stock_symbol AS INT) END
+                  WHERE src.id = ANY(:ids)
+                    AND ({_resolved_symbol_sql("src", "ss1", "ss2")})
+                        = ({_resolved_symbol_sql("quarterly_results", "ts1", "ts2")})
+                    AND src.quarter = quarterly_results.quarter
+                    AND RIGHT(src.financial_year, 2) = RIGHT(quarterly_results.financial_year, 2)
+              )
+        """), {"ids": int_ids})
+
     await db.commit()
 
     updated = result.rowcount
@@ -1179,6 +1238,55 @@ async def update_pe_analysis(
                 status_code=404,
                 detail=f"No row found for {symbol}",
             )
+    # Propagate valuation to sibling rows (same resolved_symbol + quarter + FY)
+    # so revised filings and dual-listed counterparts don't stay as ghost pending.
+    propagated = 0
+    if DEDUP_ENABLED and promote_status and row_id is not None:
+        # Fetch the row's quarter/FY for propagation scope
+        prop_row = await db.execute(text(
+            "SELECT quarter, financial_year FROM quarterly_results WHERE id = :rid"
+        ), {"rid": row_id})
+        prop_data = prop_row.first()
+        if prop_data:
+            prop_result = await db.execute(text("""
+                UPDATE quarterly_results
+                SET valuation = :val, user_reviewed = TRUE, updated_at = NOW(),
+                    reviewed_at = COALESCE(reviewed_at, NOW()),
+                    extraction_status = CASE
+                        WHEN extraction_status IN ('failed', 'error', 'pending')
+                        THEN 'completed' ELSE extraction_status END
+                WHERE (valuation IS NULL OR valuation = '')
+                  AND quarter = :q
+                  AND RIGHT(financial_year, 2) = RIGHT(:fy, 2)
+                  AND id != :rid
+                  AND stock_symbol IN (
+                      SELECT qr2.stock_symbol FROM quarterly_results qr2
+                      LEFT JOIN stocks ss1 ON ss1.symbol = qr2.stock_symbol
+                      LEFT JOIN stocks ss2 ON ss2.bse_token = CASE
+                          WHEN qr2.stock_symbol ~ '^\\d+$' THEN CAST(qr2.stock_symbol AS INT) END
+                      WHERE qr2.id = :rid
+                      UNION
+                      SELECT qr3.stock_symbol FROM quarterly_results qr3
+                      LEFT JOIN stocks ss3 ON ss3.symbol = qr3.stock_symbol
+                      LEFT JOIN stocks ss4 ON ss4.bse_token = CASE
+                          WHEN qr3.stock_symbol ~ '^\\d+$' THEN CAST(qr3.stock_symbol AS INT) END
+                      WHERE ({_resolved_symbol_sql("qr3", "ss3", "ss4")}) = (
+                          SELECT {_resolved_symbol_sql("qr4", "ss5", "ss6")}
+                          FROM quarterly_results qr4
+                          LEFT JOIN stocks ss5 ON ss5.symbol = qr4.stock_symbol
+                          LEFT JOIN stocks ss6 ON ss6.bse_token = CASE
+                              WHEN qr4.stock_symbol ~ '^\\d+$' THEN CAST(qr4.stock_symbol AS INT) END
+                          WHERE qr4.id = :rid
+                      )
+                  )
+            """), {
+                "val": updates.get("valuation"),
+                "q": prop_data.quarter,
+                "fy": prop_data.financial_year,
+                "rid": row_id,
+            })
+            propagated = prop_result.rowcount
+
     await db.commit()
 
     # Determine audit action type

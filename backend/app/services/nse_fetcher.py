@@ -35,6 +35,7 @@ _EXCLUDE_SUBJECTS = (
     "reply to clarification",
     "reasons for delayed",
     "non-submission",
+    "newspaper",
 )
 
 
@@ -62,6 +63,12 @@ def _is_financial_result(ann: dict) -> bool:
         return False
 
     if "intimation" in desc:
+        return False
+
+    # Newspaper publications are reprints; the actual result PDF is filed
+    # separately. These PDFs contain multiple companies' data on one page
+    # which causes the AI to extract the wrong company.
+    if "newspaper" in detail:
         return False
 
     if "financial result" in desc:
