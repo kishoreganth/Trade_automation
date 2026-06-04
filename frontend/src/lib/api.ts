@@ -249,6 +249,36 @@ export async function executeOrder(order: { symbol: string; action: string; qty:
   return data;
 }
 
+export async function getOrderSource() {
+  const { data } = await api.get("/place_order/source");
+  return data;
+}
+
+export async function importOrderStocks(stocks: Record<string, unknown>[]) {
+  const { data } = await api.post("/place_order/stocks/import", { stocks });
+  return data;
+}
+
+export async function uploadOrderStocksFile(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post("/place_order/stocks/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 60_000,
+  });
+  return data;
+}
+
+export async function deleteOrderStock(symbol: string) {
+  const { data } = await api.delete(`/place_order/stocks/${encodeURIComponent(symbol)}`);
+  return data;
+}
+
+export async function syncMasterScrip() {
+  const { data } = await api.post("/place_order/sync_master_scrip", null, { timeout: 120_000 });
+  return data;
+}
+
 // ─── Concall Insights ───
 
 export async function fetchConcallInsightByMessage(messageId: number) {

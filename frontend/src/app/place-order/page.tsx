@@ -12,6 +12,9 @@ import {
   Clock,
   CheckCircle2,
   Loader2,
+  Upload,
+  Database,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import {
@@ -20,6 +23,9 @@ import {
   authenticateTotp,
   fetchQuotes,
   placeAllOrders,
+  getOrderSource,
+  uploadOrderStocksFile,
+  syncMasterScrip,
 } from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -65,6 +71,12 @@ export default function PlaceOrderPage() {
   const [lastOrderTime, setLastOrderTime] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<{ successful: number; total: number } | null>(null);
 
+  // Data source
+  const [orderSource, setOrderSource] = useState<string>("gsheet");
+  const [uploading, setUploading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Session polling
   const sessionPollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -80,8 +92,9 @@ export default function PlaceOrderPage() {
     }
   }, []);
 
-  // Load sheet + check session on mount, poll session every 30s
+  // Load sheet + check session + check source on mount, poll session every 30s
   useEffect(() => {
+    getOrderSource().then((d) => setOrderSource(d.source || "gsheet")).catch(() => {});
     loadSheet();
     checkSession();
     sessionPollRef.current = setInterval(checkSession, 30000);
@@ -141,9 +154,14 @@ export default function PlaceOrderPage() {
     try {
       const result = await fetchQuotes();
       if (result.success) {
-        toast.success(result.message);
         setSheetData(result.rows || []);
         setLastQuoteFetch(result.fetch_time || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }));
+        const stats = result.stats || {};
+        if (result.sheet_updated) {
+          toast.success(`Quotes saved to DB — ${stats.prices_mapped || 0}/${stats.total_symbols || 0} prices mapped`);
+        } else {
+          toast.error(`Quotes fetched but DB write failed — ${stats.prices_mapped || 0} prices mapped (not saved)`);
+        }
       } else {
         toast.error(result.message || "Failed to fetch quotes");
       }
@@ -199,6 +217,43 @@ export default function PlaceOrderPage() {
     window.open(url, "_blank");
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadOrderStocksFile(file);
+      if (result.success) {
+        toast.success(`Imported ${result.total_processed} stocks (${result.inserted} new, ${result.updated} updated)`);
+        await loadSheet();
+      } else {
+        toast.error(result.message || "Import failed");
+      }
+    } catch {
+      toast.error("File upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSyncMasterScrip = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncMasterScrip();
+      if (result.success) {
+        toast.success(result.message);
+        await loadSheet();
+      } else {
+        toast.error(result.message || "Sync failed");
+      }
+    } catch {
+      toast.error("Master scrip sync failed. Ensure you are authenticated first.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const formatCurrency = (val: number | undefined | null) => {
     if (!val || isNaN(val)) return "—";
     return `₹${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
@@ -227,13 +282,51 @@ export default function PlaceOrderPage() {
               <p className="text-xs text-gray-500">Market orders and TOTP authentication</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={openGoogleSheet}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
-            >
-              <ExternalLink className="w-3.5 h-3.5" /> Open Sheet
-            </button>
+          <div className="flex gap-2 items-center">
+            {/* Source badge */}
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold ${
+              orderSource === "postgres"
+                ? "bg-violet-100 text-violet-700 border border-violet-200"
+                : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+            }`}>
+              {orderSource === "postgres" ? <Database className="w-3 h-3" /> : <FileSpreadsheet className="w-3 h-3" />}
+              {orderSource === "postgres" ? "Postgres" : "Google Sheet"}
+            </span>
+
+            {orderSource === "postgres" ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="bg-violet-500 hover:bg-violet-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  Import Stocks
+                </button>
+                <button
+                  onClick={handleSyncMasterScrip}
+                  disabled={syncing}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Sync Tokens
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={openGoogleSheet}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open Sheet
+              </button>
+            )}
             <button
               onClick={loadSheet}
               disabled={loadingSheet}
@@ -314,14 +407,24 @@ export default function PlaceOrderPage() {
           <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
             <span className="text-amber-500">📋</span> Place Order Steps
           </h3>
-          <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside">
-            <li>Open Google Docs</li>
-            <li>Update in PLACE_ORDER_V2 sheet</li>
-            <li>Update scrip list in Google Docs</li>
-            <li>Refresh in Dashboard</li>
-            <li>Put TOTP (Google Authenticator)</li>
-            <li>Click &quot;Place Order&quot;</li>
-          </ol>
+          {orderSource === "postgres" ? (
+            <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside">
+              <li>Import stocks via CSV/Excel (one-time)</li>
+              <li>Refresh in Dashboard</li>
+              <li>Get Quotes (fetches live prices)</li>
+              <li>Put TOTP (Google Authenticator)</li>
+              <li>Click &quot;Place Order&quot;</li>
+            </ol>
+          ) : (
+            <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside">
+              <li>Open Google Docs</li>
+              <li>Update in PLACE_ORDER_V2 sheet</li>
+              <li>Update scrip list in Google Docs</li>
+              <li>Refresh in Dashboard</li>
+              <li>Put TOTP (Google Authenticator)</li>
+              <li>Click &quot;Place Order&quot;</li>
+            </ol>
+          )}
         </div>
 
         {/* Get Quotes */}
