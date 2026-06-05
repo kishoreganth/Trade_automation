@@ -41,7 +41,7 @@ Kotak Neo broker API integration for order placement. NSE/BSE announcement proce
 - STOCK_NAME format: `{nse_symbol}-{nse_series}` e.g. "ACC-EQ", "MARUTI-EQ" (matches Kotak API `ts` field format)
 - BUY/SELL ORDER calculation stays in get_quote.py (unchanged): `BUY = OPEN_PRICE * (1 - GAP/100)`, `SELL = OPEN_PRICE * (1 + GAP/100)`
 
-**Seeding**: `python scripts/seed_order_stocks.py` inserts all active NSE stocks from `stocks` table into `order_stocks` (one-time).
+**Seeding**: NEVER use `seed_order_stocks.py` (it wrongly imports ALL 3658 stocks from `stocks` table). ALWAYS use `import_gsheet_to_order_stocks.py` which imports ONLY the curated ~1850 stocks from the Google Sheet. The `order_stocks` table must NEVER contain more stocks than the Google Sheet. The `stocks` table is a separate master reference — NOT a source for order_stocks.
 
 **.env loading**: `orders.py` loads both `Automation_TRADE/.env` and `backend/.env` (backend takes precedence).
 
