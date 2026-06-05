@@ -70,3 +70,28 @@ Kotak Neo broker API integration for order placement. NSE/BSE announcement proce
 **Sync flow**: TOTP auth → Kotak session → GET /masterscrip/file-paths → download nse_cm-v1.csv (filter EQ) → download bse_cm-v1.csv (filter A/B) → UPDATE order_stocks SET stock_name, exchange_token for matching symbols. NSE EQ priority, BSE A/B fallback for missing.
 
 **Performance**: 1759/1850 stocks now have direct tokens from GSheet import. Remaining ~91 filled after first "Sync Tokens" click post-auth. Eliminates dependency on `stocks` table JOIN for token resolution.
+
+### 2026-06-05: Run Status Tracking (Persistent Last-Run Info)
+**Problem**: No way to see when Get Quotes or Place Orders last ran successfully after page refresh.
+
+**Solution**: Persist last-run status for both operations in Redis. Show success/failure, timestamp, and summary stats in the UI.
+
+**Files modified**:
+- `backend/app/routers/orders.py` — added `_save_run_status()` / `_get_run_status()` helpers using Redis keys `run_status:quotes` / `run_status:orders`. Added `GET /api/place_order/run-status` endpoint. Both `_fetch_quotes_*` and `_place_all_orders_*` now save status on success/failure.
+- `frontend/src/lib/api.ts` — added `getRunStatus()` function
+- `frontend/src/app/place-order/page.tsx` — loads persistent status on mount via `loadRunStatus()`, refreshes after each quotes/orders action. Shows green/red status cards below Get Quotes and Place Orders buttons with timestamp + stats.
+
+**Tested**: Session active, Get Quotes fetched 1772/1776 stocks in 4.8s, all prices saved to Postgres.
+
+### 2026-06-05: Live Order Progress Bar (Background + Polling)
+**Problem**: Place Orders runs ~3600 orders over several minutes. Frontend HTTP timeout (30s) caused disconnect — backend kept running but frontend showed stale "success" from previous run.
+
+**Solution**: Fire-and-forget background execution + Redis polling for progress.
+
+**Flow**: `POST /execute/all` returns immediately → `asyncio.create_task(_run_orders_background)` → progress saved to Redis every order → frontend polls `GET /order-progress` every 2s → detects `status: "completed"` or `"error"` and stops.
+
+**Files modified**:
+- `backend/app/services/place_order.py` — added optional `progress_callback` param to `place_orders_with_rate_limit()`. After each order completes, calls callback with `{total, completed, success, failed, pending, percent, current_stock, status}`.
+- `backend/app/routers/orders.py` — `POST /execute/all` now starts orders via `asyncio.create_task()` and returns immediately (`{started: true}`). Progress saved to Redis key `order_progress:live` (600s TTL). `_save_order_final()` sets `status: "completed"` or `"error"`. `GET /order-progress` returns current progress. Prevents double-start via `_order_task_running` flag.
+- `frontend/src/app/place-order/page.tsx` — `handlePlaceOrders` no longer awaits completion. Polls `/order-progress` every 2s. Detects `status: "completed"` → stops polling, shows toast, updates run status. Detects `status: "error"` → shows error. 3-color bar: green=success, red=failed, gray=pending with counts.
+- `frontend/src/hooks/useWebSocket.tsx` — added `subscribe()`/`useWSEvent()` (kept for future use, not used by orders).

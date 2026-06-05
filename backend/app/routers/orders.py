@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 from pydantic import BaseModel
 
 # Fix Windows stdout encoding for emoji characters in neo_main_login prints
@@ -59,12 +59,41 @@ class ImportStocksRequest(BaseModel):
     stocks: List[dict]
 
 
+
+
 def _get_env(key: str) -> Optional[str]:
     """Get env var, stripping quotes if present."""
     val = os.getenv(key)
     if val and val.startswith('"') and val.endswith('"'):
         val = val[1:-1]
     return val
+
+
+def _get_redis():
+    import redis
+    return redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
+
+
+def _save_run_status(key: str, data: dict):
+    """Save run status to Redis."""
+    import json
+    try:
+        r = _get_redis()
+        data["timestamp"] = datetime.now().isoformat()
+        r.set(f"run_status:{key}", json.dumps(data))
+    except Exception as e:
+        logger.warning(f"Failed to save run status: {e}")
+
+
+def _get_run_status(key: str) -> Optional[dict]:
+    """Load run status from Redis."""
+    import json
+    try:
+        r = _get_redis()
+        raw = r.get(f"run_status:{key}")
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
 
 
 def _sanitize_df_rows(df):
@@ -297,6 +326,14 @@ async def _fetch_quotes_postgres():
 
         rows = _sanitize_df_rows(df)
         fetch_time = datetime.now().strftime("%I:%M %p")
+        prices_mapped = sum(1 for r in rows if r.get("OPEN PRICE") and r["OPEN PRICE"] > 0)
+
+        _save_run_status("quotes", {
+            "success": True,
+            "total_symbols": len(symbols_list),
+            "prices_mapped": prices_mapped,
+            "source": "postgres",
+        })
 
         return {
             "success": True,
@@ -309,11 +346,12 @@ async def _fetch_quotes_postgres():
             "stats": {
                 "total_symbols": len(symbols_list),
                 "quotes_received": len(quote_ohlc),
-                "prices_mapped": sum(1 for r in rows if r.get("OPEN PRICE") and r["OPEN PRICE"] > 0)
+                "prices_mapped": prices_mapped
             }
         }
     except Exception as e:
         logger.exception(f"Error fetching quotes (postgres): {e}")
+        _save_run_status("quotes", {"success": False, "error": str(e)})
         return {"success": False, "message": str(e), "rows": []}
 
 
@@ -364,6 +402,14 @@ async def _fetch_quotes_gsheet():
 
         rows = _sanitize_df_rows(df)
         fetch_time = datetime.now().strftime("%I:%M %p")
+        prices_mapped = sum(1 for r in rows if r.get("OPEN PRICE") and r["OPEN PRICE"] > 0)
+
+        _save_run_status("quotes", {
+            "success": True,
+            "total_symbols": len(symbols_list),
+            "prices_mapped": prices_mapped,
+            "source": "gsheet",
+        })
 
         return {
             "success": True,
@@ -376,123 +422,166 @@ async def _fetch_quotes_gsheet():
             "stats": {
                 "total_symbols": len(symbols_list),
                 "quotes_received": len(quote_ohlc),
-                "prices_mapped": sum(1 for r in rows if r.get("OPEN PRICE") and r["OPEN PRICE"] > 0)
+                "prices_mapped": prices_mapped
             }
         }
     except Exception as e:
         logger.exception(f"Error fetching quotes: {e}")
+        _save_run_status("quotes", {"success": False, "error": str(e)})
         return {"success": False, "message": str(e), "rows": []}
 
 
-# ─── Place All Orders ───
+# ─── Place All Orders (Background) ───
+
+_order_task_running = False
+
+
+async def _order_progress_callback(progress: dict):
+    """Save order progress to Redis for frontend polling."""
+    try:
+        import json
+        r = _get_redis()
+        progress["status"] = "running"
+        r.set("order_progress:live", json.dumps(progress), ex=600)
+    except Exception:
+        pass
+
+
+def _save_order_final(success: bool, total_orders: int, successful: int, failed: int, stocks: int, error: str = ""):
+    """Save final order result to both progress and run_status keys."""
+    import json
+    try:
+        r = _get_redis()
+        final = {
+            "status": "completed" if success else "error",
+            "total": total_orders, "completed": total_orders,
+            "success": successful, "failed": failed, "pending": 0,
+            "percent": 100.0,
+            "error": error,
+        }
+        r.set("order_progress:live", json.dumps(final), ex=600)
+    except Exception:
+        pass
+    _save_run_status("orders", {
+        "success": success,
+        "total_orders": total_orders,
+        "successful": successful,
+        "failed": failed,
+        "stocks": stocks,
+        **({"error": error} if error else {}),
+    })
+
+
+async def _run_orders_background(body: PlaceOrdersRequest, source: str):
+    """Background task: load data, place orders, save results."""
+    global _order_task_running
+    _order_task_running = True
+    try:
+        if source == "postgres":
+            all_orders, valid_rows = await _prepare_orders_postgres()
+        else:
+            all_orders, valid_rows = await _prepare_orders_gsheet()
+
+        if not all_orders:
+            return
+
+        from place_order import place_orders_with_rate_limit
+
+        logger.info(f"Background: Placing {len(all_orders)} orders for {len(valid_rows)} stocks...")
+        results = await place_orders_with_rate_limit(
+            all_orders,
+            orders_per_minute=body.orders_per_minute,
+            max_concurrent=body.max_concurrent,
+            progress_callback=_order_progress_callback,
+        )
+
+        successful = sum(1 for r in results if r and not isinstance(r, Exception) and r.get("status") != "error")
+        _save_order_final(True, len(results), successful, len(results) - successful, len(valid_rows))
+        logger.info(f"Background orders done: {successful}/{len(results)} success")
+
+    except Exception as e:
+        logger.exception(f"Background order error: {e}")
+        _save_order_final(False, 0, 0, 0, 0, str(e))
+    finally:
+        _order_task_running = False
+
+
+async def _prepare_orders_postgres():
+    from get_quote import get_gsheet_stocks_df
+    from place_order import get_order_data
+    from ..services.order_stock_db import get_order_stocks_df
+
+    df = await get_order_stocks_df()
+    if df is None or df.empty:
+        _save_order_final(False, 0, 0, 0, 0, "No order stocks in Postgres")
+        return [], []
+
+    all_rows = await get_gsheet_stocks_df(df)
+    if not all_rows:
+        _save_order_final(False, 0, 0, 0, 0, "No rows found")
+        return [], []
+
+    valid_rows = _filter_valid_order_rows(all_rows)
+    if not valid_rows:
+        _save_order_final(False, 0, 0, 0, 0, "No rows with valid BUY/SELL prices. Fetch quotes first.")
+        return [], []
+
+    all_orders = await get_order_data(valid_rows)
+    return all_orders, valid_rows
+
+
+async def _prepare_orders_gsheet():
+    from gsheet_stock_get import GSheetStockClient
+    from get_quote import get_gsheet_stocks_df
+    from place_order import get_order_data
+
+    base_url = _get_env("BASE_SHEET_URL")
+    gid = _get_env("sheet_gid")
+    if not base_url or not gid:
+        _save_order_final(False, 0, 0, 0, 0, "Missing BASE_SHEET_URL or sheet_gid")
+        return [], []
+
+    sheet_url = f"{base_url}{gid}"
+    client = GSheetStockClient()
+    df = await client.get_stock_dataframe(sheet_url)
+    if df is None or df.empty:
+        _save_order_final(False, 0, 0, 0, 0, "No data in sheet")
+        return [], []
+
+    all_rows = await get_gsheet_stocks_df(df)
+    if not all_rows:
+        _save_order_final(False, 0, 0, 0, 0, "No rows in sheet")
+        return [], []
+
+    valid_rows = _filter_valid_order_rows(all_rows)
+    if not valid_rows:
+        _save_order_final(False, 0, 0, 0, 0, "No rows with valid BUY/SELL prices. Fetch quotes first.")
+        return [], []
+
+    all_orders = await get_order_data(valid_rows)
+    return all_orders, valid_rows
+
 
 @router.post("/execute/all")
 async def place_all_orders(body: PlaceOrdersRequest):
-    """Place BUY + SELL orders for all stocks."""
+    """Start order placement in background. Returns immediately. Poll /order-progress for status."""
+    global _order_task_running
+    if _order_task_running:
+        return {"success": False, "message": "Orders already running. Check progress.", "started": False}
+
     source = _order_source()
-    if source == "postgres":
-        return await _place_all_orders_postgres(body)
-    return await _place_all_orders_gsheet(body)
-
-
-async def _place_all_orders_postgres(body: PlaceOrdersRequest):
-    """Place orders using Postgres data source."""
+    import json
     try:
-        from get_quote import get_gsheet_stocks_df
-        from place_order import get_order_data, place_orders_with_rate_limit
-        from ..services.order_stock_db import get_order_stocks_df
-        import pandas as pd
+        r = _get_redis()
+        r.set("order_progress:live", json.dumps({
+            "status": "starting", "total": 0, "completed": 0,
+            "success": 0, "failed": 0, "pending": 0, "percent": 0,
+        }), ex=600)
+    except Exception:
+        pass
 
-        df = await get_order_stocks_df()
-        if df is None or df.empty:
-            return {"success": False, "message": "No order stocks in Postgres", "results": []}
-
-        all_rows = await get_gsheet_stocks_df(df)
-        if not all_rows:
-            return {"success": False, "message": "No rows found", "results": []}
-
-        valid_rows = _filter_valid_order_rows(all_rows)
-        if not valid_rows:
-            return {"success": False, "message": f"No rows with valid BUY/SELL prices ({len(all_rows)} total rows). Fetch quotes first.", "results": []}
-
-        all_orders = await get_order_data(valid_rows)
-        logger.info(f"Placing {len(all_orders)} orders for {len(valid_rows)} stocks (postgres)...")
-
-        results = await place_orders_with_rate_limit(
-            all_orders,
-            orders_per_minute=body.orders_per_minute,
-            max_concurrent=body.max_concurrent
-        )
-
-        successful = sum(1 for r in results if r and not isinstance(r, Exception) and r.get("status") != "error")
-        order_time = datetime.now().strftime("%I:%M %p")
-
-        return {
-            "success": True,
-            "message": f"Placed {successful}/{len(results)} orders for {len(valid_rows)} stocks",
-            "total_orders": len(results),
-            "successful": successful,
-            "failed": len(results) - successful,
-            "order_time": order_time,
-            "results": results[:50]
-        }
-    except Exception as e:
-        logger.exception(f"Error placing orders (postgres): {e}")
-        return {"success": False, "message": str(e), "results": []}
-
-
-async def _place_all_orders_gsheet(body: PlaceOrdersRequest):
-    """Place orders using Google Sheet data source — original logic."""
-    try:
-        from gsheet_stock_get import GSheetStockClient
-        from get_quote import get_gsheet_stocks_df
-        from place_order import get_order_data, place_orders_with_rate_limit
-
-        base_url = _get_env("BASE_SHEET_URL")
-        gid = _get_env("sheet_gid")
-
-        if not base_url or not gid:
-            return {"success": False, "message": "Missing BASE_SHEET_URL or sheet_gid", "results": []}
-
-        sheet_url = f"{base_url}{gid}"
-        client = GSheetStockClient()
-        df = await client.get_stock_dataframe(sheet_url)
-
-        if df is None or df.empty:
-            return {"success": False, "message": "No data in sheet", "results": []}
-
-        all_rows = await get_gsheet_stocks_df(df)
-        if not all_rows:
-            return {"success": False, "message": "No rows in sheet", "results": []}
-
-        valid_rows = _filter_valid_order_rows(all_rows)
-        if not valid_rows:
-            return {"success": False, "message": f"No rows with valid BUY/SELL prices ({len(all_rows)} total rows). Fetch quotes first.", "results": []}
-
-        all_orders = await get_order_data(valid_rows)
-        logger.info(f"Placing {len(all_orders)} orders for {len(valid_rows)} stocks...")
-
-        results = await place_orders_with_rate_limit(
-            all_orders,
-            orders_per_minute=body.orders_per_minute,
-            max_concurrent=body.max_concurrent
-        )
-
-        successful = sum(1 for r in results if r and not isinstance(r, Exception) and r.get("status") != "error")
-        order_time = datetime.now().strftime("%I:%M %p")
-
-        return {
-            "success": True,
-            "message": f"Placed {successful}/{len(results)} orders for {len(valid_rows)} stocks",
-            "total_orders": len(results),
-            "successful": successful,
-            "failed": len(results) - successful,
-            "order_time": order_time,
-            "results": results[:50]
-        }
-    except Exception as e:
-        logger.exception(f"Error placing orders: {e}")
-        return {"success": False, "message": str(e), "results": []}
+    asyncio.create_task(_run_orders_background(body, source))
+    return {"success": True, "message": "Order placement started in background", "started": True}
 
 
 def _filter_valid_order_rows(all_rows):
@@ -635,3 +724,28 @@ async def sync_master_scrip():
     except Exception as e:
         logger.exception(f"Error syncing master scrip: {e}")
         return {"success": False, "message": str(e)}
+
+
+# ─── Run Status (persistent last-run info) ───
+
+@router.get("/run-status")
+async def get_run_statuses():
+    """Get last run status for quotes and orders (persisted in Redis)."""
+    return {
+        "quotes": _get_run_status("quotes"),
+        "orders": _get_run_status("orders"),
+    }
+
+
+@router.get("/order-progress")
+async def get_order_progress():
+    """Poll current order placement progress (Redis fallback when WebSocket is down)."""
+    import json
+    try:
+        r = _get_redis()
+        raw = r.get("order_progress:live")
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+    return None

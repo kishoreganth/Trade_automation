@@ -10,12 +10,19 @@ interface WSEvent {
   [key: string]: unknown;
 }
 
+type WSEventListener = (event: WSEvent) => void;
+
 interface WSContextValue {
   status: ConnectionStatus;
   lastUpdate: string | null;
+  subscribe: (eventType: string, listener: WSEventListener) => () => void;
 }
 
-const WebSocketContext = createContext<WSContextValue>({ status: "disconnected", lastUpdate: null });
+const WebSocketContext = createContext<WSContextValue>({
+  status: "disconnected",
+  lastUpdate: null,
+  subscribe: () => () => {},
+});
 
 const WS_PING_MS = 15_000;
 const RECONNECT_MS = 3_000;
@@ -27,8 +34,19 @@ function useWebSocketConnection() {
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenersRef = useRef<Map<string, Set<WSEventListener>>>(new Map());
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+
+  const subscribe = useCallback((eventType: string, listener: WSEventListener) => {
+    if (!listenersRef.current.has(eventType)) {
+      listenersRef.current.set(eventType, new Set());
+    }
+    listenersRef.current.get(eventType)!.add(listener);
+    return () => {
+      listenersRef.current.get(eventType)?.delete(listener);
+    };
+  }, []);
 
   const flushInvalidations = useCallback(() => {
     flushTimerRef.current = null;
@@ -51,6 +69,12 @@ function useWebSocketConnection() {
 
   const handleEvent = useCallback(
     (event: WSEvent) => {
+      // Dispatch to subscribers
+      const listeners = listenersRef.current.get(event.type);
+      if (listeners) {
+        listeners.forEach((fn) => { try { fn(event); } catch {} });
+      }
+
       switch (event.type) {
         case "new_message":
           queueInvalidate("messages", "stats");
@@ -129,7 +153,7 @@ function useWebSocketConnection() {
     };
   }, [connect]);
 
-  return { status, lastUpdate };
+  return { status, lastUpdate, subscribe };
 }
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
@@ -139,4 +163,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
 export function useWebSocketStatus() {
   return useContext(WebSocketContext);
+}
+
+export function useWSEvent(eventType: string, listener: WSEventListener) {
+  const { subscribe } = useContext(WebSocketContext);
+  useEffect(() => subscribe(eventType, listener), [eventType, listener, subscribe]);
 }

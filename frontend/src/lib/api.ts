@@ -279,6 +279,16 @@ export async function syncMasterScrip() {
   return data;
 }
 
+export async function getRunStatus() {
+  const { data } = await api.get("/place_order/run-status");
+  return data;
+}
+
+export async function getOrderProgress() {
+  const { data } = await api.get("/place_order/order-progress");
+  return data;
+}
+
 // ─── Concall Insights ───
 
 export async function fetchConcallInsightByMessage(messageId: number) {

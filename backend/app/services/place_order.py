@@ -137,7 +137,7 @@ async def place_order(order_data):
         return None
 
 
-async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_concurrent=2):
+async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_concurrent=2, progress_callback=None):
     """
     Place orders respecting Kotak 200/min limit. Pace: 185/min (7.5% buffer).
     2 concurrent + 0.324s delay = ~185 orders/min.
@@ -146,6 +146,7 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_c
         orders_list: List of order dictionaries
         orders_per_minute: Target (default 185, under 200 limit)
         max_concurrent: Max parallel (default 2, low burst)
+        progress_callback: Optional async callable(progress_dict) for real-time updates
     """
     if not orders_list:
         logger.warning("No orders to place")
@@ -153,6 +154,20 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_c
     
     total_orders = len(orders_list)
     all_results = []
+    progress = {"total": total_orders, "completed": 0, "success": 0, "failed": 0}
+
+    async def _emit_progress(stock_name=""):
+        if progress_callback:
+            try:
+                await progress_callback({
+                    **progress,
+                    "pending": progress["total"] - progress["completed"],
+                    "percent": round(progress["completed"] / progress["total"] * 100, 1),
+                    "current_stock": stock_name,
+                })
+            except Exception:
+                pass
+
     # 60/185 = 0.324s per order. 2 concurrent = ~185/min
     delay_per_order = 60.0 / min(orders_per_minute, 185)
     batch_size = min(orders_per_minute, 185)
@@ -161,6 +176,8 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_c
     logger.info(f"🚀 Starting rate-limited order execution (max 200/min)")
     logger.info(f"📊 Total orders: {total_orders}, Batch size: {batch_size}, Delay: {delay_per_order:.2f}s/order")
     logger.info(f"🔢 Total batches: {total_batches}, Est. time: ~{total_batches} min")
+
+    await _emit_progress()
     
     for batch_num in range(total_batches):
         start_idx = batch_num * batch_size
@@ -176,9 +193,10 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_c
         
         async def _place_one(o):
             async with semaphore:
+                stock_name = o.get('ts', 'Unknown')
                 r = None
-                for attempt in range(3):  # 1 initial + 2 retries on 429
-                    logger.info(f"Placing order: {o.get('ts', 'Unknown')} - {o.get('tt', 'Unknown')}")
+                for attempt in range(3):
+                    logger.info(f"Placing order: {stock_name} - {o.get('tt', 'Unknown')}")
                     r = await place_order(o)
                     if r and r.get('code') == 429:
                         logger.warning(f"429 rate limit - waiting 60s, retry {attempt + 1}/2")
@@ -186,7 +204,17 @@ async def place_orders_with_rate_limit(orders_list, orders_per_minute=185, max_c
                         continue
                     break
                 await asyncio.sleep(delay_per_order)
-                return r if r else {"status": "error", "message": "Failed after retries"}
+
+                result = r if r else {"status": "error", "message": "Failed after retries"}
+                is_success = not isinstance(result, Exception) and result and result.get('status') != 'error'
+                progress["completed"] += 1
+                if is_success:
+                    progress["success"] += 1
+                else:
+                    progress["failed"] += 1
+                await _emit_progress(stock_name)
+                return result
+
         batch_results = await asyncio.gather(*[_place_one(o) for o in batch], return_exceptions=True)
         all_results.extend(batch_results)
         

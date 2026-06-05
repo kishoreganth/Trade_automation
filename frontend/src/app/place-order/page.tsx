@@ -26,6 +26,8 @@ import {
   getOrderSource,
   uploadOrderStocksFile,
   syncMasterScrip,
+  getRunStatus,
+  getOrderProgress,
 } from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -65,11 +67,28 @@ export default function PlaceOrderPage() {
   // Quotes
   const [fetchingQuotes, setFetchingQuotes] = useState(false);
   const [lastQuoteFetch, setLastQuoteFetch] = useState<string | null>(null);
+  const [lastQuoteStatus, setLastQuoteStatus] = useState<{ success: boolean; timestamp: string; total_symbols?: number; prices_mapped?: number; error?: string } | null>(null);
 
   // Orders
   const [placingOrders, setPlacingOrders] = useState(false);
   const [lastOrderTime, setLastOrderTime] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<{ successful: number; total: number } | null>(null);
+  const [lastOrderStatus, setLastOrderStatus] = useState<{ success: boolean; timestamp: string; successful?: number; total_orders?: number; failed?: number; stocks?: number; error?: string } | null>(null);
+
+  // Order progress (polling from Redis)
+  interface OrderProgress {
+    total: number;
+    completed: number;
+    success: number;
+    failed: number;
+    pending: number;
+    percent: number;
+    current_stock: string;
+    status?: string;
+    error?: string;
+  }
+  const [orderProgress, setOrderProgress] = useState<OrderProgress | null>(null);
+  const progressPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Data source
   const [orderSource, setOrderSource] = useState<string>("gsheet");
@@ -92,16 +111,57 @@ export default function PlaceOrderPage() {
     }
   }, []);
 
-  // Load sheet + check session + check source on mount, poll session every 30s
+  const loadRunStatus = useCallback(async () => {
+    try {
+      const data = await getRunStatus();
+      if (data.quotes) setLastQuoteStatus(data.quotes);
+      if (data.orders) setLastOrderStatus(data.orders);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Poll order progress while placing orders
+  useEffect(() => {
+    if (placingOrders) {
+      progressPollRef.current = setInterval(async () => {
+        try {
+          const p = await getOrderProgress();
+          if (!p) return;
+          setOrderProgress(p as OrderProgress);
+          if (p.status === "completed" || p.status === "error") {
+            setPlacingOrders(false);
+            loadRunStatus();
+            if (p.status === "completed") {
+              setOrderResult({ successful: p.success, total: p.total });
+              setLastOrderTime(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }));
+              toast.success(`Orders done: ${p.success}/${p.total} successful`);
+            } else {
+              toast.error(p.error || "Order placement failed");
+            }
+          }
+        } catch {}
+      }, 2000);
+    } else {
+      if (progressPollRef.current) {
+        clearInterval(progressPollRef.current);
+        progressPollRef.current = null;
+      }
+    }
+    return () => {
+      if (progressPollRef.current) clearInterval(progressPollRef.current);
+    };
+  }, [placingOrders, loadRunStatus]);
+
+  // Load sheet + check session + check source + run status on mount, poll session every 30s
   useEffect(() => {
     getOrderSource().then((d) => setOrderSource(d.source || "gsheet")).catch(() => {});
     loadSheet();
     checkSession();
+    loadRunStatus();
     sessionPollRef.current = setInterval(checkSession, 30000);
     return () => {
       if (sessionPollRef.current) clearInterval(sessionPollRef.current);
     };
-  }, [checkSession]);
+  }, [checkSession, loadRunStatus]);
 
   const loadSheet = async () => {
     setLoadingSheet(true);
@@ -162,6 +222,7 @@ export default function PlaceOrderPage() {
         } else {
           toast.error(`Quotes fetched but DB write failed — ${stats.prices_mapped || 0} prices mapped (not saved)`);
         }
+        loadRunStatus();
       } else {
         toast.error(result.message || "Failed to fetch quotes");
       }
@@ -196,18 +257,18 @@ export default function PlaceOrderPage() {
     if (!ok) return;
 
     setPlacingOrders(true);
+    setOrderProgress(null);
+    setOrderResult(null);
     try {
       const result = await placeAllOrders(185, 2);
-      if (result.success) {
-        toast.success(result.message);
-        setLastOrderTime(result.order_time || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }));
-        setOrderResult({ successful: result.successful, total: result.total_orders });
+      if (result.started) {
+        toast.success("Order placement started");
       } else {
-        toast.error(result.message || "Order placement failed");
+        toast.error(result.message || "Failed to start orders");
+        setPlacingOrders(false);
       }
     } catch {
       toast.error("Order placement request failed");
-    } finally {
       setPlacingOrders(false);
     }
   };
@@ -264,6 +325,20 @@ export default function PlaceOrderPage() {
     try {
       const d = new Date(iso);
       return d.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }) + ", " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+    } catch {
+      return iso;
+    }
+  };
+
+  const formatTimestamp = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      const today = new Date();
+      const isToday = d.toDateString() === today.toDateString();
+      const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+      if (isToday) return `Today ${time}`;
+      return d.toLocaleDateString("en-IN", { month: "short", day: "numeric" }) + " " + time;
     } catch {
       return iso;
     }
@@ -444,10 +519,35 @@ export default function PlaceOrderPage() {
               <><BarChart3 className="w-4 h-4" /><span className="drop-shadow-sm">GET QUOTES (Manual)</span></>
             )}
           </button>
-          {lastQuoteFetch && (
-            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
-              <Clock className="w-3 h-3" />
-              Last fetch: <span className="font-medium text-blue-600">Today {lastQuoteFetch}</span>
+          {(lastQuoteFetch || lastQuoteStatus) && (
+            <div className="mt-2 space-y-1">
+              {lastQuoteFetch && (
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  Current session: <span className="font-medium text-blue-600">Today {lastQuoteFetch}</span>
+                </div>
+              )}
+              {lastQuoteStatus && (
+                <div className={`rounded-lg px-3 py-2 text-[11px] ${lastQuoteStatus.success ? "bg-emerald-50 border border-emerald-100" : "bg-red-50 border border-red-100"}`}>
+                  <div className="flex items-center gap-1.5">
+                    {lastQuoteStatus.success ? (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    ) : (
+                      <ShieldAlert className="w-3 h-3 text-red-500" />
+                    )}
+                    <span className={`font-semibold ${lastQuoteStatus.success ? "text-emerald-700" : "text-red-700"}`}>
+                      {lastQuoteStatus.success ? "Last run successful" : "Last run failed"}
+                    </span>
+                    <span className="text-gray-400 ml-auto">{formatTimestamp(lastQuoteStatus.timestamp)}</span>
+                  </div>
+                  {lastQuoteStatus.success && lastQuoteStatus.prices_mapped != null && (
+                    <p className="text-gray-500 mt-0.5 ml-[18px]">{lastQuoteStatus.prices_mapped}/{lastQuoteStatus.total_symbols} prices mapped</p>
+                  )}
+                  {lastQuoteStatus.error && (
+                    <p className="text-red-600 mt-0.5 ml-[18px] truncate">{lastQuoteStatus.error}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -530,15 +630,94 @@ export default function PlaceOrderPage() {
               <><Rocket className="w-4 h-4" /><span className="drop-shadow-sm">PLACE ORDERS</span></>
             )}
           </button>
-          {lastOrderTime && (
-            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
-              <Clock className="w-3 h-3" />
-              Last order: <span className="font-medium text-blue-600">Today {lastOrderTime}</span>
+
+          {/* Live Progress Bar */}
+          {placingOrders && orderProgress && orderProgress.total > 0 && (
+            <div className="mt-3 space-y-2">
+              {/* 3-color progress bar */}
+              <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden flex">
+                {orderProgress.success > 0 && (
+                  <div
+                    className="bg-emerald-500 h-full transition-all duration-300"
+                    style={{ width: `${(orderProgress.success / orderProgress.total) * 100}%` }}
+                  />
+                )}
+                {orderProgress.failed > 0 && (
+                  <div
+                    className="bg-red-500 h-full transition-all duration-300"
+                    style={{ width: `${(orderProgress.failed / orderProgress.total) * 100}%` }}
+                  />
+                )}
+              </div>
+
+              {/* Counts */}
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-600 font-medium">
+                  {orderProgress.completed}/{orderProgress.total}
+                </span>
+                <span className="text-gray-400">{orderProgress.percent}%</span>
+              </div>
+              <div className="flex gap-3 text-[10px]">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  <span className="text-emerald-700 font-semibold">{orderProgress.success}</span>
+                  <span className="text-gray-400">success</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                  <span className="text-red-600 font-semibold">{orderProgress.failed}</span>
+                  <span className="text-gray-400">failed</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />
+                  <span className="text-gray-600 font-semibold">{orderProgress.pending}</span>
+                  <span className="text-gray-400">pending</span>
+                </span>
+              </div>
+
+              {/* Current stock */}
+              {orderProgress.current_stock && (
+                <p className="text-[10px] text-gray-400 truncate">
+                  Processing: <span className="text-gray-600 font-medium">{orderProgress.current_stock}</span>
+                </p>
+              )}
             </div>
           )}
-          {orderResult && (
-            <div className="mt-2 text-[11px] text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-              <span className="text-emerald-600 font-semibold">{orderResult.successful}</span>/{orderResult.total} orders successful
+
+          {(lastOrderTime || orderResult || lastOrderStatus) && (
+            <div className="mt-2 space-y-1">
+              {lastOrderTime && (
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  Current session: <span className="font-medium text-blue-600">Today {lastOrderTime}</span>
+                </div>
+              )}
+              {orderResult && (
+                <div className="text-[11px] text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="text-emerald-600 font-semibold">{orderResult.successful}</span>/{orderResult.total} orders successful
+                </div>
+              )}
+              {lastOrderStatus && (
+                <div className={`rounded-lg px-3 py-2 text-[11px] ${lastOrderStatus.success ? "bg-emerald-50 border border-emerald-100" : "bg-red-50 border border-red-100"}`}>
+                  <div className="flex items-center gap-1.5">
+                    {lastOrderStatus.success ? (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    ) : (
+                      <ShieldAlert className="w-3 h-3 text-red-500" />
+                    )}
+                    <span className={`font-semibold ${lastOrderStatus.success ? "text-emerald-700" : "text-red-700"}`}>
+                      {lastOrderStatus.success ? "Last run successful" : "Last run failed"}
+                    </span>
+                    <span className="text-gray-400 ml-auto">{formatTimestamp(lastOrderStatus.timestamp)}</span>
+                  </div>
+                  {lastOrderStatus.success && lastOrderStatus.successful != null && (
+                    <p className="text-gray-500 mt-0.5 ml-[18px]">{lastOrderStatus.successful}/{lastOrderStatus.total_orders} orders placed for {lastOrderStatus.stocks} stocks</p>
+                  )}
+                  {lastOrderStatus.error && (
+                    <p className="text-red-600 mt-0.5 ml-[18px] truncate">{lastOrderStatus.error}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

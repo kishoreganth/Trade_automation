@@ -69,4 +69,5 @@ BEAT_SCHEDULE = {
         "schedule": 120.0,
         "options": {"queue": "cpu_queue"},
     },
+
 }
