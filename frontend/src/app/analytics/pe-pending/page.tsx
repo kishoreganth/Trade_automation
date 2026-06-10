@@ -72,7 +72,14 @@ export default function PEPendingPage() {
   }, [filters, search, sectors, dateFrom, dateTo, perPage, setViewFilters]);
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "exchange" && prev.segment) {
+        const prefix = value ? value + "_" : "";
+        if (prefix && !prev.segment.startsWith(prefix)) next.segment = "";
+      }
+      return next;
+    });
   };
 
   const clearFilters = () => setFilters({});
@@ -148,6 +155,11 @@ export default function PEPendingPage() {
         <FilterBadge label="Year" value={filters.year} options={filterOptions?.years || ["2026", "2025"]} onChange={(v) => handleFilterChange("year", v)} formatLabel={(v) => `FY${v.slice(-2)}`} />
         <FilterBadge label="Quarter" value={filters.quarter} options={filterOptions?.quarters || ["Q1", "Q2", "Q3", "Q4"]} onChange={(v) => handleFilterChange("quarter", v)} />
         <FilterBadge label="Exchange" value={filters.exchange} options={filterOptions?.exchanges || ["BSE", "NSE"]} onChange={(v) => handleFilterChange("exchange", v)} />
+        <FilterBadge label="Segment" value={filters.segment} options={
+          filters.exchange === "BSE" ? ["BSE_EQ", "BSE_SME"] :
+          filters.exchange === "NSE" ? ["NSE_EQ", "NSE_SME"] :
+          ["NSE_EQ", "NSE_SME", "BSE_EQ", "BSE_SME"]
+        } onChange={(v) => handleFilterChange("segment", v)} formatLabel={(v) => v.replace("_", " ")} />
 
         {activeFilterCount > 0 && (
           <button onClick={clearFilters} className="text-xs text-red-500 border border-red-200 rounded-md px-2 py-0.5 hover:bg-red-50 hover:border-red-300 active:scale-95 transition-all flex items-center gap-0.5"><X className="w-3 h-3" /> Clear</button>

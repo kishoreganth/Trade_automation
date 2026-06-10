@@ -272,10 +272,13 @@ async def get_pe_analysis(
     date_to: Optional[str] = None,
     valuation: Optional[str] = None,
     signal: Optional[str] = None,
+    segment: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Paginated PE analysis results with computed fields."""
-    cache_key = f"pe:list:{valuation_filter}:{page}:{per_page}:{year}:{quarter}:{exchange}:{sector}:{search}:{date_from}:{date_to}:{valuation}:{signal}"
+    cache_key = f"pe:list:{valuation_filter}:{page}:{per_page}:{year}:{quarter}:{exchange}:{sector}:{search}:{date_from}:{date_to}:{valuation}:{signal}:{segment}:{sort_by}:{sort_dir}"
     cached_result = await cache_get(cache_key)
     if cached_result:
         return cached_result
@@ -370,6 +373,10 @@ async def get_pe_analysis(
         scope_conditions.append("qr.recommendation = :signal_exact")
         params["signal_exact"] = signal
 
+    if segment:
+        outer_conditions.append("market_segment = :segment_exact")
+        params["segment_exact"] = segment
+
     where_inside = "WHERE " + " AND ".join(scope_conditions) if scope_conditions else ""
     outer_filter = " AND ".join(outer_conditions)
 
@@ -438,10 +445,14 @@ async def get_pe_analysis(
     count_row = await db.execute(text(count_sql), params)
     total = count_row.scalar()
 
+    allowed_sort = {"date": "COALESCE(announcement_date, created_at)"}
+    sort_col = allowed_sort.get(sort_by or "", "COALESCE(announcement_date, created_at)")
+    sort_direction = "ASC" if sort_dir == "asc" else "DESC"
+
     data_sql = f"""
         {dedup_cte}
         SELECT * FROM ranked WHERE {rn_filter} {outer_where}
-        ORDER BY COALESCE(announcement_date, created_at) DESC
+        ORDER BY {sort_col} {sort_direction}
         LIMIT :limit OFFSET :offset
     """
     rows = await db.execute(text(data_sql), params)
@@ -790,6 +801,7 @@ async def get_pe_filters(db: AsyncSession = Depends(get_db)):
         "quarters": [r[0] for r in quarters.fetchall()],
         "exchanges": [r[0] for r in exchanges.fetchall()],
         "sectors": [r[0] for r in sectors.fetchall()],
+        "segments": ["NSE_EQ", "NSE_SME", "BSE_EQ", "BSE_SME"],
     }
 
     await cache_set("pe:filters", result, ttl=60)

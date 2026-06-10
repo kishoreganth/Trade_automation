@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { deletePEAnalysis, updatePEAnalysis, retriggerPEExtraction, fetchValuationOptions, bulkIgnorePE } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2, Pencil, X, ExternalLink, AlertTriangle, RefreshCw, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2, Pencil, X, ExternalLink, AlertTriangle, RefreshCw, RotateCw, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   FALLBACK_VALUATION_OPTIONS,
   VALUATION_BADGE_COLORS,
@@ -89,6 +89,7 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [sortDir, setSortDir] = useState<"desc" | "asc" | null>(null);
   const lastClickedIdx = useRef<number | null>(null);
   const shiftHeld = useRef(false);
   const isPending = valuationFilter === "pending";
@@ -101,12 +102,15 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
-  const filtersKey = JSON.stringify(filters) + valuationFilter + perPage;
+  const filtersKey = JSON.stringify(filters) + valuationFilter + perPage + sortDir;
   useEffect(() => { setPage(1); setSelectedIds(new Set()); }, [filtersKey]);
   useEffect(() => { setSelectedIds(new Set()); }, [page]);
 
   const confirm = useConfirm();
-  const params = { page, per_page: perPage, valuation_filter: valuationFilter, ...filters };
+  const params = {
+    page, per_page: perPage, valuation_filter: valuationFilter, ...filters,
+    ...(sortDir ? { sort_by: "date", sort_dir: sortDir } : {}),
+  };
   const { data, isLoading, isError, error, refetch, isFetching } = usePEAnalysis(params);
 
   useEffect(() => {
@@ -367,7 +371,15 @@ export function PETable({ valuationFilter, filters = {}, perPage = 50, visibleCo
                   />
                 </th>
               )}
-              {show("date") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${dateColW} ${stickyDate}`}>Date</th>}
+              {show("date") && <th
+                className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 cursor-pointer select-none hover:bg-gray-100 transition-colors ${dateColW} ${stickyDate}`}
+                onClick={() => setSortDir((prev) => prev === null ? "asc" : prev === "asc" ? "desc" : null)}
+              >
+                <span className="inline-flex items-center gap-1">
+                  Date
+                  {sortDir === "asc" ? <ArrowUp className="w-3 h-3 text-primary" /> : sortDir === "desc" ? <ArrowDown className="w-3 h-3 text-primary" /> : <ArrowUpDown className="w-3 h-3 text-gray-300" />}
+                </span>
+              </th>}
               {show("stock") && <th className={`text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50 ${stockColW} ${stickyStock}`}>Stock</th>}
               {show("exch") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Exch</th>}
               {show("segment") && <th className="text-left px-3 py-2 font-medium whitespace-nowrap bg-gray-50">Segment</th>}

@@ -95,3 +95,44 @@ Kotak Neo broker API integration for order placement. NSE/BSE announcement proce
 - `backend/app/routers/orders.py` — `POST /execute/all` now starts orders via `asyncio.create_task()` and returns immediately (`{started: true}`). Progress saved to Redis key `order_progress:live` (600s TTL). `_save_order_final()` sets `status: "completed"` or `"error"`. `GET /order-progress` returns current progress. Prevents double-start via `_order_task_running` flag.
 - `frontend/src/app/place-order/page.tsx` — `handlePlaceOrders` no longer awaits completion. Polls `/order-progress` every 2s. Detects `status: "completed"` → stops polling, shows toast, updates run status. Detects `status: "error"` → shows error. 3-color bar: green=success, red=failed, gray=pending with counts.
 - `frontend/src/hooks/useWebSocket.tsx` — added `subscribe()`/`useWSEvent()` (kept for future use, not used by orders).
+
+### 2026-06-09: PE Status Check — Symbol Mismatch Fix (v2)
+**Problem**: `scripts/check_pe_status.py` marked 1068/1964 stocks as "NOT FOUND" because Excel uses abbreviated names (`TINNA RUBBER`, `INDAG RUBBER`, `JASCH`) while DB stores NSE tickers (`TINNARUBR`), BSE codes (`509162`), or no-space names (`NACLIND`). Direct string match failed massively.
+
+**Solution**: 6-strategy symbol matching in `check_pe_status.py`:
+1. Direct match (exact symbol)
+2. No-space match (remove spaces/& from Excel symbol)
+3. Stocks table bridge (nospace→symbol via stocks table, then check QR)
+4. BSE code reverse lookup (quarterly_results BSE codes → stocks.bse_token → resolve)
+5. First-word prefix match (`TINNA RUBBER` → first word `TINNA` → matches `TINNARUBR`)
+6. Company name partial match (quarterly_results.company_name words → match Excel symbol words)
+
+**Files modified**: `scripts/check_pe_status.py` — full rewrite. `build_db_context()` fetches stocks table + QR symbols + company names in bulk. `match_symbol()` applies all 6 strategies. `save_excel_with_status()` has PermissionError fallback. 4 status categories: REVIEWED (green), PENDING (yellow), IN_STOCKS (blue), NOT FOUND (red). Sector breakdown in console.
+
+**Result**: NOT FOUND dropped from 1068 → **68** (3.5%). REVIEWED: 1200 (61.1%), PENDING: 512 (26.1%), IN_STOCKS: 184 (9.4%). 1000 stocks correctly reclassified.
+
+**Performance**: Script runs in ~20s via SSH → docker exec → psql. All data fetched in bulk (no per-stock queries).
+
+### 2026-06-10: Segment Filter for PE Pending & PE Reviewed
+**Problem**: No way to filter PE analysis results by market segment (NSE_EQ, NSE_SME, BSE_EQ, BSE_SME).
+
+**Solution**: Added segment filter dropdown to Row 1 filters (alongside Year/Quarter/Exchange) on both PE Pending and PE Reviewed pages.
+
+**Files modified**:
+- `backend/app/routers/pe_analysis.py` — added `segment` query param to `get_pe_analysis()`, filters via `outer_conditions` on computed `market_segment` column. Added `segments` list to `get_pe_filters()` response. Updated cache key.
+- `frontend/src/lib/api.ts` — added `segment` to `fetchPEAnalysis` params type
+- `frontend/src/hooks/usePEAnalysis.ts` — added `segment` to `PEFilters` interface
+- `frontend/src/app/analytics/pe-pending/page.tsx` — added Segment FilterBadge in Row 1
+- `frontend/src/app/analytics/pe-reviewed/page.tsx` — added Segment FilterBadge in Row 1
+
+**Segment values**: NSE_EQ, NSE_SME, BSE_EQ, BSE_SME (static list, derived from series data in stocks table). Display labels use space instead of underscore (e.g. "NSE EQ"). Segment options are exchange-aware: BSE exchange shows only BSE_EQ/BSE_SME, NSE shows only NSE_EQ/NSE_SME. Changing exchange auto-clears mismatched segment.
+
+### 2026-06-10: Sortable Date Column on PE Pages
+**Problem**: No way to sort PE results by date — always newest first.
+
+**Solution**: Clickable Date column header in PETable with 3-state toggle: default (DESC) → ASC → DESC → back to default.
+
+**Files modified**:
+- `backend/app/routers/pe_analysis.py` — added `sort_by` + `sort_dir` query params. Whitelist approach: only `date` → `COALESCE(announcement_date, created_at)` allowed. Default remains DESC.
+- `frontend/src/lib/api.ts` — added `sort_by`, `sort_dir` to `fetchPEAnalysis` params
+- `frontend/src/components/PETable.tsx` — `sortDir` state (null/asc/desc), Date header clickable with ArrowUp/ArrowDown/ArrowUpDown icons, resets page on sort change. Sort params passed to API only when active.

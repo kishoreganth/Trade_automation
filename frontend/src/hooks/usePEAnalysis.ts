@@ -14,6 +14,7 @@ interface PEFilters {
   search?: string;
   date_from?: string;
   date_to?: string;
+  segment?: string;
 }
 
 export function usePEAnalysis(filters: PEFilters) {
