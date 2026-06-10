@@ -36,6 +36,18 @@ config.json
 last_actions.json
 financial_extraction_pymupdf_output.json
 
+# Excel lock files (Microsoft Office temp — never commit)
+~$*
+
+# Local Excel data (analysis scripts only — not needed on Docker server)
+*.xlsx
+*.xls
+
+# Script-generated output (reports, SQL dumps, migration JSON)
+scripts/output/
+scripts/stock_db_sync/output/
+scripts/nse_sme_historical/
+
 # Exclude documentation and context files
 memory_context.md
 async_architecture_explained.md

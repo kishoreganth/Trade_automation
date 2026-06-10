@@ -53,23 +53,37 @@ const VIEW_KEY = "pe-pending";
 
 export default function PEPendingPage() {
   const { getViewFilters, setViewFilters } = useFilterStore();
-  const saved = getViewFilters(VIEW_KEY);
 
-  const [filters, setFilters] = useState<Record<string, string>>(saved?.filters ?? getDefaultFilters);
-  const [search, setSearch] = useState(saved?.search ?? "");
-  const [sectors, setSectors] = useState<string[]>(saved?.sectors ?? []);
-  const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? "");
-  const [dateTo, setDateTo] = useState(saved?.dateTo ?? "");
-  const [perPage, setPerPage] = useState(saved?.perPage ?? 50);
+  const [filters, setFilters] = useState<Record<string, string>>(getDefaultFilters);
+  const [search, setSearch] = useState("");
+  const [sectors, setSectors] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [perPage, setPerPage] = useState(50);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [showFormulas, setShowFormulas] = useState(false);
   const [visibleCols, setVisibleCols] = useState<string[]>(ALL_COLUMNS.map((c) => c.key));
   const [totalStocks, setTotalStocks] = useState(0);
   const { data: filterOptions } = usePEFilters();
   const queryClient = useQueryClient();
 
+  // Restore saved filters after mount — avoids SSR/client hydration mismatch
+  // (sessionStorage has NSE while server defaults to BSE).
   useEffect(() => {
+    const saved = getViewFilters(VIEW_KEY);
+    if (saved?.filters) setFilters(saved.filters);
+    if (saved?.search) setSearch(saved.search);
+    if (saved?.sectors?.length) setSectors(saved.sectors);
+    if (saved?.dateFrom) setDateFrom(saved.dateFrom);
+    if (saved?.dateTo) setDateTo(saved.dateTo);
+    if (saved?.perPage) setPerPage(saved.perPage);
+    setFiltersReady(true);
+  }, [getViewFilters]);
+
+  useEffect(() => {
+    if (!filtersReady) return;
     setViewFilters(VIEW_KEY, { filters, search, sectors, dateFrom, dateTo, perPage });
-  }, [filters, search, sectors, dateFrom, dateTo, perPage, setViewFilters]);
+  }, [filters, search, sectors, dateFrom, dateTo, perPage, setViewFilters, filtersReady]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters((prev) => {
